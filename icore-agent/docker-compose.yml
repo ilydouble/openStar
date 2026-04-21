@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  # ── iCore Agent API ────────────────────────────────────
+  icore-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: icore-agent:dev
+    container_name: icore-agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      # Hot-reload in dev: mount source
+      - ./src:/app/src:ro
+      # Sequential agent workspace
+      - seq-workspace:/tmp/icore-seq-workspace
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - icore-net
+
+  # ── Redis (conversation memory & task queue) ───────────
+  redis:
+    image: redis:7-alpine
+    container_name: icore-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - icore-net
+
+  # ── Dev convenience: hot-reload with uvicorn ───────────
+  icore-agent-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: icore-agent-dev
+    profiles: ["dev"]
+    ports:
+      - "8080:8080"
+    environment:
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./src:/build/src
+    command: >
+      uvicorn icore_agent.main:app
+        --host 0.0.0.0
+        --port 8080
+        --reload
+        --reload-dir /build/src
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - icore-net
+
+volumes:
+  redis-data:
+  seq-workspace:
+
+networks:
+  icore-net:
+    driver: bridge

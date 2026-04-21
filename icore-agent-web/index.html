@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
+    <script>
+      (function () {
+        try {
+          var k = 'icore-theme'
+          var s = localStorage.getItem(k)
+          var r = document.documentElement
+          if (s === 'light') r.classList.remove('dark')
+          else r.classList.add('dark')
+        } catch (e) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>iCore AI 工作台</title>

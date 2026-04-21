@@ -1,111 +1,190 @@
 <template>
-  <div class="w-full max-w-2xl mx-auto">
-    <!-- 主输入框 -->
-    <div class="bg-white rounded-2xl shadow-sm border border-black/8 overflow-hidden">
-      <!-- 文本区 -->
-      <div class="flex items-center px-4 pt-3 pb-1 gap-2">
-        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="m21 21-4.35-4.35"/>
-        </svg>
-        <input
-          v-model="input"
-          :placeholder="tab === 'chat' ? (locale === 'zh-CN' ? '问任何问题，创造任何内容…' : 'Ask any question, create any content...') : (locale === 'zh-CN' ? '搜索知识库、文件、Agent…' : 'Search knowledge base, files, Agent...')"
-          class="flex-1 text-sm text-gray-800 placeholder-gray-400 outline-none bg-transparent"
-          @keydown.enter.prevent="handleSubmit"
-        />
-        <!-- 语音 -->
-        <button class="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center transition">
-          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" d="M12 1a3 3 0 013 3v7a3 3 0 01-6 0V4a3 3 0 013-3z"/>
-            <path stroke-linecap="round" d="M19 10a7 7 0 01-14 0M12 19v4M8 23h8"/>
-          </svg>
-        </button>
-        <!-- Chat 按钮 -->
-        <button
-          @click="handleSubmit"
-          class="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/>
-          </svg>
-          Chat
-        </button>
-      </div>
+  <div class="relative z-0 mx-auto w-full max-w-3xl">
+    <div
+      class="relative z-0 rounded-2xl border border-zinc-200/80 bg-white/90 p-3 shadow-sm backdrop-blur-md
+             transition-all duration-200
+             hover:shadow-md
+             focus-within:border-zinc-300/90 focus-within:shadow-md
+             dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl
+             dark:focus-within:border-white/20"
+    >
+      <div class="flex items-center">
+        <div class="flex shrink-0 items-center">
+          <div ref="plusRootRef" class="relative z-10">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              :aria-expanded="plusMenuOpen"
+              class="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200/80
+                     bg-zinc-50/90 text-zinc-700 backdrop-blur-sm transition-all duration-200
+                     hover:border-zinc-300 hover:bg-zinc-100/90 hover:text-zinc-900
+                     active:scale-95
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30
+                     dark:border-white/10 dark:bg-white/10 dark:text-white
+                     dark:hover:border-white/20 dark:hover:bg-white/[0.14]"
+              @click.stop="plusMenuOpen = !plusMenuOpen"
+            >
+              <Plus class="h-5 w-5" stroke-width="2" />
+            </button>
 
-      <!-- 底部工具栏 -->
-      <div class="flex items-center justify-between px-4 pb-2.5 pt-1">
-        <div class="flex items-center gap-3">
-          <!-- 附件 -->
-          <button class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-            </svg>
-            {{ locale === 'zh-CN' ? '附件' : 'Attach' }}
-          </button>
-          <!-- 选择 Agent -->
-          <button class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-            </svg>
-            {{ locale === 'zh-CN' ? '选择 Agent' : 'Select Agent' }}
-          </button>
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="scale-95 opacity-0"
+              enter-to-class="scale-100 opacity-100"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="scale-100 opacity-100"
+              leave-to-class="scale-95 opacity-0"
+            >
+              <div
+                v-show="plusMenuOpen"
+                class="absolute bottom-full left-0 z-[100] mb-2 max-h-[min(22rem,calc(100dvh-6rem))] min-w-[15rem]
+                       max-w-[min(17rem,calc(100vw-2rem))] origin-bottom-left overflow-y-auto overflow-x-hidden
+                       rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl shadow-zinc-900/15
+                       backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/95 dark:shadow-black/50"
+                role="menu"
+              >
+                <button
+                  v-for="item in plusMenuItems"
+                  :key="item.labelKey"
+                  type="button"
+                  role="menuitem"
+                  class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm
+                         text-zinc-900 transition-all duration-200
+                         hover:bg-zinc-100/90
+                         dark:text-white dark:hover:bg-white/10"
+                  @click="closePlusMenu"
+                >
+                  <component
+                    :is="item.icon"
+                    class="h-4 w-4 shrink-0 text-zinc-500 transition-colors duration-200
+                           group-hover:text-zinc-900
+                           dark:text-zinc-400 dark:group-hover:text-white"
+                    stroke-width="2"
+                  />
+                  {{ t(item.labelKey) }}
+                </button>
+              </div>
+            </Transition>
+          </div>
         </div>
-        <!-- Chat / 搜索 切换 -->
-        <div class="flex items-center gap-1 text-xs">
+
+        <div class="flex min-w-0 flex-1 items-center px-3">
+          <textarea
+            ref="area"
+            v-model="input"
+            rows="1"
+            :placeholder="t('home.inputPlaceholder')"
+            class="box-border min-h-[2.25rem] w-full resize-none appearance-none overflow-hidden
+                   rounded-xl border border-transparent bg-transparent px-0 py-1.5 text-sm leading-6
+                   text-zinc-900 outline-none [-ms-overflow-style:none] [scrollbar-width:none]
+                   placeholder:text-transparent sm:placeholder:text-zinc-400
+                   dark:text-white dark:placeholder:text-transparent dark:sm:placeholder:text-zinc-500
+                   [&::-webkit-scrollbar]:hidden"
+            @keydown.enter.exact.prevent="handleSubmit"
+            @input="autoGrow"
+          />
+        </div>
+
+        <div class="flex shrink-0 items-center gap-2">
           <button
-            v-for="t in tabs" :key="t.key"
-            @click="tab = t.key"
-            :class="tab === t.key
-              ? 'text-gray-900 font-medium'
-              : 'text-gray-400 hover:text-gray-600'"
-            class="transition px-1"
-          >{{ t.label }}</button>
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-full
+                   text-zinc-500 transition-all duration-200
+                   hover:bg-zinc-100/90 hover:text-zinc-900
+                   active:scale-90
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30
+                   dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            <Mic class="h-[1.125rem] w-[1.125rem]" stroke-width="2" />
+          </button>
+
+          <button
+            type="button"
+            :disabled="!input.trim()"
+            class="flex h-9 w-9 items-center justify-center rounded-full
+                   bg-zinc-900 text-white shadow-sm transition-all duration-200
+                   hover:bg-zinc-800 hover:shadow
+                   active:scale-90
+                   disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30
+                   dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+            @click="handleSubmit"
+          >
+            <SendHorizontal class="h-[1.125rem] w-[1.125rem]" stroke-width="2" />
+          </button>
         </div>
       </div>
-    </div>
-
-    <!-- 快捷提示词 -->
-    <div class="flex flex-wrap gap-2 mt-3 justify-center">
-      <button
-        v-for="p in prompts" :key="p"
-        @click="input = p"
-        class="text-xs text-gray-600 bg-white border border-black/8 rounded-full px-3 py-1.5 hover:border-gray-400 hover:text-gray-800 transition shadow-sm"
-      >
-        {{ p }}
-      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  Plus,
+  User,
+  Paperclip,
+  Image,
+  Brain,
+  Search,
+  Mic,
+  SendHorizontal,
+} from 'lucide-vue-next'
 
-const { locale } = useI18n()
+const TEXTAREA_MAX_HEIGHT = 200
+
+const { t } = useI18n()
 const emit = defineEmits(['submit'])
 
 const input = ref('')
-const tab = ref('chat')
-const tabs = computed(() => [
-  { key: 'chat', label: locale.value === 'zh-CN' ? 'Chat' : 'Chat' },
-  { key: 'search', label: locale.value === 'zh-CN' ? '搜索' : 'Search' },
-])
-const prompts = computed(() => locale.value === 'zh-CN' ? [
-  '帮我分析最新的行业趋势',
-  '写一段 Python 数据处理脚本',
-  '查询知识库中的产品文档',
-  '生成一份竞品对比报告',
-] : [
-  'Help me analyze the latest industry trends',
-  'Write a Python data processing script',
-  'Search product documentation in knowledge base',
-  'Generate a competitive analysis report',
-])
+const area = ref(null)
+const plusMenuOpen = ref(false)
+const plusRootRef = ref(null)
+
+const plusMenuItems = [
+  { icon: User, labelKey: 'home.chatInput.selectAgent' },
+  { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto' },
+  { icon: Image, labelKey: 'home.chatInput.createImage' },
+  { icon: Brain, labelKey: 'home.chatInput.thinkDeeply' },
+  { icon: Search, labelKey: 'home.chatInput.searchInternet' },
+]
+
+function closePlusMenu() {
+  plusMenuOpen.value = false
+}
+
+function onDocumentClick(e) {
+  if (plusRootRef.value && !plusRootRef.value.contains(e.target)) {
+    plusMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  nextTick(autoGrow)
+})
+
+onUnmounted(() => document.removeEventListener('click', onDocumentClick))
+
+function autoGrow() {
+  const el = area.value
+  if (!el) return
+  el.style.overflow = 'hidden'
+  el.style.height = 'auto'
+  void el.offsetHeight
+  el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`
+}
 
 function handleSubmit() {
   const msg = input.value.trim()
   if (!msg) return
-  emit('submit', { message: msg, mode: tab.value })
+  emit('submit', { message: msg })
   input.value = ''
+  nextTick(autoGrow)
 }
+
+defineExpose({
+  focus: () => area.value?.focus(),
+})
 </script>

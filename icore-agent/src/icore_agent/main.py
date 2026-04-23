@@ -5,6 +5,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import litellm
 import structlog
 import uvicorn
 from fastapi import FastAPI
@@ -13,9 +14,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .api.routers import agent as agent_router
 from .api.routers import health as health_router
+from .api.routers import knowledge as knowledge_router
 from .api.middleware.auth import AuthMiddleware
 
 log = structlog.get_logger()
+
+
+# ── LiteLLM token usage logging ───────────────────────────────────────────────
+# Fires after EVERY LLM call in the process: orchestrator turns, sub-agent turns,
+# rolling-summary compression, memU extraction — all are counted.
+
+def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
+    usage = getattr(completion_response, "usage", None)
+    if usage is None:
+        return
+    elapsed = (end_time - start_time).total_seconds()
+    log.info(
+        "llm_token_usage",
+        model=kwargs.get("model", "unknown"),
+        prompt_tokens=getattr(usage, "prompt_tokens", 0),
+        completion_tokens=getattr(usage, "completion_tokens", 0),
+        total_tokens=getattr(usage, "total_tokens", 0),
+        elapsed_s=round(elapsed, 2),
+    )
+
+
+litellm.success_callback = [_log_token_usage]
 
 
 def create_app() -> FastAPI:
@@ -46,6 +70,7 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])
     app.include_router(agent_router.router, prefix="/api/v1/agent", tags=["agent"])
+    app.include_router(knowledge_router.router, prefix="/api/v1/knowledge", tags=["knowledge"])
 
     # ── Lifecycle ─────────────────────────────────────────
     @app.on_event("startup")

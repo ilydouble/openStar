@@ -1,13 +1,24 @@
 <template>
   <div class="relative z-0 mx-auto w-full max-w-3xl">
     <div
-      class="relative z-0 rounded-2xl border border-zinc-200/80 bg-white/90 p-3 shadow-sm backdrop-blur-md
-             transition-all duration-200
-             hover:shadow-md
-             focus-within:border-zinc-300/90 focus-within:shadow-md
-             dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl
-             dark:focus-within:border-white/20"
+      :class="[
+        'relative z-0 rounded-2xl border p-3 shadow-sm backdrop-blur-md transition-all duration-200',
+        'hover:shadow-md focus-within:border-zinc-300/90 focus-within:shadow-md',
+        isDragging
+          ? 'border-violet-400 bg-violet-50/80 shadow-md dark:border-violet-400/60 dark:bg-violet-900/20'
+          : 'border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl dark:focus-within:border-white/20',
+      ]"
+      @dragover.prevent="isDragging = true"
+      @dragleave.self="isDragging = false"
+      @drop.prevent="handleDrop"
     >
+      <!-- 拖拽提示覆盖层 -->
+      <div
+        v-if="isDragging"
+        class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
+      >
+        <span class="text-sm font-medium text-violet-600 dark:text-violet-300">松开鼠标上传文件</span>
+      </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
           <div ref="plusRootRef" class="relative z-10">
@@ -26,6 +37,15 @@
             >
               <Plus class="h-5 w-5" stroke-width="2" />
             </button>
+
+            <!-- 隐藏的文件输入 -->
+            <input
+              ref="fileInputEl"
+              type="file"
+              class="hidden"
+              accept=".pdf,.docx,.txt,.md"
+              @change="handleFileSelect"
+            />
 
             <Transition
               enter-active-class="transition duration-200 ease-out"
@@ -52,7 +72,7 @@
                          text-zinc-900 transition-all duration-200
                          hover:bg-zinc-100/90
                          dark:text-white dark:hover:bg-white/10"
-                  @click="closePlusMenu"
+                  @click="handleMenuItemClick(item)"
                 >
                   <component
                     :is="item.icon"
@@ -135,23 +155,53 @@ import {
 const TEXTAREA_MAX_HEIGHT = 200
 
 const { t } = useI18n()
-const emit = defineEmits(['submit'])
+const emit = defineEmits(['submit', 'file-selected'])
 
 const input = ref('')
 const area = ref(null)
+const fileInputEl = ref(null)
 const plusMenuOpen = ref(false)
 const plusRootRef = ref(null)
+const isDragging = ref(false)
+
+const ACCEPTED_EXTS = new Set(['.pdf', '.docx', '.txt', '.md'])
+
+function handleDrop(e) {
+  isDragging.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  const ext = '.' + file.name.split('.').pop().toLowerCase()
+  if (!ACCEPTED_EXTS.has(ext)) return
+  emit('file-selected', file)
+}
 
 const plusMenuItems = [
-  { icon: User, labelKey: 'home.chatInput.selectAgent' },
-  { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto' },
-  { icon: Image, labelKey: 'home.chatInput.createImage' },
-  { icon: Brain, labelKey: 'home.chatInput.thinkDeeply' },
-  { icon: Search, labelKey: 'home.chatInput.searchInternet' },
+  { icon: User,      labelKey: 'home.chatInput.selectAgent',    action: null },
+  { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
+  { icon: Image,     labelKey: 'home.chatInput.createImage',    action: null },
+  { icon: Brain,     labelKey: 'home.chatInput.thinkDeeply',    action: null },
+  { icon: Search,    labelKey: 'home.chatInput.searchInternet', action: null },
 ]
 
 function closePlusMenu() {
   plusMenuOpen.value = false
+}
+
+function handleMenuItemClick(item) {
+  closePlusMenu()
+  if (item.action === 'openFile') {
+    // 重置 value 使得同一文件可重复选
+    if (fileInputEl.value) fileInputEl.value.value = ''
+    fileInputEl.value?.click()
+  }
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  emit('file-selected', file)
+  // 重置让用户可以再次选同名文件
+  e.target.value = ''
 }
 
 function onDocumentClick(e) {

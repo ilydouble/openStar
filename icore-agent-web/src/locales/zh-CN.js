@@ -82,6 +82,7 @@ export default {
     placeholder: '请输入您的问题...',
     send: '发送',
     thinking: '思考中...',
+    attachFile: '上传文件（PDF / DOCX / TXT / MD）',
   },
   theme: {
     switchToLight: '切换到浅色模式',

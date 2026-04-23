@@ -83,6 +83,7 @@ export default {
     placeholder: 'Enter your question...',
     send: 'Send',
     thinking: 'Thinking...',
+    attachFile: 'Attach file (PDF / DOCX / TXT / MD)',
   },
   theme: {
     switchToLight: 'Switch to light mode',

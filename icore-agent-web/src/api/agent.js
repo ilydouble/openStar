@@ -84,3 +84,48 @@ export async function clearSession(sessionId) {
 export function newSessionId() {
   return crypto.randomUUID()
 }
+
+// ── 附件管理 ──────────────────────────────────────────────────────────────
+
+/**
+ * 上传文件并附加到会话上下文
+ * @param {File} file
+ * @param {string} sessionId
+ * @returns {Promise<{filename: string, char_count: number, mode: string}>}
+ */
+export async function attachFile(file, sessionId) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('session_id', sessionId)
+  const resp = await fetch(`${BASE}/attach`, { method: 'POST', body: form })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(detail.detail || `HTTP ${resp.status}`)
+  }
+  return resp.json()
+}
+
+/**
+ * 列出当前会话的附件（不含文本内容）
+ * @param {string} sessionId
+ * @returns {Promise<Array<{filename: string, char_count: number, mode: string, uploaded_at: number}>>}
+ */
+export async function listAttachments(sessionId) {
+  const resp = await fetch(`${BASE}/attachments/${sessionId}`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+/**
+ * 删除指定附件
+ * @param {string} sessionId
+ * @param {string} filename
+ */
+export async function removeAttachment(sessionId, filename) {
+  const resp = await fetch(
+    `${BASE}/attachments/${sessionId}/${encodeURIComponent(filename)}`,
+    { method: 'DELETE' },
+  )
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}

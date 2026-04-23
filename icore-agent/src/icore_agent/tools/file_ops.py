@@ -76,3 +76,56 @@ def write_file(path: str, content: str, encoding: str = "utf-8") -> str:
     except Exception as exc:
         log.error("write_file_error", error=str(exc))
         return f"[ERROR] {exc}"
+
+
+@tool
+def list_files(directory: str = ".", max_depth: int = 2) -> str:
+    """List files and directories inside the agent workspace.
+
+    Use this to understand the project structure before reading or editing files.
+
+    Args:
+        directory: Relative path of the directory to list (default: workspace root).
+        max_depth: How many levels deep to recurse (1 = top-level only, default 2).
+
+    Returns:
+        A tree-style text listing of files with sizes, or an error message.
+    """
+    log.info("list_files", directory=directory, max_depth=max_depth)
+    try:
+        root = _safe_path(directory)
+        if not root.exists():
+            return f"[NOT FOUND] {directory}"
+        if not root.is_dir():
+            return f"[NOT A DIRECTORY] {directory}"
+
+        lines: list[str] = [f"{directory}/"]
+
+        def _walk(path: Path, depth: int, prefix: str) -> None:
+            if depth > max_depth:
+                return
+            try:
+                entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+            except PermissionError:
+                lines.append(f"{prefix}[permission denied]")
+                return
+            for i, entry in enumerate(entries):
+                connector = "└── " if i == len(entries) - 1 else "├── "
+                if entry.is_dir():
+                    lines.append(f"{prefix}{connector}{entry.name}/")
+                    extension = "    " if i == len(entries) - 1 else "│   "
+                    _walk(entry, depth + 1, prefix + extension)
+                else:
+                    size = entry.stat().st_size
+                    size_str = (
+                        f"{size / 1024:.1f} KB" if size >= 1024 else f"{size} B"
+                    )
+                    lines.append(f"{prefix}{connector}{entry.name}  ({size_str})")
+
+        _walk(root, 1, "")
+        return "\n".join(lines)
+    except PermissionError as exc:
+        return f"[PERMISSION DENIED] {exc}"
+    except Exception as exc:
+        log.error("list_files_error", error=str(exc))
+        return f"[ERROR] {exc}"

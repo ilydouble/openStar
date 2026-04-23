@@ -38,3 +38,4 @@ hello.txt
 .vscode/
 *.swp
 *.swo
+*.json

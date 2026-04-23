@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # ── Conversation Memory (Redis) ─────────────────────
     redis_url: str = "redis://localhost:6379/0"
     memory_ttl_seconds: int = 86400  # 24 h
+    # 滚动摘要：消息超过 max 条时，压缩旧消息，只保留最近 keep_recent 条原文
+    memory_max_messages: int = 20    # 触发压缩的阈值
+    memory_keep_recent: int = 8      # 压缩后保留的最近消息数
 
     # ── Auth (validates tokens via iCore ft-base) ─────────
     icore_base_url: str = ""
@@ -69,9 +72,28 @@ class Settings(BaseSettings):
     anthropic_api_key: str = "" # anthropic/* 模型使用
     openai_api_key: str = ""    # openai/* 模型使用
 
+    # ── Zhipu Embedding（供 ChromaDB RAG 使用）─────────────
+    zhipu_api_base: str = "https://open.bigmodel.cn/api/paas/v4"
+    zhipu_embed_model: str = "embedding-3"
+
+    # ── ChromaDB (文档 RAG) ───────────────────────────────
+    chroma_path: str = "/tmp/icore-chroma"   # 持久化目录；生产换绝对路径
+    chroma_collection: str = "icore_docs"    # 基础 collection 名
+    rag_chunk_size: int = 500                # 每个分块的最大字符数
+    rag_chunk_overlap: int = 50             # 相邻分块的重叠字符数
+    rag_top_k: int = 5                      # 默认检索返回条数
+
     # ── Tools ─────────────────────────────────────────────
     tavily_api_key: str = ""
     file_ops_max_size_mb: int = 10
+
+    # 智谱联网搜索引擎档位（使用 ZAI_API_KEY，无需额外 key）
+    # 可选值: search_std | search_pro | search_pro_sogou | search_pro_quark
+    # search_std:        基础版，0.01¥/次，日常查询
+    # search_pro:        高级版，0.03¥/次，多引擎，召回率更高
+    # search_pro_sogou:  搜狗，0.05¥/次，覆盖腾讯生态 + 知乎
+    # search_pro_quark:  夸克，0.05¥/次，精准垂直内容
+    zhipu_search_engine: str = "search_std"
 
 
 # Singleton — import this everywhere

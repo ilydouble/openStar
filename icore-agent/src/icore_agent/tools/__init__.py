@@ -1,7 +1,7 @@
 from .web_search import web_search
 from .http_client import http_request
 from .code_executor import run_python_snippet
-from .file_ops import read_file, write_file
+from .file_ops import read_file, write_file, list_files
 
 __all__ = [
     "web_search",
@@ -9,4 +9,5 @@ __all__ = [
     "run_python_snippet",
     "read_file",
     "write_file",
+    "list_files",
 ]

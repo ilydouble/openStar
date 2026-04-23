@@ -12,17 +12,18 @@ from strands.models.litellm import LiteLLMModel
 
 from ...config import settings
 from ...tools.code_executor import run_python_snippet
-from ...tools.file_ops import read_file, write_file
+from ...tools.file_ops import read_file, write_file, list_files
 from ..sequential.agent import SequentialAgent
 
 _SYSTEM_PROMPT = """
 You are a software engineering assistant. You can:
 - Write, review, and debug code in any language.
 - Execute Python snippets directly via run_python_snippet.
-- Read and write files via read_file / write_file.
+- Explore the workspace with list_files, then read or edit files via read_file / write_file.
 - For complex multi-step tasks (e.g. "set up a project", "fix a GitHub issue"),
   delegate to the sequential bash runner instead of doing everything in one shot.
 
+Always use list_files first when you need to understand the project structure.
 Return clean, well-commented code. Prefer correctness over brevity.
 """.strip()
 
@@ -30,14 +31,16 @@ Return clean, well-commented code. Prefer correctness over brevity.
 def _create_code_agent() -> Agent:
     model = LiteLLMModel(
         model_id=settings.model_id,
-        max_tokens=settings.agent_max_tokens,
-        temperature=0.05,
-        **settings.litellm_kwargs(),
+        params={
+            "max_tokens": settings.agent_max_tokens,
+            "temperature": 0.05,
+            **settings.litellm_kwargs(),
+        },
     )
     return Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
-        tools=[run_python_snippet, read_file, write_file],
+        tools=[run_python_snippet, list_files, read_file, write_file],
     )
 
 

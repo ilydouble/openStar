@@ -115,7 +115,44 @@
               </div>
 
               <div class="mt-6 w-full">
-                <SearchBar ref="searchRefHome" @submit="handleSubmit" />
+                <SearchBar ref="searchRefHome" @submit="handleSubmit" @file-selected="handleFileSelected" />
+
+                <!-- 附件列表（首页） -->
+                <div v-if="attachmentList.length" class="mt-2 flex flex-wrap gap-2 justify-center">
+                  <div
+                    v-for="att in attachmentList"
+                    :key="att.filename"
+                    class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
+                           border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
+                  >
+                    <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                    <span :class="att.mode === 'rag'
+                      ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                      : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
+                      {{ att.mode === 'rag' ? 'RAG' : '内联' }}
+                    </span>
+                    <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                      <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <div v-if="uploading" class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
+                    <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    上传中...
+                  </div>
+                </div>
+                <div v-else-if="uploading" class="mt-2 flex justify-center">
+                  <div class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
+                    <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    上传中...
+                  </div>
+                </div>
+                <div v-if="uploadError" class="mt-2 mx-auto max-w-lg rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
+                  {{ uploadError }}
+                  <button @click="uploadError = ''" class="ml-auto">✕</button>
+                </div>
               </div>
 
               <div
@@ -151,7 +188,39 @@
             v-if="messages.length > 0"
             class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950/50 sm:px-8"
           >
-            <SearchBar ref="searchRefChat" @submit="handleSubmit" />
+            <!-- 附件列表（对话模式） -->
+            <div v-if="attachmentList.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">
+              <div v-if="attachmentList.length || uploading" class="flex flex-wrap gap-2">
+                <div
+                  v-for="att in attachmentList"
+                  :key="att.filename"
+                  class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
+                         border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
+                >
+                  <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                  <span :class="att.mode === 'rag'
+                    ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
+                    {{ att.mode === 'rag' ? 'RAG' : '内联' }}
+                  </span>
+                  <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                    <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <div v-if="uploading" class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
+                  <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                  上传中...
+                </div>
+              </div>
+              <div v-if="uploadError" class="mt-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
+                {{ uploadError }}
+                <button @click="uploadError = ''" class="ml-auto">✕</button>
+              </div>
+            </div>
+            <SearchBar ref="searchRefChat" @submit="handleSubmit" @file-selected="handleFileSelected" />
           </div>
         </div>
       </main>
@@ -163,7 +232,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import { chatStream, newSessionId } from '../api/agent.js'
+import { chatStream, newSessionId, attachFile, listAttachments, removeAttachment } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import SearchBar from '../components/SearchBar.vue'
@@ -218,6 +287,39 @@ const scrollEl = ref(null)
 const searchRefHome = ref(null)
 const searchRefChat = ref(null)
 const dark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
+
+// ── 附件状态 ──────────────────────────────────────────────────────────────
+const attachmentList = ref([])
+const uploading = ref(false)
+const uploadError = ref('')
+
+async function refreshAttachments() {
+  try {
+    attachmentList.value = await listAttachments(sessionId.value)
+  } catch { /* 静默失败 */ }
+}
+
+async function handleFileSelected(file) {
+  uploading.value = true
+  uploadError.value = ''
+  try {
+    await attachFile(file, sessionId.value)
+    await refreshAttachments()
+  } catch (err) {
+    uploadError.value = err.message || '上传失败'
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function deleteAttachment(filename) {
+  try {
+    await removeAttachment(sessionId.value, filename)
+    await refreshAttachments()
+  } catch (err) {
+    uploadError.value = err.message || '删除失败'
+  }
+}
 
 provide(
   'hasChatMessages',
@@ -308,6 +410,8 @@ function onSidebarNew() {
   sessionId.value = newSessionId()
   loading.value = false
   streamingMsg.value = null
+  attachmentList.value = []
+  uploadError.value = ''
   nextTick(() => {
     ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0

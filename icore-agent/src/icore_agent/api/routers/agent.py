@@ -12,11 +12,12 @@ import json
 import re
 import threading
 import uuid
+from pathlib import Path
 import structlog
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from typing import Annotated
@@ -24,10 +25,12 @@ from typing import Annotated
 from fastapi import File, Form, UploadFile
 
 from ...config import settings
-from ...engine.orchestrator import create_orchestrator
+from ...engine.orchestrator import VALID_AGENT_HINTS, create_orchestrator
+from ...engine.callback_ctx import set_parent_callback, reset_parent_callback
 from ...engine.sequential import SequentialAgent
 from ...memory.conversation import memory
 from ...memory.attachment_store import attachments
+from ...tools.image_tools import _SUPPORTED_IMAGE_EXTS
 from ...api.routers.knowledge import _parse_file, SUPPORTED_EXTENSIONS
 
 log = structlog.get_logger()
@@ -118,6 +121,10 @@ class ChatRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     stream: bool = True
     tenant_code: str = ""
+    # UI shortcut button binding. One of: research | code | knowledge |
+    # image | data | chat. Takes precedence over the rule-based intent
+    # classifier when supplied; unknown values are ignored.
+    agent_hint: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -153,101 +160,202 @@ def _to_strands_messages(history: list[dict]) -> list[dict]:
 
 async def _load_context(
     session_id: str,
-) -> tuple[str | None, list[dict], str | None, bool]:
-    """Fetch Redis history, inline attachments concurrently.
+) -> tuple[str | None, list[dict], str | None, bool, list[dict], list[dict]]:
+    """Fetch Redis history, inline attachments, image and data refs concurrently.
 
     Returns:
-        (summary, strands_history, inline_text, has_rag)
+        (summary, strands_history, inline_text, has_rag, image_refs, data_refs)
     """
-    (summary, history), inline_text, has_rag = await asyncio.gather(
+    (summary, history), inline_text, has_rag, image_refs, data_refs = await asyncio.gather(
         memory.get_context(session_id),
         attachments.get_inline_text(session_id),
         attachments.has_rag_docs(session_id),
+        attachments.get_image_refs(session_id),
+        attachments.get_data_refs(session_id),
     )
     return (
         summary or None,
         _to_strands_messages(history),
         inline_text or None,
         has_rag,
+        image_refs or [],
+        data_refs or [],
     )
+
+
+def _resolve_routing(message: str, agent_hint: str) -> tuple[str, bool, str | None]:
+    """Apply agent_hint over the rule-based classifier.
+
+    Returns (intent, enable_tools, effective_hint). If hint is set and valid,
+    it wins: "chat" disables tools, any other valid hint enables them.
+    """
+    hint = (agent_hint or "").strip().lower()
+    if hint in VALID_AGENT_HINTS:
+        if hint == "chat":
+            return "chat", False, hint
+        return "task", True, hint
+    intent = _classify_intent(message)
+    return intent, intent == "task", None
 
 
 # ── Chat endpoint (SSE streaming) ─────────────────────────────────────────
 
-async def _stream_agent(message: str, session_id: str) -> AsyncGenerator[str, None]:
-    """真正的 token 级 SSE 流：Strands callback_handler → asyncio.Queue → SSE。"""
-    loop = asyncio.get_event_loop()
-    q: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+# SSE 心跳间隔（秒）：队列静默达到该值时，推一条 keep-alive 注释，
+# 防止浏览器 / 反向代理在长任务中断开连接。
+_SSE_HEARTBEAT_SEC = 15
+# 总墙钟预算（秒）：单轮 agent 最长可运行时间，覆盖深度调研等耗时任务。
+_SSE_WALL_BUDGET_SEC = 600
 
-    # ── 0. 意图分类（零延迟规则分类器）──────────────────────────────────
-    intent = _classify_intent(message)
-    enable_tools = intent == "task"
+
+def _sse(event: dict) -> str:
+    """Serialize a typed event as an SSE data frame."""
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+async def _stream_agent(
+    message: str, session_id: str, agent_hint: str = ""
+) -> AsyncGenerator[str, None]:
+    """Token 级 SSE 流 + 工具步骤状态推送 + 心跳防超时。
+
+    SSE 事件类型：
+      {"type":"status","tool":...,"input_preview":...,"step":N}  — 工具开始执行
+      {"type":"token","text":...}                                 — LLM 流式 token
+      {"type":"error","message":...}                              — 失败
+      {"type":"done"}                                             — 本轮结束
+    另外每 _SSE_HEARTBEAT_SEC 秒在静默时插入一条 ": keep-alive" 注释帧。
+    """
+    loop = asyncio.get_event_loop()
+    q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+    # ── 0. 路由决策（agent_hint 优先于规则分类器）─────────────────────────
+    intent, enable_tools, effective_hint = _resolve_routing(message, agent_hint)
     log.info("intent_classified", intent=intent, enable_tools=enable_tools,
-             session_id=session_id, msg_preview=message[:60])
+             agent_hint=effective_hint, session_id=session_id,
+             msg_preview=message[:60])
 
     # ── 1. 加载短期上下文 + 附件 ─────────────────────────────────────────
-    summary, strands_history, inline_text, has_rag = await _load_context(session_id)
-    # 有 RAG 文档时强制开启工具（knowledge_agent 需要检索）
-    if has_rag:
+    summary, strands_history, inline_text, has_rag, image_refs, data_refs = \
+        await _load_context(session_id)
+    if has_rag or image_refs or data_refs:
         enable_tools = True
 
+    # 路由完成即推首条状态 —— 避免子 agent 长时间工作时前端完全无反馈。
+    route_label_map = {
+        "research": "research_agent",
+        "knowledge": "knowledge_agent",
+        "image": "image_agent",
+        "data": "data_agent",
+        "code": "code_agent",
+        "chat": "chat",
+    }
+    init_label = route_label_map.get(effective_hint or intent, "orchestrator")
+    init_summary_bits: list[str] = []
+    if has_rag:
+        init_summary_bits.append("RAG 知识库已载入")
+    if image_refs:
+        init_summary_bits.append(f"图片 {len(image_refs)} 张")
+    if data_refs:
+        init_summary_bits.append(f"数据 {len(data_refs)} 份")
+    init_preview = "，".join(init_summary_bits) or f"启动 {init_label}"
+    await q.put(("status", {"tool": init_label, "input_preview": init_preview}))
+
     full_reply: list[str] = []
+    # Strands 在工具执行期间会反复触发 current_tool_use delta；用 toolUseId
+    # 去重，保证每次工具调用只推送一次 status 事件。
+    seen_tool_ids: set[str] = set()
 
     def on_stream_event(**kwargs):
-        """Strands 在 worker 线程中同步调用此回调，桥接到 asyncio Queue。"""
-        # ── 工具调用可观测性 ──────────────────────────────────────────────
-        event_loop = kwargs.get("event_loop_metrics")
+        """Strands worker 线程同步回调 → asyncio Queue。"""
         current_tool = kwargs.get("current_tool_use")
         if current_tool:
-            tool_name = current_tool.get("name", "unknown")
-            tool_input = current_tool.get("input", {})
-            log.info(
-                "tool_call",
-                tool=tool_name,
-                input_preview=str(tool_input)[:120],
-                session_id=session_id,
-            )
-        # ── 流式 token ──────────────────────────────────────────────────
+            tool_id = str(current_tool.get("toolUseId") or "")
+            if tool_id and tool_id not in seen_tool_ids:
+                seen_tool_ids.add(tool_id)
+                tool_name = current_tool.get("name", "unknown")
+                tool_input = current_tool.get("input", {})
+                log.info("tool_call", tool=tool_name,
+                         input_preview=str(tool_input)[:120], session_id=session_id)
+                asyncio.run_coroutine_threadsafe(
+                    q.put(("status", {
+                        "tool": tool_name,
+                        "input_preview": str(tool_input)[:200],
+                    })),
+                    loop,
+                )
         token = kwargs.get("data")
         if token and isinstance(token, str):
             asyncio.run_coroutine_threadsafe(q.put(("token", token)), loop)
 
     def run_agent():
+        token = set_parent_callback(on_stream_event)
         try:
             orchestrator = create_orchestrator(
                 callback_handler=on_stream_event,
                 summary=summary,
                 attachments_text=inline_text,
+                image_attachments=image_refs,
+                data_attachments=data_refs,
                 enable_tools=enable_tools,
+                agent_hint=effective_hint,
+                session_id=session_id,
             )
-            # Pre-populate with recent history as proper role-tagged messages
             orchestrator.messages = strands_history
             orchestrator(message)
         except Exception as exc:
             asyncio.run_coroutine_threadsafe(q.put(("error", str(exc))), loop)
         finally:
+            reset_parent_callback(token)
             asyncio.run_coroutine_threadsafe(q.put(("done", "")), loop)
 
     threading.Thread(target=run_agent, daemon=True).start()
 
-    try:
-        while True:
-            kind, data = await asyncio.wait_for(q.get(), timeout=120)
-            if kind == "token":
-                full_reply.append(data)
-                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-            elif kind == "error":
-                log.error("agent_stream_error", error=data, session_id=session_id)
-                yield f"data: {json.dumps('[ERROR] ' + data, ensure_ascii=False)}\n\n"
-                break
-            else:  # done
-                break
-    except asyncio.TimeoutError:
-        yield f"data: {json.dumps('[ERROR] Agent 响应超时', ensure_ascii=False)}\n\n"
+    # ── 2. 心跳驱动的事件循环 ────────────────────────────────────────────
+    start = loop.time()
+    step_idx = 0
+    timed_out = False
+    while True:
+        if loop.time() - start > _SSE_WALL_BUDGET_SEC:
+            timed_out = True
+            break
+        try:
+            kind, payload = await asyncio.wait_for(
+                q.get(), timeout=_SSE_HEARTBEAT_SEC
+            )
+        except asyncio.TimeoutError:
+            # 静默期间推心跳注释帧（不消耗业务事件，仅用于保活）
+            yield ": keep-alive\n\n"
+            continue
 
+        if kind == "token":
+            text = payload if isinstance(payload, str) else str(payload)
+            full_reply.append(text)
+            yield _sse({"type": "token", "text": text})
+        elif kind == "status":
+            step_idx += 1
+            evt = {"type": "status", "step": step_idx}
+            if isinstance(payload, dict):
+                evt.update(payload)
+            yield _sse(evt)
+        elif kind == "error":
+            msg = payload if isinstance(payload, str) else str(payload)
+            log.error("agent_stream_error", error=msg, session_id=session_id)
+            yield _sse({"type": "error", "message": msg})
+            break
+        else:  # done
+            break
+
+    if timed_out:
+        log.warning("agent_stream_wall_timeout",
+                    session_id=session_id, budget_sec=_SSE_WALL_BUDGET_SEC)
+        yield _sse({
+            "type": "error",
+            "message": f"Agent 运行超过 {_SSE_WALL_BUDGET_SEC}s 预算，已中止",
+        })
+
+    yield _sse({"type": "done"})
     yield "data: [DONE]\n\n"
 
-    # ── 2. 保存短期记忆（Redis）────────────────────────────────────────────
+    # ── 3. 保存短期记忆（Redis）────────────────────────────────────────────
     reply_text = "".join(full_reply)
     await memory.append_message(session_id, "user", message)
     await memory.append_message(session_id, "assistant", reply_text)
@@ -256,31 +364,45 @@ async def _stream_agent(message: str, session_id: str) -> AsyncGenerator[str, No
 
 @router.post("/chat", summary="Chat with the agent (SSE streaming)")
 async def chat(req: ChatRequest):
-    intent = _classify_intent(req.message)
-    enable_tools = intent == "task"
+    intent, enable_tools, effective_hint = _resolve_routing(req.message, req.agent_hint)
     log.info(
         "chat_request",
         session_id=req.session_id,
         stream=req.stream,
         intent=intent,
         enable_tools=enable_tools,
+        agent_hint=effective_hint,
     )
 
     if req.stream:
         return StreamingResponse(
-            _stream_agent(req.message, req.session_id),
+            _stream_agent(req.message, req.session_id, req.agent_hint),
             media_type="text/event-stream",
-            headers={"X-Session-Id": req.session_id},
+            headers={
+                "X-Session-Id": req.session_id,
+                # SSE 必备三件套：禁用任何中间层缓冲 / 缓存 / 压缩。
+                # X-Accel-Buffering 会被 nginx 识别，Vite 的 http-proxy 在
+                # 看到它时也会放弃自作主张的积攒策略，保证每次 yield 立刻
+                # 到达浏览器。
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
         )
 
     # Non-streaming fallback
-    summary, strands_history, inline_text, has_rag = await _load_context(req.session_id)
-    if has_rag:
+    summary, strands_history, inline_text, has_rag, image_refs, data_refs = \
+        await _load_context(req.session_id)
+    if has_rag or image_refs or data_refs:
         enable_tools = True
     orchestrator = create_orchestrator(
         summary=summary,
         attachments_text=inline_text,
+        image_attachments=image_refs,
+        data_attachments=data_refs,
         enable_tools=enable_tools,
+        agent_hint=effective_hint,
+        session_id=req.session_id,
     )
     orchestrator.messages = strands_history
     loop = asyncio.get_event_loop()
@@ -324,15 +446,44 @@ async def run_sequential(req: SequentialRequest) -> SequentialResponse:
 
 class AttachmentInfo(BaseModel):
     filename: str
-    char_count: int
-    mode: str   # "inline" | "rag"
+    mode: str   # "inline" | "rag" | "image" | "data"
     uploaded_at: float
+    char_count: int | None = None   # text attachments only
+    ref: str | None = None          # image / data attachments
+    size: int | None = None         # image / data attachments
+    ext: str | None = None          # data attachments
+    row_count: int | None = None    # data attachments
+    columns: list[dict] | None = None   # data attachments: [{name, dtype}]
+    preview_md: str | None = None   # data attachments: head(N) markdown
+    preview_error: str | None = None  # data attachments: parse error, if any
 
 
 class AttachResponse(BaseModel):
     filename: str
     char_count: int
     mode: str
+
+
+class ImageAttachResponse(BaseModel):
+    filename: str
+    ref: str
+    size: int
+    mode: str = "image"
+
+
+class DataAttachResponse(BaseModel):
+    filename: str
+    ref: str
+    size: int
+    ext: str
+    row_count: int | None = None
+    columns: list[dict] = []
+    preview_md: str = ""
+    preview_error: str = ""
+    mode: str = "data"
+
+
+_SUPPORTED_DATA_EXTS = {".csv", ".xlsx", ".xls"}
 
 
 @router.post("/attach", response_model=AttachResponse,
@@ -376,6 +527,81 @@ async def remove_attachment(session_id: str, filename: str) -> dict:
     if not removed:
         raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
     return {"removed": True, "filename": filename, "session_id": session_id}
+
+
+# ── Image upload / serve ──────────────────────────────────────────────────
+
+@router.post("/attach/image", response_model=ImageAttachResponse,
+             summary="Upload an image (jpg/png/webp) and attach it to the session")
+async def attach_image(
+    file: Annotated[UploadFile, File(description="JPG, PNG, WEBP, BMP or GIF image")],
+    session_id: Annotated[str, Form(description="Session ID to attach the image to")],
+) -> ImageAttachResponse:
+    filename = file.filename or "image"
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _SUPPORTED_IMAGE_EXTS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported image type '{ext}'. Supported: {sorted(_SUPPORTED_IMAGE_EXTS)}",
+        )
+    data = await file.read()
+    limit = settings.image_upload_max_mb * 1024 * 1024
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image exceeds {settings.image_upload_max_mb} MB limit",
+        )
+    record = await attachments.add_image(session_id, filename, data)
+    return ImageAttachResponse(
+        filename=record["filename"], ref=record["ref"], size=record["size"]
+    )
+
+
+@router.get("/images/{session_id}/{filename}",
+            summary="Serve a session-scoped image")
+async def get_image(session_id: str, filename: str):
+    # Prevent path traversal — filename must not contain separators.
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = Path(settings.image_save_dir) / session_id / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path)
+
+
+# ── Data file upload (CSV / Excel) ────────────────────────────────────────
+
+@router.post("/attach/data", response_model=DataAttachResponse,
+             summary="Upload a CSV / Excel file to the session workspace for pandas analysis")
+async def attach_data(
+    file: Annotated[UploadFile, File(description="CSV, XLSX or XLS file")],
+    session_id: Annotated[str, Form(description="Session ID to attach the data file to")],
+) -> DataAttachResponse:
+    filename = file.filename or "data"
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _SUPPORTED_DATA_EXTS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported data type '{ext}'. Supported: {sorted(_SUPPORTED_DATA_EXTS)}",
+        )
+    data = await file.read()
+    limit = settings.data_upload_max_mb * 1024 * 1024
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Data file exceeds {settings.data_upload_max_mb} MB limit",
+        )
+    record = await attachments.add_data(session_id, filename, data)
+    return DataAttachResponse(
+        filename=record["filename"],
+        ref=record["ref"],
+        size=record["size"],
+        ext=record["ext"],
+        row_count=record.get("row_count"),
+        columns=record.get("columns") or [],
+        preview_md=record.get("preview_md") or "",
+        preview_error=record.get("preview_error") or "",
+    )
 
 
 # ── Session management ────────────────────────────────────────────────────

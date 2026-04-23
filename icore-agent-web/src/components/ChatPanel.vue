@@ -3,7 +3,12 @@
     class="flex h-full flex-col bg-zinc-100 transition-colors duration-300 ease-out dark:bg-zinc-950"
   >
     <div ref="scrollEl" class="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
-      <div v-for="msg in messages" :key="msg.id" :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+      <div
+        v-for="msg in messages"
+        :key="msg.id"
+        v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
+        :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+      >
         <div
           v-if="msg.role === 'user'"
           class="max-w-[70%] rounded-2xl rounded-tr-sm bg-zinc-900 px-4 py-3 text-sm leading-relaxed text-white shadow-md ring-1 ring-zinc-900/20 transition-colors duration-300 dark:bg-zinc-800 dark:shadow-lg dark:shadow-black/20 dark:ring-white/10"
@@ -16,19 +21,54 @@
           >
             A
           </div>
-          <div
-            :class="[
-              'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
-              'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
-              dark ? 'prose-chat-dark' : 'prose-chat',
-              msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
-            ]"
-            v-html="renderMarkdown(msg.content)"
-          />
+          <div class="flex min-w-0 flex-1 flex-col gap-2">
+            <div
+              v-if="msg.steps && msg.steps.length"
+              class="rounded-xl border border-zinc-200/90 bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/40 dark:ring-white/10"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center gap-1.5 text-left text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                @click="msg.stepsCollapsed = !msg.stepsCollapsed"
+              >
+                <span class="transition-transform" :class="msg.stepsCollapsed ? '' : 'rotate-90'">▸</span>
+                <span>
+                  {{ msg.streaming
+                    ? t('chat.stepsLive', { n: msg.steps.length })
+                    : t('chat.stepsCollapsed', { n: msg.steps.length }) }}
+                </span>
+              </button>
+              <ul
+                v-if="!msg.stepsCollapsed"
+                class="mt-2 space-y-1 border-l border-zinc-200 pl-3 dark:border-white/10"
+              >
+                <li
+                  v-for="s in msg.steps"
+                  :key="s.step"
+                  class="text-zinc-600 dark:text-zinc-400"
+                >
+                  <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ s.step }}. {{ s.tool }}</span>
+                  <span v-if="s.input_preview" class="ml-1 text-zinc-500 dark:text-zinc-500">— {{ s.input_preview }}</span>
+                </li>
+              </ul>
+            </div>
+            <div
+              :class="[
+                'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
+                'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
+                dark ? 'prose-chat-dark' : 'prose-chat',
+                msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
+              ]"
+              v-html="renderMarkdown(msg.content)"
+            />
+          </div>
         </div>
       </div>
 
-      <div v-if="loading && !streamingMsg" class="flex justify-start gap-3">
+      <div
+        v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
+        class="flex justify-start gap-3"
+      >
         <div
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
         >
@@ -265,13 +305,29 @@ async function sendMessage(msg) {
   loading.value = true
   await scrollBottom()
 
-  const reply = { id: Date.now() + 1, role: 'assistant', content: '', streaming: true }
+  const reply = {
+    id: Date.now() + 1,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    steps: [],
+    stepsCollapsed: false,
+  }
   streamingMsg.value = reply
   messages.value.push(reply)
 
   try {
-    for await (const token of chatStream(msg, sessionId.value)) {
-      reply.content += token
+    for await (const evt of chatStream(msg, sessionId.value)) {
+      if (!evt) continue
+      if (evt.kind === 'token') {
+        reply.content += evt.text || ''
+      } else if (evt.kind === 'status') {
+        reply.steps.push({
+          step: evt.step,
+          tool: evt.tool,
+          input_preview: evt.input_preview,
+        })
+      }
       await scrollBottom()
     }
   } catch (e) {
@@ -279,6 +335,7 @@ async function sendMessage(msg) {
       locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
   } finally {
     reply.streaming = false
+    reply.stepsCollapsed = true
     streamingMsg.value = null
     loading.value = false
     await scrollBottom()

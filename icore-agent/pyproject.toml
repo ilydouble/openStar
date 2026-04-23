@@ -29,6 +29,9 @@ dependencies = [
     # Redis (conversation memory)
     "redis>=5.0.0",
     "hiredis>=3.0.0",
+    # Structured data uploads (Data agent) — CSV / Excel parsing
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
 ]
 
 [project.optional-dependencies]

@@ -35,35 +35,38 @@ export default {
       {
         id: 'research',
         label: 'Research',
-        prompt:
-          'Give me a tight research brief on one emerging topic in my industry, with 5 sources to read next.',
+        placeholder: 'What would you like to research? I\u2019ll search the web and cross-check sources.',
       },
       {
         id: 'code',
         label: 'Code',
-        prompt: 'Help me write a small, well-documented function and include edge cases and tests.',
+        placeholder: 'Describe the feature to build or the bug to debug\u2026',
       },
       {
         id: 'docs',
         label: 'Docs',
-        prompt: 'Turn rough bullet notes into a crisp one-pager with headings and a short executive summary.',
+        placeholder: 'Ask about your knowledge base, or what should I organize? (upload docs first)',
       },
       {
         id: 'chat',
         label: 'Chat',
-        prompt: 'Let’s do a focused Q&A — ask one clarifying question at a time.',
+        placeholder: 'Ask me anything \u2014 focused chat, no tools.',
       },
       {
         id: 'image',
         label: 'Visual',
-        prompt: 'Describe a detailed scene for an image concept: subject, lighting, lens, palette, and mood.',
+        placeholder: 'Describe the image to generate, or upload one to analyze\u2026',
       },
       {
         id: 'data',
         label: 'Data',
-        prompt: 'Propose a minimal data model and example SQL for a small analytics dashboard.',
+        placeholder: 'What\u2019s your data and what would you like to learn? (upload CSV / Excel)',
       },
     ],
+    modePill: {
+      suffix: ' mode',
+      clear: 'Exit mode',
+    },
     suggestions: [
       { label: 'Summarize a long document', prompt: 'How should I summarize a long document clearly for executives?' },
       { label: 'Draft an email', prompt: 'Help me draft a concise professional email to follow up after a meeting.' },
@@ -84,6 +87,8 @@ export default {
     send: 'Send',
     thinking: 'Thinking...',
     attachFile: 'Attach file (PDF / DOCX / TXT / MD)',
+    stepsLive: 'Running ({n} step(s))',
+    stepsCollapsed: 'Thinking process ({n} step(s))',
   },
   theme: {
     switchToLight: 'Switch to light mode',

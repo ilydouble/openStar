@@ -21,9 +21,11 @@ from typing import Any
 import structlog
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
+from strands.tools.executors import SequentialToolExecutor
 
 from ...config import settings
 from ...memory.chroma_store import search as _chroma_search_raw
+from ..callback_ctx import sub_agent_callback
 
 log = structlog.get_logger()
 
@@ -150,6 +152,8 @@ def _create_knowledge_agent(tenant_code: str = "") -> Agent:
         model=model,
         system_prompt=_SYSTEM_PROMPT,
         tools=[chroma_search, rerank_results],
+        callback_handler=sub_agent_callback(),
+        tool_executor=SequentialToolExecutor(),
     )
 
 

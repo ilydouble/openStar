@@ -35,34 +35,38 @@ export default {
       {
         id: 'research',
         label: '研究',
-        prompt: '请就我所在行业的一个新兴趋势写一份精炼的研究要点，并列出 5 个延伸阅读来源。',
+        placeholder: '想调研什么主题？我会联网搜索并交叉验证来源。',
       },
       {
         id: 'code',
         label: '代码',
-        prompt: '帮我写一个小而清晰的函数，补充注释，并说明边界情况与简单测试思路。',
+        placeholder: '描述你要实现的功能或要调试的代码…',
       },
       {
         id: 'docs',
         label: '文档',
-        prompt: '把这些要点整理成一页内部文档：标题层级 + 执行摘要。',
+        placeholder: '想基于知识库问答，或整理什么内容？（可先上传文档）',
       },
       {
         id: 'chat',
         label: '问答',
-        prompt: '我们来做聚焦问答：每次只问我一个澄清问题。',
+        placeholder: '有什么问题？（纯对话模式，不调用工具）',
       },
       {
         id: 'image',
         label: '视觉',
-        prompt: '描述一幅图像概念：主体、光线、镜头感、配色与情绪。',
+        placeholder: '描述你想生成的图片，或上传图片让我分析…',
       },
       {
         id: 'data',
         label: '数据',
-        prompt: '为小型分析看板给出一个最小数据模型示例 SQL。',
+        placeholder: '你的数据是什么？想做什么分析？（可上传 CSV / Excel）',
       },
     ],
+    modePill: {
+      suffix: '模式',
+      clear: '退出该模式',
+    },
     suggestions: [
       { label: '总结长文档', prompt: '如何把一份长文档清晰总结给管理层阅读？请给出结构建议。' },
       { label: '写一封邮件', prompt: '帮我写一封简洁专业的会议跟进邮件。' },
@@ -83,6 +87,8 @@ export default {
     send: '发送',
     thinking: '思考中...',
     attachFile: '上传文件（PDF / DOCX / TXT / MD）',
+    stepsLive: '执行中（{n} 步）',
+    stepsCollapsed: '思考过程（{n} 步）',
   },
   theme: {
     switchToLight: '切换到浅色模式',

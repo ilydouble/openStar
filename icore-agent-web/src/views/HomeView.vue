@@ -45,6 +45,7 @@
               <div
                 v-for="msg in messages"
                 :key="msg.id"
+                v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
                 :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
               >
                 <div
@@ -59,19 +60,54 @@
                   >
                     A
                   </div>
-                  <div
-                    :class="[
-                      'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
-                      'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
-                      dark ? 'prose-chat-dark' : 'prose-chat',
-                      msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
-                    ]"
-                    v-html="renderMarkdown(msg.content)"
-                  />
+                  <div class="flex min-w-0 flex-1 flex-col gap-2">
+                    <div
+                      v-if="msg.steps && msg.steps.length"
+                      class="rounded-xl border border-zinc-200/90 bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/40 dark:ring-white/10"
+                    >
+                      <button
+                        type="button"
+                        class="flex w-full items-center gap-1.5 text-left text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                        @click="msg.stepsCollapsed = !msg.stepsCollapsed"
+                      >
+                        <span class="transition-transform" :class="msg.stepsCollapsed ? '' : 'rotate-90'">▸</span>
+                        <span>
+                          {{ msg.streaming
+                            ? t('chat.stepsLive', { n: msg.steps.length })
+                            : t('chat.stepsCollapsed', { n: msg.steps.length }) }}
+                        </span>
+                      </button>
+                      <ul
+                        v-if="!msg.stepsCollapsed"
+                        class="mt-2 space-y-1 border-l border-zinc-200 pl-3 dark:border-white/10"
+                      >
+                        <li
+                          v-for="s in msg.steps"
+                          :key="s.step"
+                          class="text-zinc-600 dark:text-zinc-400"
+                        >
+                          <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ s.step }}. {{ s.tool }}</span>
+                          <span v-if="s.input_preview" class="ml-1 text-zinc-500 dark:text-zinc-500">— {{ s.input_preview }}</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <div
+                      :class="[
+                        'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
+                        'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
+                        dark ? 'prose-chat-dark' : 'prose-chat',
+                        msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
+                      ]"
+                      v-html="renderMarkdown(msg.content)"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div v-if="loading && !streamingMsg" class="flex justify-start gap-3">
+              <div
+                v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
+                class="flex justify-start gap-3"
+              >
                 <div
                   class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
                 >
@@ -115,7 +151,14 @@
               </div>
 
               <div class="mt-6 w-full">
-                <SearchBar ref="searchRefHome" @submit="handleSubmit" @file-selected="handleFileSelected" />
+                <SearchBar
+                  ref="searchRefHome"
+                  :placeholder="activeShortcut?.placeholder || ''"
+                  :mode-pill="activeShortcutPill"
+                  @submit="handleSubmit"
+                  @file-selected="handleFileSelected"
+                  @clear-mode="clearShortcut"
+                />
 
                 <!-- 附件列表（首页） -->
                 <div v-if="attachmentList.length" class="mt-2 flex flex-wrap gap-2 justify-center">
@@ -125,14 +168,24 @@
                     class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                            border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                   >
-                    <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <img
+                      v-if="att.mode === 'image' && att.ref"
+                      :src="imageUrl(att.ref)"
+                      :alt="att.filename"
+                      class="h-5 w-5 shrink-0 rounded object-cover"
+                    />
+                    <svg v-else class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
                     <span class="max-w-[160px] truncate">{{ att.filename }}</span>
                     <span :class="att.mode === 'rag'
                       ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                      : att.mode === 'image'
+                      ? 'rounded bg-fuchsia-100 px-1 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
+                      : att.mode === 'data'
+                      ? 'rounded bg-emerald-100 px-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                       : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
-                      {{ att.mode === 'rag' ? 'RAG' : '内联' }}
+                      {{ att.mode === 'rag' ? 'RAG' : att.mode === 'image' ? '图片' : att.mode === 'data' ? '数据' : '内联' }}
                     </span>
                     <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                       <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -163,19 +216,28 @@
                   :key="item.id"
                   type="button"
                   :disabled="loading"
-                  @click="startWithPrompt(item.prompt)"
+                  :aria-pressed="activeShortcutId === item.id"
+                  @click="toggleShortcut(item.id)"
                   class="group flex w-[4.5rem] flex-col items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 disabled:opacity-50 dark:focus-visible:ring-violet-400/40 dark:focus-visible:ring-offset-zinc-950 sm:w-[5.25rem]"
                 >
                   <span
                     :class="[
-                      'flex h-12 w-12 items-center justify-center rounded-2xl border text-lg shadow-md ring-1 ring-black/5 transition-all duration-300 ease-out group-hover:scale-110 group-hover:shadow-lg group-hover:ring-black/10 motion-reduce:transition-colors motion-reduce:group-hover:scale-100 sm:h-14 sm:w-14 sm:text-xl dark:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.5)] dark:ring-white/10 dark:group-hover:shadow-[0_16px_32px_-8px_rgba(0,0,0,0.55)]',
+                      'flex h-12 w-12 items-center justify-center rounded-2xl border text-lg shadow-md ring-1 transition-all duration-300 ease-out group-hover:scale-110 group-hover:shadow-lg motion-reduce:transition-colors motion-reduce:group-hover:scale-100 sm:h-14 sm:w-14 sm:text-xl dark:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_16px_32px_-8px_rgba(0,0,0,0.55)]',
                       item.panel,
+                      activeShortcutId === item.id
+                        ? 'scale-110 ring-2 ring-violet-500 ring-offset-2 ring-offset-zinc-100 dark:ring-violet-400 dark:ring-offset-zinc-950'
+                        : 'ring-black/5 group-hover:ring-black/10 dark:ring-white/10',
                     ]"
                   >
                     {{ item.emoji }}
                   </span>
                   <span
-                    class="max-w-[5.5rem] text-center text-[11px] font-medium leading-tight text-zinc-600 transition-colors duration-200 group-hover:text-zinc-950 sm:text-xs dark:text-zinc-400 dark:group-hover:text-zinc-200"
+                    :class="[
+                      'max-w-[5.5rem] text-center text-[11px] font-medium leading-tight transition-colors duration-200 sm:text-xs',
+                      activeShortcutId === item.id
+                        ? 'text-violet-600 dark:text-violet-300'
+                        : 'text-zinc-600 group-hover:text-zinc-950 dark:text-zinc-400 dark:group-hover:text-zinc-200',
+                    ]"
                   >
                     {{ item.label }}
                   </span>
@@ -197,14 +259,24 @@
                   class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                          border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                 >
-                  <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <img
+                    v-if="att.mode === 'image' && att.ref"
+                    :src="imageUrl(att.ref)"
+                    :alt="att.filename"
+                    class="h-5 w-5 shrink-0 rounded object-cover"
+                  />
+                  <svg v-else class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
                   <span class="max-w-[160px] truncate">{{ att.filename }}</span>
                   <span :class="att.mode === 'rag'
                     ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    : att.mode === 'image'
+                    ? 'rounded bg-fuchsia-100 px-1 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
+                    : att.mode === 'data'
+                    ? 'rounded bg-emerald-100 px-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
-                    {{ att.mode === 'rag' ? 'RAG' : '内联' }}
+                    {{ att.mode === 'rag' ? 'RAG' : att.mode === 'image' ? '图片' : att.mode === 'data' ? '数据' : '内联' }}
                   </span>
                   <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                     <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -220,7 +292,14 @@
                 <button @click="uploadError = ''" class="ml-auto">✕</button>
               </div>
             </div>
-            <SearchBar ref="searchRefChat" @submit="handleSubmit" @file-selected="handleFileSelected" />
+            <SearchBar
+              ref="searchRefChat"
+              :placeholder="activeShortcut?.placeholder || ''"
+              :mode-pill="activeShortcutPill"
+              @submit="handleSubmit"
+              @file-selected="handleFileSelected"
+              @clear-mode="clearShortcut"
+            />
           </div>
         </div>
       </main>
@@ -232,7 +311,16 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import { chatStream, newSessionId, attachFile, listAttachments, removeAttachment } from '../api/agent.js'
+import {
+  chatStream,
+  newSessionId,
+  attachFile,
+  attachImage,
+  attachData,
+  imageUrl,
+  listAttachments,
+  removeAttachment,
+} from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import SearchBar from '../components/SearchBar.vue'
@@ -299,11 +387,26 @@ async function refreshAttachments() {
   } catch { /* 静默失败 */ }
 }
 
+const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
+const DATA_EXTS = new Set(['.csv', '.xls', '.xlsx'])
+
+function extOf(name) {
+  const i = name.lastIndexOf('.')
+  return i >= 0 ? name.slice(i).toLowerCase() : ''
+}
+
 async function handleFileSelected(file) {
   uploading.value = true
   uploadError.value = ''
   try {
-    await attachFile(file, sessionId.value)
+    const ext = extOf(file.name)
+    if (IMAGE_EXTS.has(ext)) {
+      await attachImage(file, sessionId.value)
+    } else if (DATA_EXTS.has(ext)) {
+      await attachData(file, sessionId.value)
+    } else {
+      await attachFile(file, sessionId.value)
+    }
     await refreshAttachments()
   } catch (err) {
     uploadError.value = err.message || '上传失败'
@@ -326,6 +429,15 @@ provide(
   computed(() => messages.value.length > 0),
 )
 
+const PILL_BY_ID = {
+  research: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:ring-rose-400/30',
+  code:     'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:ring-amber-400/30',
+  docs:     'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:ring-sky-400/30',
+  chat:     'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:ring-violet-400/30',
+  image:    'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-900/40 dark:text-fuchsia-200 dark:ring-fuchsia-400/30',
+  data:     'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-400/30',
+}
+
 const shortcutItems = computed(() => {
   const raw = tm('home.shortcuts')
   if (!Array.isArray(raw)) return []
@@ -339,11 +451,25 @@ const shortcutItems = computed(() => {
     return {
       id,
       label: row.label,
-      prompt: row.prompt,
+      placeholder: row.placeholder || '',
       emoji: ui.emoji,
       panel: ui.panel,
     }
   })
+})
+
+const activeShortcutId = ref('')
+const activeShortcut = computed(
+  () => shortcutItems.value.find((it) => it.id === activeShortcutId.value) || null,
+)
+const activeShortcutPill = computed(() => {
+  const it = activeShortcut.value
+  if (!it) return null
+  return {
+    label: it.label,
+    emoji: it.emoji,
+    pillClass: PILL_BY_ID[it.id] || '',
+  }
 })
 
 function syncTheme() {
@@ -364,7 +490,17 @@ async function scrollBottom() {
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
 }
 
-async function sendUserMessage(msg) {
+// 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
+const SHORTCUT_HINT = {
+  research: 'research',
+  code: 'code',
+  docs: 'knowledge',
+  chat: 'chat',
+  image: 'image',
+  data: 'data',
+}
+
+async function sendUserMessage(msg, agentHint = '') {
   if (!msg?.trim() || loading.value) return
   const text = msg.trim()
 
@@ -377,13 +513,24 @@ async function sendUserMessage(msg) {
     role: 'assistant',
     content: '',
     streaming: true,
+    steps: [],
+    stepsCollapsed: false,
   }
   streamingMsg.value = reply
   messages.value.push(reply)
 
   try {
-    for await (const token of chatStream(text, sessionId.value)) {
-      reply.content += token
+    for await (const evt of chatStream(text, sessionId.value, agentHint)) {
+      if (!evt) continue
+      if (evt.kind === 'token') {
+        reply.content += evt.text || ''
+      } else if (evt.kind === 'status') {
+        reply.steps.push({
+          step: evt.step,
+          tool: evt.tool,
+          input_preview: evt.input_preview,
+        })
+      }
       await scrollBottom()
     }
   } catch (e) {
@@ -391,6 +538,7 @@ async function sendUserMessage(msg) {
       locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
   } finally {
     reply.streaming = false
+    reply.stepsCollapsed = true
     streamingMsg.value = null
     loading.value = false
     await scrollBottom()
@@ -398,11 +546,19 @@ async function sendUserMessage(msg) {
 }
 
 function handleSubmit({ message }) {
-  sendUserMessage(message)
+  const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+  sendUserMessage(message, hint)
 }
 
-function startWithPrompt(prompt) {
-  sendUserMessage(prompt)
+function toggleShortcut(id) {
+  activeShortcutId.value = activeShortcutId.value === id ? '' : id
+  nextTick(() => {
+    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+  })
+}
+
+function clearShortcut() {
+  activeShortcutId.value = ''
 }
 
 function onSidebarNew() {
@@ -412,6 +568,7 @@ function onSidebarNew() {
   streamingMsg.value = null
   attachmentList.value = []
   uploadError.value = ''
+  activeShortcutId.value = ''
   nextTick(() => {
     ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0

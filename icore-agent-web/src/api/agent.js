@@ -1,15 +1,28 @@
 const BASE = '/api/v1/agent'
 
 /**
- * 流式对话 — 返回 AsyncGenerator，逐 token yield 文本片段
+ * 流式对话 — 返回 AsyncGenerator，yield 类型化事件：
+ *   { kind: 'token',  text: string }                                        — LLM 流式 token
+ *   { kind: 'status', tool: string, input_preview: string, step: number }  — 子 agent 工具开始执行
+ *   { kind: 'error',  message: string }                                     — 错误
+ *   { kind: 'done' }                                                        — 本轮结束
+ *
+ * 向后兼容：旧后端如果推送的是裸字符串，会被当作 token 文本处理。
+ *
  * @param {string} message
  * @param {string} sessionId
+ * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
  */
-export async function* chatStream(message, sessionId) {
+export async function* chatStream(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, stream: true }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      stream: true,
+      agent_hint: agentHint || '',
+    }),
   })
 
   if (!resp.ok) {
@@ -24,22 +37,54 @@ export async function* chatStream(message, sessionId) {
     const { done, value } = await reader.read()
     if (done) break
 
+    // [DIAG] 诊断：SSE 分片到达时刻与字节数。确认了实时性后删掉。
+    // eslint-disable-next-line no-console
+    console.log('[SSE chunk]', new Date().toISOString(), value?.byteLength ?? 0, 'bytes')
+
     buf += decoder.decode(value, { stream: true })
     const lines = buf.split('\n')
     buf = lines.pop() // 保留未完整的行
 
     for (const line of lines) {
+      // SSE comment（心跳）以 ':' 开头；本协议里用于 keep-alive，前端可忽略
+      if (line.startsWith(':')) continue
       if (!line.startsWith('data: ')) continue
       const payload = line.slice(6).trim()
       if (payload === '[DONE]') return
+
+      let parsed
       try {
-        const token = JSON.parse(payload)
-        if (typeof token === 'string' && token.startsWith('[ERROR]')) throw new Error(token)
-        yield token
-      } catch (e) {
-        if (e.message.startsWith('[ERROR]')) throw e
-        // JSON 解析失败则原样输出（兼容旧格式）
-        yield payload
+        parsed = JSON.parse(payload)
+      } catch {
+        // 非 JSON：按裸文本处理
+        yield { kind: 'token', text: payload }
+        continue
+      }
+
+      // 新协议：typed 事件
+      if (parsed && typeof parsed === 'object') {
+        const type = parsed.type
+        if (type === 'token') {
+          yield { kind: 'token', text: String(parsed.text ?? '') }
+        } else if (type === 'status') {
+          yield {
+            kind: 'status',
+            tool: String(parsed.tool ?? ''),
+            input_preview: String(parsed.input_preview ?? ''),
+            step: Number(parsed.step ?? 0),
+          }
+        } else if (type === 'error') {
+          throw new Error(String(parsed.message ?? 'unknown error'))
+        } else if (type === 'done') {
+          return
+        }
+        continue
+      }
+
+      // 旧协议：裸字符串
+      if (typeof parsed === 'string') {
+        if (parsed.startsWith('[ERROR]')) throw new Error(parsed)
+        yield { kind: 'token', text: parsed }
       }
     }
   }
@@ -48,11 +93,16 @@ export async function* chatStream(message, sessionId) {
 /**
  * 非流式对话（备用）
  */
-export async function chat(message, sessionId) {
+export async function chat(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, stream: false }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      stream: false,
+      agent_hint: agentHint || '',
+    }),
   })
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
@@ -103,6 +153,51 @@ export async function attachFile(file, sessionId) {
     throw new Error(detail.detail || `HTTP ${resp.status}`)
   }
   return resp.json()
+}
+
+/**
+ * 上传图片（jpg/png/webp 等）并附加到会话上下文
+ * @param {File} file
+ * @param {string} sessionId
+ * @returns {Promise<{filename: string, ref: string, size: number, mode: string}>}
+ */
+export async function attachImage(file, sessionId) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('session_id', sessionId)
+  const resp = await fetch(`${BASE}/attach/image`, { method: 'POST', body: form })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(detail.detail || `HTTP ${resp.status}`)
+  }
+  return resp.json()
+}
+
+/**
+ * 上传结构化数据文件（.csv / .xlsx / .xls）并落盘到 data_agent 可读的 workspace
+ * @param {File} file
+ * @param {string} sessionId
+ * @returns {Promise<{filename: string, ref: string, size: number, ext: string,
+ *   row_count: number|null, columns: Array<{name:string,dtype:string}>,
+ *   preview_md: string, preview_error: string, mode: string}>}
+ */
+export async function attachData(file, sessionId) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('session_id', sessionId)
+  const resp = await fetch(`${BASE}/attach/data`, { method: 'POST', body: form })
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(detail.detail || `HTTP ${resp.status}`)
+  }
+  return resp.json()
+}
+
+/** 给一个会话内的图片 ref（形如 `{session_id}/{filename}`）构造前端可访问的 URL */
+export function imageUrl(ref) {
+  if (!ref) return ''
+  if (/^https?:\/\//i.test(ref)) return ref
+  return `${BASE}/images/${ref}`
 }
 
 /**

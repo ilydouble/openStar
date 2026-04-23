@@ -9,11 +9,13 @@ import json
 
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
+from strands.tools.executors import SequentialToolExecutor
 
 from ...config import settings
 from ...tools.code_executor import run_python_snippet
 from ...tools.file_ops import read_file, write_file, list_files
 from ..sequential.agent import SequentialAgent
+from ..callback_ctx import sub_agent_callback
 
 _SYSTEM_PROMPT = """
 You are a software engineering assistant. You can:
@@ -41,6 +43,8 @@ def _create_code_agent() -> Agent:
         model=model,
         system_prompt=_SYSTEM_PROMPT,
         tools=[run_python_snippet, list_files, read_file, write_file],
+        callback_handler=sub_agent_callback(),
+        tool_executor=SequentialToolExecutor(),
     )
 
 

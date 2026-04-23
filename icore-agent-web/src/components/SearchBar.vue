@@ -19,6 +19,26 @@
       >
         <span class="text-sm font-medium text-violet-600 dark:text-violet-300">松开鼠标上传文件</span>
       </div>
+      <!-- 模式 pill -->
+      <div v-if="modePill" class="mb-2 flex flex-wrap items-center gap-2">
+        <span
+          :class="[
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1',
+            modePill.pillClass || 'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:ring-violet-400/30',
+          ]"
+        >
+          <span>{{ modePill.emoji }}</span>
+          <span>{{ modePill.label }}{{ t('home.modePill.suffix') }}</span>
+          <button
+            type="button"
+            :aria-label="t('home.modePill.clear')"
+            class="-mr-0.5 ml-0.5 rounded-full p-0.5 opacity-70 transition hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+            @click="$emit('clear-mode')"
+          >
+            <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </span>
+      </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
           <div ref="plusRootRef" class="relative z-10">
@@ -43,7 +63,7 @@
               ref="fileInputEl"
               type="file"
               class="hidden"
-              accept=".pdf,.docx,.txt,.md"
+              accept=".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
               @change="handleFileSelect"
             />
 
@@ -93,7 +113,7 @@
             ref="area"
             v-model="input"
             rows="1"
-            :placeholder="t('home.inputPlaceholder')"
+            :placeholder="placeholder || t('home.inputPlaceholder')"
             class="box-border min-h-[2.25rem] w-full resize-none appearance-none overflow-hidden
                    rounded-xl border border-transparent bg-transparent px-0 py-1.5 text-sm leading-6
                    text-zinc-900 outline-none [-ms-overflow-style:none] [scrollbar-width:none]
@@ -155,7 +175,11 @@ import {
 const TEXTAREA_MAX_HEIGHT = 200
 
 const { t } = useI18n()
-const emit = defineEmits(['submit', 'file-selected'])
+defineProps({
+  placeholder: { type: String, default: '' },
+  modePill: { type: Object, default: null },
+})
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode'])
 
 const input = ref('')
 const area = ref(null)
@@ -164,7 +188,11 @@ const plusMenuOpen = ref(false)
 const plusRootRef = ref(null)
 const isDragging = ref(false)
 
-const ACCEPTED_EXTS = new Set(['.pdf', '.docx', '.txt', '.md'])
+const ACCEPTED_EXTS = new Set([
+  '.pdf', '.docx', '.txt', '.md',
+  '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif',
+  '.csv', '.xls', '.xlsx',
+])
 
 function handleDrop(e) {
   isDragging.value = false

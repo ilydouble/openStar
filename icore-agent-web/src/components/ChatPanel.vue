@@ -305,7 +305,7 @@ async function sendMessage(msg) {
   loading.value = true
   await scrollBottom()
 
-  const reply = {
+  const assistant = {
     id: Date.now() + 1,
     role: 'assistant',
     content: '',
@@ -313,29 +313,54 @@ async function sendMessage(msg) {
     steps: [],
     stepsCollapsed: false,
   }
-  streamingMsg.value = reply
-  messages.value.push(reply)
+  messages.value.push(assistant)
+  // push sonrası index sabit: iç nesneyi mutasyona değil replace ile güncelliyoruz
+  // (push sonrası elde tutulan referans / proxy farkı yüzünden ekrana tek seferde yansıma
+  // sorununu giderir).
+  const replyIndex = messages.value.length - 1
+  streamingMsg.value = messages.value[replyIndex]
+
+  function commitAssistant(partial) {
+    const cur = messages.value[replyIndex]
+    const next = { ...cur, ...partial }
+    messages.value[replyIndex] = next
+    streamingMsg.value = next
+  }
 
   try {
     for await (const evt of chatStream(msg, sessionId.value)) {
       if (!evt) continue
       if (evt.kind === 'token') {
-        reply.content += evt.text || ''
+        const cur = messages.value[replyIndex]
+        commitAssistant({
+          content: (cur.content || '') + (evt.text || ''),
+        })
       } else if (evt.kind === 'status') {
-        reply.steps.push({
-          step: evt.step,
-          tool: evt.tool,
-          input_preview: evt.input_preview,
+        const cur = messages.value[replyIndex]
+        commitAssistant({
+          steps: [
+            ...cur.steps,
+            {
+              step: evt.step,
+              tool: evt.tool,
+              input_preview: evt.input_preview,
+            },
+          ],
         })
       }
       await scrollBottom()
     }
   } catch (e) {
-    reply.content =
-      locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
+    const err = e instanceof Error ? e.message : String(e)
+    commitAssistant({
+      content:
+        locale.value === 'zh-CN' ? `请求失败：${err}` : `Request failed: ${err}`,
+    })
   } finally {
-    reply.streaming = false
-    reply.stepsCollapsed = true
+    commitAssistant({
+      streaming: false,
+      stepsCollapsed: true,
+    })
     streamingMsg.value = null
     loading.value = false
     await scrollBottom()

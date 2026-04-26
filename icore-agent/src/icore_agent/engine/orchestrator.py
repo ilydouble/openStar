@@ -236,13 +236,14 @@ def create_orchestrator(
         settings.model_id_fast or settings.model_id
     )
     model = LiteLLMModel(
-        model_id=selected_model,
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": settings.agent_temperature,
-            **settings.litellm_kwargs(),
-        },
-    )
+    model_id=selected_model,
+    params={
+        "max_tokens": settings.agent_max_tokens,
+        "temperature": settings.agent_temperature,
+        "stream": True,  # 🔥 BUNU ƏLAVƏ ET
+        **settings.litellm_kwargs(),
+    },
+)
 
     # Window large enough to hold our pre-populated history (≤ memory_keep_recent=8)
     # plus the turns generated during this request; prevents Strands from

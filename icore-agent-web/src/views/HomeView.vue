@@ -10,10 +10,10 @@
           class="absolute inset-0 bg-zinc-100 transition-colors duration-300 ease-out dark:bg-zinc-950"
         />
         <div
-          class="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.14),transparent)] opacity-60 transition-opacity duration-300 dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.22),transparent)] dark:opacity-100"
+          class="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.14),transparent)] opacity-60 transition-opacity duration-300 dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.18),transparent)] dark:opacity-[0.38]"
         />
         <div
-          class="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(59,130,246,0.06),transparent)] opacity-80 transition-opacity duration-300 dark:bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(59,130,246,0.1),transparent)] dark:opacity-100"
+          class="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(59,130,246,0.06),transparent)] opacity-80 transition-opacity duration-300 dark:bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(59,130,246,0.08),transparent)] dark:opacity-[0.42]"
         />
       </div>
 
@@ -50,9 +50,60 @@
               >
                 <div
                   v-if="msg.role === 'user'"
-                  class="max-w-[70%] rounded-2xl rounded-tr-sm bg-zinc-900 px-4 py-3 text-sm leading-relaxed text-white shadow-md ring-1 ring-zinc-900/20 transition-colors duration-300 dark:bg-zinc-800 dark:shadow-lg dark:shadow-black/20 dark:ring-white/10"
+                  :class="[
+                    'rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300',
+                    'bg-white text-zinc-900 ring-zinc-200/90 shadow-zinc-900/8',
+                    'dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10',
+                    msg.type === 'image' && msg.content
+                      ? 'max-w-[min(22rem,88vw)] px-3 py-2.5'
+                      : 'max-w-[70%] px-4 py-3',
+                  ]"
                 >
-                  {{ msg.content }}
+                  <template v-if="msg.type === 'image' && msg.content">
+                    <!-- 上行：缩略图 + 元数据；说明文字单独占满下一行，可自然换行到图片下方，不留空白栏 -->
+                    <div class="flex flex-col gap-0">
+                      <div class="flex items-start gap-3">
+                        <div
+                          class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/90 dark:bg-zinc-900/80 dark:ring-white/10"
+                        >
+                          <img
+                            :src="msg.content"
+                            :alt="imageMessageAlt(msg)"
+                            class="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div class="min-w-0 flex-1 pt-0.5">
+                          <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+                            {{ t('chat.imageMessageLabel') }}
+                          </p>
+                          <p
+                            class="mt-0.5 text-xs break-words text-zinc-700 dark:text-zinc-300"
+                            :title="msg.filename || ''"
+                          >
+                            {{ msg.filename || t('chat.imageUntitled') }}
+                          </p>
+                          <a
+                            :href="msg.content"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="mt-1 inline-block text-[11px] font-medium text-fuchsia-700 underline-offset-2 hover:text-fuchsia-800 hover:underline dark:text-fuchsia-300/90 dark:hover:text-fuchsia-200"
+                          >
+                            {{ t('chat.openImageFullSize') }}
+                          </a>
+                        </div>
+                      </div>
+                      <p
+                        v-if="msg.caption"
+                        class="mt-2 w-full whitespace-pre-wrap break-words border-t border-zinc-200/90 pt-2 text-sm leading-relaxed text-zinc-800 dark:border-white/10 dark:text-white/95"
+                      >
+                        {{ msg.caption }}
+                      </p>
+                    </div>
+                  </template>
+                  <template v-else>
+                    {{ msg.content }}
+                  </template>
                 </div>
                 <div v-else class="flex max-w-[80%] gap-3">
                   <div
@@ -155,37 +206,32 @@
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
                   :mode-pill="activeShortcutPill"
+                  :streaming="loading"
+                  :send-blocked="uploading"
                   @submit="handleSubmit"
+                  @stop="stopAssistantStream"
                   @file-selected="handleFileSelected"
                   @clear-mode="clearShortcut"
                 />
 
-                <!-- 附件列表（首页） -->
-                <div v-if="attachmentList.length" class="mt-2 flex flex-wrap gap-2 justify-center">
+                <!-- 附件列表（首页，不含图片——图片只在对话里展示） -->
+                <div v-if="composerAttachments.length || uploading" class="mt-2 flex flex-wrap gap-2 justify-center">
                   <div
-                    v-for="att in attachmentList"
+                    v-for="att in composerAttachments"
                     :key="att.filename"
                     class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                            border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                   >
-                    <img
-                      v-if="att.mode === 'image' && att.ref"
-                      :src="imageUrl(att.ref)"
-                      :alt="att.filename"
-                      class="h-5 w-5 shrink-0 rounded object-cover"
-                    />
-                    <svg v-else class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
                     <span class="max-w-[160px] truncate">{{ att.filename }}</span>
                     <span :class="att.mode === 'rag'
                       ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                      : att.mode === 'image'
-                      ? 'rounded bg-fuchsia-100 px-1 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
                       : att.mode === 'data'
                       ? 'rounded bg-emerald-100 px-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                       : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
-                      {{ att.mode === 'rag' ? 'RAG' : att.mode === 'image' ? '图片' : att.mode === 'data' ? '数据' : '内联' }}
+                      {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                     </span>
                     <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                       <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -193,13 +239,13 @@
                   </div>
                   <div v-if="uploading" class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
                     <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                    上传中...
+                    {{ t('chat.uploading') }}
                   </div>
                 </div>
                 <div v-else-if="uploading" class="mt-2 flex justify-center">
                   <div class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
                     <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                    上传中...
+                    {{ t('chat.uploading') }}
                   </div>
                 </div>
                 <div v-if="uploadError" class="mt-2 mx-auto max-w-lg rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
@@ -248,35 +294,27 @@
 
           <div
             v-if="messages.length > 0"
-            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950/50 sm:px-8"
+            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
           >
-            <!-- 附件列表（对话模式） -->
-            <div v-if="attachmentList.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">
-              <div v-if="attachmentList.length || uploading" class="flex flex-wrap gap-2">
+            <!-- 附件列表（对话模式，不含图片） -->
+            <div v-if="composerAttachments.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">
+              <div v-if="composerAttachments.length || uploading" class="flex flex-wrap gap-2">
                 <div
-                  v-for="att in attachmentList"
+                  v-for="att in composerAttachments"
                   :key="att.filename"
                   class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                          border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                 >
-                  <img
-                    v-if="att.mode === 'image' && att.ref"
-                    :src="imageUrl(att.ref)"
-                    :alt="att.filename"
-                    class="h-5 w-5 shrink-0 rounded object-cover"
-                  />
-                  <svg v-else class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
                   <span class="max-w-[160px] truncate">{{ att.filename }}</span>
                   <span :class="att.mode === 'rag'
                     ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                    : att.mode === 'image'
-                    ? 'rounded bg-fuchsia-100 px-1 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
                     : att.mode === 'data'
                     ? 'rounded bg-emerald-100 px-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
-                    {{ att.mode === 'rag' ? 'RAG' : att.mode === 'image' ? '图片' : att.mode === 'data' ? '数据' : '内联' }}
+                    {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                   </span>
                   <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                     <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -284,7 +322,7 @@
                 </div>
                 <div v-if="uploading" class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-400/20 dark:bg-violet-900/20 dark:text-violet-300">
                   <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                  上传中...
+                  {{ t('chat.uploading') }}
                 </div>
               </div>
               <div v-if="uploadError" class="mt-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
@@ -296,7 +334,10 @@
               ref="searchRefChat"
               :placeholder="activeShortcut?.placeholder || ''"
               :mode-pill="activeShortcutPill"
+              :streaming="loading"
+              :send-blocked="uploading"
               @submit="handleSubmit"
+              @stop="stopAssistantStream"
               @file-selected="handleFileSelected"
               @clear-mode="clearShortcut"
             />
@@ -325,9 +366,15 @@ import { isDark as isDarkFn } from '../theme'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import SearchBar from '../components/SearchBar.vue'
 
-const { t, locale, tm } = useI18n()
+const { t, tm } = useI18n()
 
 marked.setOptions({ breaks: true, gfm: true })
+
+function imageMessageAlt(msg) {
+  const name = msg?.filename
+  if (name) return t('chat.imageUploadedAlt', { name })
+  return t('chat.imageUploadedAltGeneric')
+}
 
 function renderMarkdown(text) {
   if (!text) return '&nbsp;'
@@ -369,7 +416,13 @@ const UI_BY_ID = {
 
 const messages = ref([])
 const loading = ref(false)
+/** 中止当前 /chat SSE（用户点击停止） */
+const streamAbortController = ref(null)
 const streamingMsg = ref(null)
+
+function stopAssistantStream() {
+  streamAbortController.value?.abort()
+}
 const sessionId = ref(newSessionId())
 const scrollEl = ref(null)
 const searchRefHome = ref(null)
@@ -380,6 +433,11 @@ const dark = ref(typeof document !== 'undefined' && document.documentElement.cla
 const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
+
+/** 输入区只展示文档/数据等非图片附件；图片仅在对话气泡中展示，避免“文件名像卡在输入框” */
+const composerAttachments = computed(() =>
+  attachmentList.value.filter((a) => a.mode !== 'image'),
+)
 
 async function refreshAttachments() {
   try {
@@ -396,20 +454,38 @@ function extOf(name) {
 }
 
 async function handleFileSelected(file) {
+  if (loading.value || uploading.value) return
   uploading.value = true
   uploadError.value = ''
   try {
     const ext = extOf(file.name)
     if (IMAGE_EXTS.has(ext)) {
-      await attachImage(file, sessionId.value)
+      const { ref: imageRef, filename: savedName } = await attachImage(file, sessionId.value)
+      await refreshAttachments()
+      const url = imageUrl(imageRef)
+      if (url) {
+        messages.value.push({
+          id: `${Date.now()}-u`,
+          role: 'user',
+          type: 'image',
+          content: url,
+          filename: savedName || file.name,
+        })
+        await scrollBottom()
+        const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+        if (!loading.value) {
+          await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
+        }
+      }
     } else if (DATA_EXTS.has(ext)) {
       await attachData(file, sessionId.value)
+      await refreshAttachments()
     } else {
       await attachFile(file, sessionId.value)
+      await refreshAttachments()
     }
-    await refreshAttachments()
   } catch (err) {
-    uploadError.value = err.message || '上传失败'
+    uploadError.value = err.message || t('chat.uploadFailed')
   } finally {
     uploading.value = false
   }
@@ -420,7 +496,7 @@ async function deleteAttachment(filename) {
     await removeAttachment(sessionId.value, filename)
     await refreshAttachments()
   } catch (err) {
-    uploadError.value = err.message || '删除失败'
+    uploadError.value = err.message || t('chat.deleteFailed')
   }
 }
 
@@ -500,15 +576,17 @@ const SHORTCUT_HINT = {
   data: 'data',
 }
 
-async function sendUserMessage(msg, agentHint = '') {
-  if (!msg?.trim() || loading.value) return
-  const text = msg.trim()
+async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } = {}) {
+  const text = String(msg ?? '').trim()
+  if (!text || loading.value) return
 
-  messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+  if (!skipUserBubble) {
+    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+  }
   loading.value = true
   await scrollBottom()
 
-  const reply = {
+  const assistant = {
     id: `${Date.now()}-a`,
     role: 'assistant',
     content: '',
@@ -516,38 +594,103 @@ async function sendUserMessage(msg, agentHint = '') {
     steps: [],
     stepsCollapsed: false,
   }
-  streamingMsg.value = reply
-  messages.value.push(reply)
+  messages.value.push(assistant)
+  const replyIndex = messages.value.length - 1
+  streamingMsg.value = messages.value[replyIndex]
+
+  const ac = new AbortController()
+  streamAbortController.value = ac
+
+  function commitAssistant(partial) {
+    const cur = messages.value[replyIndex]
+    const next = { ...cur, ...partial }
+    messages.value[replyIndex] = next
+    streamingMsg.value = next
+  }
 
   try {
-    for await (const evt of chatStream(text, sessionId.value, agentHint)) {
+    for await (const evt of chatStream(text, sessionId.value, agentHint, {
+      signal: ac.signal,
+    })) {
       if (!evt) continue
       if (evt.kind === 'token') {
-        reply.content += evt.text || ''
+        const cur = messages.value[replyIndex]
+        commitAssistant({
+          content: (cur.content || '') + (evt.text || ''),
+        })
       } else if (evt.kind === 'status') {
-        reply.steps.push({
-          step: evt.step,
-          tool: evt.tool,
-          input_preview: evt.input_preview,
+        const cur = messages.value[replyIndex]
+        commitAssistant({
+          steps: [
+            ...cur.steps,
+            {
+              step: evt.step,
+              tool: evt.tool,
+              input_preview: evt.input_preview,
+            },
+          ],
         })
       }
       await scrollBottom()
     }
   } catch (e) {
-    reply.content =
-      locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
+    const aborted = typeof e?.name === 'string' && e.name === 'AbortError'
+    if (!aborted) {
+      const err = e instanceof Error ? e.message : String(e)
+      commitAssistant({
+        content: t('chat.requestFailed', { msg: err }),
+      })
+    }
   } finally {
-    reply.streaming = false
-    reply.stepsCollapsed = true
+    streamAbortController.value = null
+    commitAssistant({
+      streaming: false,
+      stepsCollapsed: true,
+    })
     streamingMsg.value = null
     loading.value = false
     await scrollBottom()
   }
 }
 
-function handleSubmit({ message }) {
+async function handleSubmit({ message, imageFile }) {
+  if (loading.value || uploading.value) return
   const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-  sendUserMessage(message, hint)
+  const text = (message || '').trim()
+
+  if (imageFile) {
+    uploadError.value = ''
+    uploading.value = true
+    try {
+      const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
+      await refreshAttachments()
+      const url = imageUrl(imageRef)
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'image',
+        content: url,
+        filename: savedName || imageFile.name,
+        ...(text ? { caption: text } : {}),
+      })
+      await scrollBottom()
+      const apiText = text || t('chat.imageReplyPrompt')
+      await sendUserMessage(apiText, hint, { skipUserBubble: true })
+    } catch (err) {
+      uploadError.value = err.message || t('chat.uploadFailed')
+    } finally {
+      uploading.value = false
+      nextTick(() => {
+        searchRefHome.value?.clearPendingImage?.()
+        searchRefChat.value?.clearPendingImage?.()
+      })
+    }
+    return
+  }
+
+  if (text) {
+    await sendUserMessage(text, hint)
+  }
 }
 
 function toggleShortcut(id) {
@@ -562,6 +705,7 @@ function clearShortcut() {
 }
 
 function onSidebarNew() {
+  stopAssistantStream()
   messages.value = []
   sessionId.value = newSessionId()
   loading.value = false
@@ -570,6 +714,8 @@ function onSidebarNew() {
   uploadError.value = ''
   activeShortcutId.value = ''
   nextTick(() => {
+    searchRefHome.value?.clearPendingImage?.()
+    searchRefChat.value?.clearPendingImage?.()
     ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   })

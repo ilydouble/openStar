@@ -1,6 +1,6 @@
 <template>
   <aside
-    class="flex h-full w-[4.5rem] shrink-0 flex-col border-r border-zinc-200/80 bg-white/90 backdrop-blur-xl transition-colors duration-300 ease-out dark:border-white/[0.08] dark:bg-zinc-950/50 sm:w-[13.5rem]"
+    class="flex h-full w-[4.5rem] shrink-0 flex-col border-r border-zinc-200/80 bg-white/90 backdrop-blur-xl transition-colors duration-300 ease-out dark:border-white/[0.08] dark:bg-zinc-950 sm:w-[13.5rem]"
   >
     <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2 pt-4 sm:px-3">
       <button

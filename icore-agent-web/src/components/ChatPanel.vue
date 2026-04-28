@@ -11,7 +11,7 @@
       >
         <div
           v-if="msg.role === 'user'"
-          class="max-w-[70%] rounded-2xl rounded-tr-sm bg-zinc-900 px-4 py-3 text-sm leading-relaxed text-white shadow-md ring-1 ring-zinc-900/20 transition-colors duration-300 dark:bg-zinc-800 dark:shadow-lg dark:shadow-black/20 dark:ring-white/10"
+          class="max-w-[70%] rounded-2xl rounded-tr-sm bg-white px-4 py-3 text-sm leading-relaxed text-zinc-900 shadow-md ring-1 ring-zinc-200/90 shadow-zinc-900/8 transition-colors duration-300 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10"
         >
           {{ msg.content }}
         </div>

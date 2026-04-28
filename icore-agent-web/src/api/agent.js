@@ -33,8 +33,10 @@ function *yieldTokenChunks(text) {
  * @param {string} message
  * @param {string} sessionId
  * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
+ * @param {{ signal?: AbortSignal }} [options] 传入 signal 可中止 fetch / 流读取（用户点击停止）
  */
-export async function* chatStream(message, sessionId, agentHint = '') {
+export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
+  const signal = options && options.signal
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -46,6 +48,7 @@ export async function* chatStream(message, sessionId, agentHint = '') {
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
+    signal,
   })
 
   if (!resp.ok) {

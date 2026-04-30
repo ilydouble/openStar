@@ -51,55 +51,47 @@
                 <div
                   v-if="msg.role === 'user'"
                   :class="[
-                    'rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300',
-                    'bg-white text-zinc-900 ring-zinc-200/90 shadow-zinc-900/8',
-                    'dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10',
-                    msg.type === 'image' && msg.content
-                      ? 'max-w-[min(22rem,88vw)] px-3 py-2.5'
+                    'rounded-2xl rounded-tr-sm text-sm leading-relaxed ring-1 transition-colors duration-300',
+                    msg.type === 'image' && userImageList(msg).length
+                      ? 'shadow-sm shadow-zinc-900/5 dark:shadow-md dark:shadow-black/20'
+                      : 'shadow-md shadow-zinc-900/8 dark:shadow-lg dark:shadow-black/25',
+                    'bg-white text-zinc-900 ring-zinc-200/90',
+                    'dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
+                    msg.type === 'image' && userImageList(msg).length
+                      ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5'
                       : 'max-w-[70%] px-4 py-3',
                   ]"
                 >
-                  <template v-if="msg.type === 'image' && msg.content">
-                    <!-- 上行：缩略图 + 元数据；说明文字单独占满下一行，可自然换行到图片下方，不留空白栏 -->
-                    <div class="flex flex-col gap-0">
-                      <div class="flex items-start gap-3">
-                        <div
-                          class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/90 dark:bg-zinc-900/80 dark:ring-white/10"
-                        >
-                          <img
-                            :src="msg.content"
-                            :alt="imageMessageAlt(msg)"
-                            class="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                        <div class="min-w-0 flex-1 pt-0.5">
-                          <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
-                            {{ t('chat.imageMessageLabel') }}
-                          </p>
-                          <p
-                            class="mt-0.5 text-xs break-words text-zinc-700 dark:text-zinc-300"
-                            :title="msg.filename || ''"
-                          >
-                            {{ msg.filename || t('chat.imageUntitled') }}
-                          </p>
+                  <template v-if="msg.type === 'image'">
+                    <template v-for="imgItems in [userImageList(msg)]" :key="`${msg.id}-imglist`">
+                      <div v-if="imgItems.length" class="flex flex-col gap-1.5">
+                        <div class="flex flex-wrap items-end gap-1.5">
                           <a
-                            :href="msg.content"
+                            v-for="(im, idx) in imgItems"
+                            :key="(im.filename || 'img') + '-' + idx"
+                            :href="im.content"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="mt-1 inline-block text-[11px] font-medium text-fuchsia-700 underline-offset-2 hover:text-fuchsia-800 hover:underline dark:text-fuchsia-300/90 dark:hover:text-fuchsia-200"
+                            :title="`${im.filename || t('chat.imageUntitled')} — ${t('chat.openImageFullSize')}`"
+                            :aria-label="`${t('chat.openImageFullSize')}: ${im.filename || t('chat.imageUntitled')}`"
+                            class="block h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200/90 shadow-sm ring-1 ring-zinc-200/80 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 dark:bg-zinc-700/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
                           >
-                            {{ t('chat.openImageFullSize') }}
+                            <img
+                              :src="im.content"
+                              :alt="imageItemAlt(im.filename)"
+                              class="h-full w-full object-cover"
+                              loading="lazy"
+                            />
                           </a>
                         </div>
+                        <p
+                          v-if="msg.caption"
+                          class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
+                        >
+                          {{ msg.caption }}
+                        </p>
                       </div>
-                      <p
-                        v-if="msg.caption"
-                        class="mt-2 w-full whitespace-pre-wrap break-words border-t border-zinc-200/90 pt-2 text-sm leading-relaxed text-zinc-800 dark:border-white/10 dark:text-white/95"
-                      >
-                        {{ msg.caption }}
-                      </p>
-                    </div>
+                    </template>
                   </template>
                   <template v-else>
                     {{ msg.content }}
@@ -206,12 +198,15 @@
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
                   :mode-pill="activeShortcutPill"
+                  :mode-menu-items="shortcutItems"
+                  :active-mode-id="activeShortcutId"
                   :streaming="loading"
                   :send-blocked="uploading"
                   @submit="handleSubmit"
                   @stop="stopAssistantStream"
                   @file-selected="handleFileSelected"
                   @clear-mode="clearShortcut"
+                  @select-mode="setComposerMode"
                 />
 
                 <!-- 附件列表（首页，不含图片——图片只在对话里展示） -->
@@ -334,12 +329,15 @@
               ref="searchRefChat"
               :placeholder="activeShortcut?.placeholder || ''"
               :mode-pill="activeShortcutPill"
+              :mode-menu-items="shortcutItems"
+              :active-mode-id="activeShortcutId"
               :streaming="loading"
               :send-blocked="uploading"
               @submit="handleSubmit"
               @stop="stopAssistantStream"
               @file-selected="handleFileSelected"
               @clear-mode="clearShortcut"
+              @select-mode="setComposerMode"
             />
           </div>
         </div>
@@ -370,10 +368,16 @@ const { t, tm } = useI18n()
 
 marked.setOptions({ breaks: true, gfm: true })
 
-function imageMessageAlt(msg) {
-  const name = msg?.filename
-  if (name) return t('chat.imageUploadedAlt', { name })
+function imageItemAlt(filename) {
+  if (filename) return t('chat.imageUploadedAlt', { name: filename })
   return t('chat.imageUploadedAltGeneric')
+}
+
+/** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string }} msg */
+function userImageList(msg) {
+  if (msg?.images?.length) return msg.images
+  if (msg?.content) return [{ content: msg.content, filename: msg.filename }]
+  return []
 }
 
 function renderMarkdown(text) {
@@ -468,8 +472,7 @@ async function handleFileSelected(file) {
           id: `${Date.now()}-u`,
           role: 'user',
           type: 'image',
-          content: url,
-          filename: savedName || file.name,
+          images: [{ content: url, filename: savedName || file.name }],
         })
         await scrollBottom()
         const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
@@ -653,29 +656,39 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   }
 }
 
-async function handleSubmit({ message, imageFile }) {
+async function handleSubmit({ message, imageFiles }) {
   if (loading.value || uploading.value) return
   const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
   const text = (message || '').trim()
+  const files = Array.isArray(imageFiles) ? imageFiles.filter((f) => f && f.size) : []
 
-  if (imageFile) {
+  if (files.length) {
     uploadError.value = ''
     uploading.value = true
     try {
-      const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
+      const uploaded = []
+      for (const imageFile of files) {
+        const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
+        const url = imageUrl(imageRef)
+        if (url) uploaded.push({ content: url, filename: savedName || imageFile.name })
+      }
       await refreshAttachments()
-      const url = imageUrl(imageRef)
-      messages.value.push({
-        id: `${Date.now()}-u`,
-        role: 'user',
-        type: 'image',
-        content: url,
-        filename: savedName || imageFile.name,
-        ...(text ? { caption: text } : {}),
-      })
-      await scrollBottom()
-      const apiText = text || t('chat.imageReplyPrompt')
-      await sendUserMessage(apiText, hint, { skipUserBubble: true })
+      if (uploaded.length) {
+        messages.value.push({
+          id: `${Date.now()}-u`,
+          role: 'user',
+          type: 'image',
+          images: uploaded,
+          ...(text ? { caption: text } : {}),
+        })
+        await scrollBottom()
+        const apiText =
+          text
+          || (uploaded.length > 1
+            ? t('chat.imageReplyPromptMulti')
+            : t('chat.imageReplyPrompt'))
+        await sendUserMessage(apiText, hint, { skipUserBubble: true })
+      }
     } catch (err) {
       uploadError.value = err.message || t('chat.uploadFailed')
     } finally {
@@ -695,6 +708,13 @@ async function handleSubmit({ message, imageFile }) {
 
 function toggleShortcut(id) {
   activeShortcutId.value = activeShortcutId.value === id ? '' : id
+  nextTick(() => {
+    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+  })
+}
+
+function setComposerMode(id) {
+  activeShortcutId.value = id
   nextTick(() => {
     ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
   })

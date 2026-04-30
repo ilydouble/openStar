@@ -39,46 +39,38 @@
           </button>
         </span>
       </div>
-      <!-- 待发送图片：ChatGPT 式 — 左侧小方缩略图 + 角标关闭，整体 inline 不占满宽 -->
-      <div v-if="pendingImage" class="mb-2 flex w-full justify-start">
-        <div
-          class="inline-flex max-w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-xl border border-zinc-200/90 bg-zinc-50/95 py-1 pl-1 pr-2.5 shadow-sm dark:border-white/[0.1] dark:bg-zinc-800/95 dark:shadow-none"
-          :title="`${pendingImage.file.name} — ${t('chat.pendingImageHint')}`"
-        >
+      <!-- 待发送图片：紧凑方形缩略图横排/换行（与气泡内样式一致） -->
+      <div v-if="pendingImages.length" class="mb-2 flex flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-1.5">
           <div
-            class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-950"
+            v-for="item in pendingImages"
+            :key="item.id"
+            :title="item.file.name"
+            class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200/90 shadow-sm ring-1 ring-zinc-200/80 dark:bg-zinc-800 dark:ring-white/10"
           >
             <img
-              :src="pendingImage.url"
-              :alt="pendingImageAlt"
-              class="pointer-events-none h-full w-full object-cover"
+              :src="item.url"
+              :alt="pendingItemAlt(item)"
+              class="h-full w-full object-cover"
               draggable="false"
+              loading="lazy"
             />
             <button
               type="button"
-              class="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white shadow-sm ring-1 ring-white/15 backdrop-blur-[1px] transition hover:bg-black/75 dark:bg-black/60 dark:ring-white/10"
+              class="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-950/70 text-white shadow-sm ring-1 ring-white/25 backdrop-blur-[2px] transition hover:bg-zinc-950/90 dark:bg-black/65 dark:ring-white/20 dark:hover:bg-black/85"
               :aria-label="t('home.chatInput.removePendingImage')"
-              @click.stop="clearPendingImage"
+              @click.stop="removePendingImageItem(item.id)"
             >
-              <svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <span class="text-xs font-light leading-none" aria-hidden="true">×</span>
             </button>
           </div>
-          <div class="min-w-0 max-w-[11rem] py-0.5 leading-tight sm:max-w-[13.5rem]">
-            <p
-              class="truncate text-xs font-medium text-zinc-800 dark:text-zinc-100"
-              :title="pendingImage.file.name"
-            >
-              {{ pendingImage.file.name }}
-            </p>
-            <p class="truncate text-[10px] text-zinc-500 dark:text-zinc-400" :title="`${t('chat.imageMessageLabel')} — ${t('chat.pendingImageHint')}`">
-              <span class="font-medium text-zinc-600 dark:text-zinc-300">{{ t('chat.imageMessageLabel') }}</span>
-              <span class="text-zinc-400 dark:text-zinc-500"> — </span>
-              <span>{{ t('chat.pendingImageHint') }}</span>
-            </p>
-          </div>
         </div>
+        <p class="text-[11px] leading-tight text-zinc-500 dark:text-zinc-500">
+          {{ t('chat.pendingImagesCount', { n: pendingImages.length, max: MAX_PENDING_IMAGES }) }}
+        </p>
+        <p v-if="pendingTrimmedCount > 0" class="text-[11px] leading-tight text-amber-700 dark:text-amber-400/90">
+          {{ t('chat.pendingImagesTrimmed', { n: pendingTrimmedCount, max: MAX_PENDING_IMAGES }) }}
+        </p>
       </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
@@ -94,7 +86,7 @@
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30
                      dark:border-white/10 dark:bg-white/10 dark:text-white
                      dark:hover:border-white/20 dark:hover:bg-white/[0.14]"
-              @click.stop="plusMenuOpen = !plusMenuOpen"
+              @click.stop="togglePlusMenu"
             >
               <Plus class="h-5 w-5" stroke-width="2" />
             </button>
@@ -103,6 +95,7 @@
             <input
               ref="fileInputEl"
               type="file"
+              multiple
               class="hidden"
               accept=".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
               @change="handleFileSelect"
@@ -118,32 +111,67 @@
             >
               <div
                 v-show="plusMenuOpen"
-                class="absolute bottom-full left-0 z-[100] mb-2 max-h-[min(22rem,calc(100dvh-6rem))] min-w-[15rem]
-                       max-w-[min(17rem,calc(100vw-2rem))] origin-bottom-left overflow-y-auto overflow-x-hidden
+                class="absolute bottom-full left-0 z-[100] mb-2 max-h-[min(24rem,calc(100dvh-6rem))] min-w-[15rem]
+                       max-w-[min(18.5rem,calc(100vw-2rem))] origin-bottom-left overflow-y-auto overflow-x-hidden
                        rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl shadow-zinc-900/15
                        backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/95 dark:shadow-black/50"
                 role="menu"
               >
-                <button
-                  v-for="item in plusMenuItems"
-                  :key="item.labelKey"
-                  type="button"
-                  role="menuitem"
-                  class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm
-                         text-zinc-900 transition-all duration-200
-                         hover:bg-zinc-100/90
-                         dark:text-white dark:hover:bg-white/10"
-                  @click="handleMenuItemClick(item)"
-                >
-                  <component
-                    :is="item.icon"
-                    class="h-4 w-4 shrink-0 text-zinc-500 transition-colors duration-200
-                           group-hover:text-zinc-900
-                           dark:text-zinc-400 dark:group-hover:text-white"
-                    stroke-width="2"
-                  />
-                  {{ t(item.labelKey) }}
-                </button>
+                <template v-if="modePickerOpen && modeMenuItemsList.length">
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 border-b border-zinc-200/80 px-3 py-2 text-left text-sm text-zinc-600 transition-colors
+                           hover:bg-zinc-100/90 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-200"
+                    @click.stop="modePickerOpen = false"
+                  >
+                    <ChevronLeft class="h-4 w-4 shrink-0" stroke-width="2" aria-hidden="true" />
+                    {{ t('home.chatInput.modePickerBack') }}
+                  </button>
+                  <button
+                    v-for="m in modeMenuItemsList"
+                    :key="m.id"
+                    type="button"
+                    role="menuitem"
+                    :aria-pressed="activeModeId === m.id"
+                    class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors duration-200
+                           text-zinc-900 hover:bg-zinc-100/90 dark:text-white dark:hover:bg-white/10"
+                    :class="activeModeId === m.id ? 'bg-violet-50/90 dark:bg-violet-950/35' : ''"
+                    @click.stop="selectComposerMode(m.id)"
+                  >
+                    <span
+                      :class="[
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border text-base shadow-md ring-1 transition-all duration-200 sm:text-lg',
+                        m.panel,
+                        activeModeId === m.id
+                          ? 'ring-2 ring-violet-500 ring-offset-2 ring-offset-white dark:ring-violet-400 dark:ring-offset-zinc-900'
+                          : 'ring-black/5 group-hover:ring-black/10 dark:ring-white/10 dark:group-hover:ring-white/15',
+                      ]"
+                    >{{ m.emoji }}</span>
+                    <span class="min-w-0 flex-1 font-medium leading-tight">{{ m.label }}</span>
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    v-for="item in plusMenuItems"
+                    :key="item.labelKey"
+                    type="button"
+                    role="menuitem"
+                    class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm
+                           text-zinc-900 transition-all duration-200
+                           hover:bg-zinc-100/90
+                           dark:text-white dark:hover:bg-white/10"
+                    @click.stop="handleMenuItemClick(item)"
+                  >
+                    <component
+                      :is="item.icon"
+                      class="h-4 w-4 shrink-0 text-zinc-500 transition-colors duration-200
+                             group-hover:text-zinc-900
+                             dark:text-zinc-400 dark:group-hover:text-white"
+                      stroke-width="2"
+                    />
+                    {{ t(item.labelKey) }}
+                  </button>
+                </template>
               </div>
             </Transition>
           </div>
@@ -218,13 +246,14 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus,
-  User,
   Paperclip,
   Image,
   Brain,
   Search,
   Mic,
   SendHorizontal,
+  LayoutGrid,
+  ChevronLeft,
 } from 'lucide-vue-next'
 
 const TEXTAREA_MAX_HEIGHT = 200
@@ -234,28 +263,40 @@ const { t } = useI18n()
 const props = defineProps({
   placeholder: { type: String, default: '' },
   modePill: { type: Object, default: null },
+  /** 与首页快捷方式同源：id / label / emoji / panel */
+  modeMenuItems: { type: Array, default: () => [] },
+  activeModeId: { type: String, default: '' },
   /** 正在接收助手流式回复：主按钮切换为「停止」 */
   streaming: { type: Boolean, default: false },
   /** 上传等场景下禁止发起新一轮发送（非流式阶段） */
   sendBlocked: { type: Boolean, default: false },
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop'])
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode'])
+
+const modeMenuItemsList = computed(() =>
+  Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
+)
 
 const input = ref('')
 const area = ref(null)
 const fileInputEl = ref(null)
 const plusMenuOpen = ref(false)
+const modePickerOpen = ref(false)
 const plusRootRef = ref(null)
 const isDragging = ref(false)
 
-/** @type {import('vue').Ref<{ file: File, url: string } | null>} */
-const pendingImage = ref(null)
+const MAX_PENDING_IMAGES = 5
+
+/** @type {import('vue').Ref<Array<{ id: string, file: File, url: string }>>} */
+const pendingImages = ref([])
+/** 最近一次批量选择时因上限丢弃的张数（展示提示后于下次添加时清零） */
+const pendingTrimmedCount = ref(0)
 
 /** 流式输出时可点停止；否则无内容且无图时禁用发送 */
 const mainActionDisabled = computed(
   () =>
     !props.streaming
-    && (props.sendBlocked || (!input.value.trim() && !pendingImage.value)),
+    && (props.sendBlocked || (!input.value.trim() && !pendingImages.value.length)),
 )
 
 function onMainAction() {
@@ -271,7 +312,7 @@ function onEnterInTextarea() {
   handleSubmit()
 }
 
-/** Ctrl+V / 剪贴板图片 → 与「选择图片」相同的待发送预览 */
+/** Ctrl+V / 剪贴板图片 → 与「选择图片」相同的待发送预览（支持多张） */
 function onPaste(e) {
   const cd = e.clipboardData
   if (!cd?.items?.length) return
@@ -279,14 +320,19 @@ function onPaste(e) {
     (it) => it.kind === 'file' && typeof it.type === 'string' && it.type.startsWith('image/'),
   )
   if (!imageItems.length) return
-  let file = imageItems[0].getAsFile()
-  if (!file?.size) return
-  if (!file.name?.trim()) {
-    const ext = file.type?.split('/')[1] || 'png'
-    file = new File([file], `pasted-image.${ext}`, { type: file.type || 'image/png' })
+  const files = []
+  for (const it of imageItems) {
+    let file = it.getAsFile()
+    if (!file?.size) continue
+    if (!file.name?.trim()) {
+      const ext = file.type?.split('/')[1] || 'png'
+      file = new File([file], `pasted-image.${ext}`, { type: file.type || 'image/png' })
+    }
+    files.push(file)
   }
+  if (!files.length) return
   e.preventDefault()
-  setPendingImage(file)
+  addPendingImageFiles(files)
   nextTick(autoGrow)
 }
 
@@ -303,42 +349,81 @@ function extOf(name) {
   return i >= 0 ? name.slice(i).toLowerCase() : ''
 }
 
-const pendingImageAlt = computed(() => {
-  const f = pendingImage.value?.file
+function makePendingId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `pi-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function pendingItemAlt(item) {
+  const f = item?.file
   if (!f?.name) return t('chat.imageUploadedAltGeneric')
   return t('chat.imageUploadedAlt', { name: f.name })
-})
+}
 
-function setPendingImage(file) {
-  if (pendingImage.value?.url) {
-    URL.revokeObjectURL(pendingImage.value.url)
+/** 将图片文件加入待发送列表（总数不超过 MAX_PENDING_IMAGES） */
+function addPendingImageFiles(files) {
+  pendingTrimmedCount.value = 0
+  const list = Array.isArray(files) ? files : [files]
+  let trimmed = 0
+  const next = [...pendingImages.value]
+  for (const file of list) {
+    if (next.length >= MAX_PENDING_IMAGES) {
+      trimmed += 1
+      continue
+    }
+    if (!file?.size) continue
+    const ext = extOf(file.name)
+    if (!IMAGE_EXTS.has(ext)) continue
+    next.push({
+      id: makePendingId(),
+      file,
+      url: URL.createObjectURL(file),
+    })
   }
-  pendingImage.value = { file, url: URL.createObjectURL(file) }
+  pendingImages.value = next
+  if (trimmed > 0) pendingTrimmedCount.value = trimmed
+}
+
+function removePendingImageItem(id) {
+  const item = pendingImages.value.find((p) => p.id === id)
+  if (item?.url) URL.revokeObjectURL(item.url)
+  pendingImages.value = pendingImages.value.filter((p) => p.id !== id)
+  if (!pendingImages.value.length) pendingTrimmedCount.value = 0
+  if (fileInputEl.value) fileInputEl.value.value = ''
 }
 
 function clearPendingImage() {
-  if (pendingImage.value?.url) {
-    URL.revokeObjectURL(pendingImage.value.url)
+  for (const p of pendingImages.value) {
+    if (p.url) URL.revokeObjectURL(p.url)
   }
-  pendingImage.value = null
+  pendingImages.value = []
+  pendingTrimmedCount.value = 0
   if (fileInputEl.value) fileInputEl.value.value = ''
 }
 
 function handleDrop(e) {
   isDragging.value = false
-  const file = e.dataTransfer?.files?.[0]
-  if (!file) return
+  const raw = e.dataTransfer?.files
+  if (!raw?.length) return
+  const files = [...raw]
+  const allImages = files.length > 0 && files.every((f) => IMAGE_EXTS.has(extOf(f.name)))
+  if (allImages) {
+    addPendingImageFiles(files)
+    return
+  }
+  const file = files[0]
   const ext = extOf(file.name)
   if (!ACCEPTED_EXTS.has(ext)) return
   if (IMAGE_EXTS.has(ext)) {
-    setPendingImage(file)
+    addPendingImageFiles([file])
     return
   }
   emit('file-selected', file)
 }
 
 const plusMenuItems = [
-  { icon: User,      labelKey: 'home.chatInput.selectAgent',    action: null },
+  { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode', action: 'openModePicker' },
   { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
   { icon: Image,     labelKey: 'home.chatInput.createImage',    action: null },
   { icon: Brain,     labelKey: 'home.chatInput.thinkDeeply',    action: null },
@@ -347,9 +432,24 @@ const plusMenuItems = [
 
 function closePlusMenu() {
   plusMenuOpen.value = false
+  modePickerOpen.value = false
+}
+
+function togglePlusMenu() {
+  if (plusMenuOpen.value) {
+    closePlusMenu()
+  } else {
+    modePickerOpen.value = false
+    plusMenuOpen.value = true
+  }
 }
 
 function handleMenuItemClick(item) {
+  if (item.action === 'openModePicker') {
+    if (!modeMenuItemsList.value.length) return
+    modePickerOpen.value = true
+    return
+  }
   closePlusMenu()
   if (item.action === 'openFile') {
     // 重置 value 使得同一文件可重复选
@@ -358,22 +458,33 @@ function handleMenuItemClick(item) {
   }
 }
 
+function selectComposerMode(id) {
+  emit('select-mode', id)
+  closePlusMenu()
+  nextTick(() => area.value?.focus())
+}
+
 function handleFileSelect(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
-  const ext = extOf(file.name)
-  if (IMAGE_EXTS.has(ext)) {
-    setPendingImage(file)
+  const files = [...(e.target.files || [])]
+  if (!files.length) return
+  const allImages = files.length > 0 && files.every((f) => IMAGE_EXTS.has(extOf(f.name)))
+  if (allImages) {
+    addPendingImageFiles(files)
   } else {
-    emit('file-selected', file)
+    const file = files[0]
+    const ext = extOf(file.name)
+    if (IMAGE_EXTS.has(ext)) {
+      addPendingImageFiles([file])
+    } else {
+      emit('file-selected', file)
+    }
   }
-  // 重置让用户可以再次选同名文件
   e.target.value = ''
 }
 
 function onDocumentClick(e) {
   if (plusRootRef.value && !plusRootRef.value.contains(e.target)) {
-    plusMenuOpen.value = false
+    closePlusMenu()
   }
 }
 
@@ -398,13 +509,11 @@ function autoGrow() {
 
 function handleSubmit() {
   const msg = input.value.trim()
-  const file = pendingImage.value?.file ?? null
-  if (!msg && !file) return
-  // Reset composer *before* emit so preview clears immediately even if the parent
-  // handler is async and the runtime waits on its returned Promise.
+  const imageFiles = pendingImages.value.map((p) => p.file)
+  if (!msg && !imageFiles.length) return
   input.value = ''
   clearPendingImage()
-  emit('submit', { message: msg, imageFile: file })
+  emit('submit', { message: msg, imageFiles })
   nextTick(autoGrow)
 }
 

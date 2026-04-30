@@ -11,8 +11,8 @@ initTheme()
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', component: HomeView },
-    { path: '/chat/:sessionId?', redirect: '/' },
+    { path: '/', name: 'home', component: HomeView },
+    { path: '/chat/:sessionId?', name: 'chat', component: HomeView },
   ],
 })
 

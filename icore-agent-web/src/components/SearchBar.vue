@@ -72,6 +72,38 @@
           {{ t('chat.pendingImagesTrimmed', { n: pendingTrimmedCount, max: MAX_PENDING_IMAGES }) }}
         </p>
       </div>
+      <!-- 待发送数据文件（CSV / Excel）：与图片一致的「先发预览、发送后进气泡」 -->
+      <div v-if="pendingDataFiles.length" class="mb-2 flex flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <div
+            v-for="item in pendingDataFiles"
+            :key="item.id"
+            :title="item.file.name"
+            class="relative flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-800/80 dark:ring-white/10"
+          >
+            <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
+              {{ item.file.name }}
+            </span>
+            <button
+              type="button"
+              class="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-950/70 text-white shadow-sm ring-1 ring-white/25 backdrop-blur-[2px] transition hover:bg-zinc-950/90 dark:bg-black/65 dark:ring-white/20 dark:hover:bg-black/85"
+              :aria-label="t('chat.removePendingDataFile')"
+              @click.stop="removePendingDataFileItem(item.id)"
+            >
+              <span class="text-xs font-light leading-none" aria-hidden="true">×</span>
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] leading-tight text-zinc-500 dark:text-zinc-500">
+          {{ t('chat.pendingDataFilesCount', { n: pendingDataFiles.length, max: MAX_PENDING_DATA_FILES }) }}
+        </p>
+        <p v-if="pendingDataTrimmedCount > 0" class="text-[11px] leading-tight text-amber-700 dark:text-amber-400/90">
+          {{ t('chat.pendingDataFilesTrimmed', { n: pendingDataTrimmedCount, max: MAX_PENDING_DATA_FILES }) }}
+        </p>
+      </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
           <div ref="plusRootRef" class="relative z-10">
@@ -286,17 +318,23 @@ const plusRootRef = ref(null)
 const isDragging = ref(false)
 
 const MAX_PENDING_IMAGES = 5
+const MAX_PENDING_DATA_FILES = 5
 
 /** @type {import('vue').Ref<Array<{ id: string, file: File, url: string }>>} */
 const pendingImages = ref([])
 /** 最近一次批量选择时因上限丢弃的张数（展示提示后于下次添加时清零） */
 const pendingTrimmedCount = ref(0)
 
-/** 流式输出时可点停止；否则无内容且无图时禁用发送 */
+/** @type {import('vue').Ref<Array<{ id: string, file: File }>>} */
+const pendingDataFiles = ref([])
+const pendingDataTrimmedCount = ref(0)
+
+/** 流式输出时可点停止；否则无内容、无图且无数据文件时禁用发送 */
 const mainActionDisabled = computed(
   () =>
     !props.streaming
-    && (props.sendBlocked || (!input.value.trim() && !pendingImages.value.length)),
+    && (props.sendBlocked
+      || (!input.value.trim() && !pendingImages.value.length && !pendingDataFiles.value.length)),
 )
 
 function onMainAction() {
@@ -343,6 +381,7 @@ const ACCEPTED_EXTS = new Set([
 ])
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
+const DATA_EXTS = new Set(['.csv', '.xls', '.xlsx'])
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -402,6 +441,38 @@ function clearPendingImage() {
   if (fileInputEl.value) fileInputEl.value.value = ''
 }
 
+/** 待发送数据文件加入列表（总数不超过 MAX_PENDING_DATA_FILES） */
+function addPendingDataFiles(files) {
+  pendingDataTrimmedCount.value = 0
+  const list = Array.isArray(files) ? files : [files]
+  let trimmed = 0
+  const next = [...pendingDataFiles.value]
+  for (const file of list) {
+    if (next.length >= MAX_PENDING_DATA_FILES) {
+      trimmed += 1
+      continue
+    }
+    if (!file?.size) continue
+    const ext = extOf(file.name)
+    if (!DATA_EXTS.has(ext)) continue
+    next.push({ id: makePendingId(), file })
+  }
+  pendingDataFiles.value = next
+  if (trimmed > 0) pendingDataTrimmedCount.value = trimmed
+}
+
+function removePendingDataFileItem(id) {
+  pendingDataFiles.value = pendingDataFiles.value.filter((p) => p.id !== id)
+  if (!pendingDataFiles.value.length) pendingDataTrimmedCount.value = 0
+  if (fileInputEl.value) fileInputEl.value.value = ''
+}
+
+function clearPendingDataFiles() {
+  pendingDataFiles.value = []
+  pendingDataTrimmedCount.value = 0
+  if (fileInputEl.value) fileInputEl.value.value = ''
+}
+
 function handleDrop(e) {
   isDragging.value = false
   const raw = e.dataTransfer?.files
@@ -412,11 +483,20 @@ function handleDrop(e) {
     addPendingImageFiles(files)
     return
   }
+  const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
+  if (allData) {
+    addPendingDataFiles(files)
+    return
+  }
   const file = files[0]
   const ext = extOf(file.name)
   if (!ACCEPTED_EXTS.has(ext)) return
   if (IMAGE_EXTS.has(ext)) {
     addPendingImageFiles([file])
+    return
+  }
+  if (DATA_EXTS.has(ext)) {
+    addPendingDataFiles([file])
     return
   }
   emit('file-selected', file)
@@ -471,12 +551,19 @@ function handleFileSelect(e) {
   if (allImages) {
     addPendingImageFiles(files)
   } else {
-    const file = files[0]
-    const ext = extOf(file.name)
-    if (IMAGE_EXTS.has(ext)) {
-      addPendingImageFiles([file])
+    const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
+    if (allData) {
+      addPendingDataFiles(files)
     } else {
-      emit('file-selected', file)
+      const file = files[0]
+      const ext = extOf(file.name)
+      if (IMAGE_EXTS.has(ext)) {
+        addPendingImageFiles([file])
+      } else if (DATA_EXTS.has(ext)) {
+        addPendingDataFiles([file])
+      } else {
+        emit('file-selected', file)
+      }
     }
   }
   e.target.value = ''
@@ -496,6 +583,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
   clearPendingImage()
+  clearPendingDataFiles()
 })
 
 function autoGrow() {
@@ -510,15 +598,18 @@ function autoGrow() {
 function handleSubmit() {
   const msg = input.value.trim()
   const imageFiles = pendingImages.value.map((p) => p.file)
-  if (!msg && !imageFiles.length) return
+  const dataFiles = pendingDataFiles.value.map((p) => p.file)
+  if (!msg && !imageFiles.length && !dataFiles.length) return
   input.value = ''
   clearPendingImage()
-  emit('submit', { message: msg, imageFiles })
+  clearPendingDataFiles()
+  emit('submit', { message: msg, imageFiles, dataFiles })
   nextTick(autoGrow)
 }
 
 defineExpose({
   focus: () => area.value?.focus(),
   clearPendingImage,
+  clearPendingDataFiles,
 })
 </script>

@@ -2,9 +2,21 @@
   <div
     class="flex h-screen min-h-0 bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
-    <HomeSidebar @new="onSidebarNew" />
+    <div
+      v-show="sidebarMobileOpen"
+      class="fixed inset-0 z-30 bg-zinc-950/35 backdrop-blur-[1px] transition-opacity lg:hidden"
+      aria-hidden="true"
+      @click="sidebarMobileOpen = false"
+    />
 
-    <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <HomeSidebar
+      class="fixed inset-y-0 left-0 z-40 max-lg:shadow-[4px_0_24px_-4px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-out lg:relative lg:z-auto lg:translate-x-0 lg:shadow-none lg:transition-none dark:max-lg:shadow-black/50"
+      :class="sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+      @new="onSidebarNew"
+      @navigate="sidebarMobileOpen = false"
+    />
+
+    <div class="relative flex min-h-0 min-w-0 flex-1 flex-col lg:min-w-0">
       <div class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div
           class="absolute inset-0 bg-zinc-100 transition-colors duration-300 ease-out dark:bg-zinc-950"
@@ -22,6 +34,16 @@
       >
         <button
           type="button"
+          class="-ml-1 mr-auto flex rounded-xl p-2 text-zinc-600 transition-colors hover:bg-zinc-200/80 hover:text-zinc-950 lg:hidden dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          :aria-label="t('home.sidebar.openMenu')"
+          @click="sidebarMobileOpen = true"
+        >
+          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <button
+          type="button"
           class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
         >
           {{ t('home.signIn') }}
@@ -35,11 +57,11 @@
       </header>
 
       <main class="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div class="flex h-full min-h-0 flex-col">
+        <div class="flex min-h-0 flex-1 flex-col">
           <div
-            v-if="messages.length > 0"
+            v-if="isChatRoute && messages.length > 0"
             ref="scrollEl"
-            class="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6"
+            class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6"
           >
             <div class="mx-auto w-full max-w-3xl space-y-6">
               <div
@@ -52,12 +74,12 @@
                   v-if="msg.role === 'user'"
                   :class="[
                     'rounded-2xl rounded-tr-sm text-sm leading-relaxed ring-1 transition-colors duration-300',
-                    msg.type === 'image' && userImageList(msg).length
+                    userBubbleUsesAttachLayout(msg)
                       ? 'shadow-sm shadow-zinc-900/5 dark:shadow-md dark:shadow-black/20'
                       : 'shadow-md shadow-zinc-900/8 dark:shadow-lg dark:shadow-black/25',
                     'bg-white text-zinc-900 ring-zinc-200/90',
                     'dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
-                    msg.type === 'image' && userImageList(msg).length
+                    userBubbleUsesAttachLayout(msg)
                       ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5'
                       : 'max-w-[70%] px-4 py-3',
                   ]"
@@ -92,6 +114,75 @@
                         </p>
                       </div>
                     </template>
+                  </template>
+                  <template v-else-if="msg.type === 'data'">
+                    <div class="flex flex-col gap-1.5">
+                      <div class="flex flex-wrap items-end gap-1.5">
+                        <div
+                          v-for="(row, idx) in (msg.dataAttachments || [])"
+                          :key="(row.filename || 'data') + '-' + idx"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
+                          :title="row.filename"
+                        >
+                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
+                            {{ row.filename }}
+                          </span>
+                        </div>
+                      </div>
+                      <p
+                        v-if="msg.caption"
+                        class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
+                      >
+                        {{ msg.caption }}
+                      </p>
+                    </div>
+                  </template>
+                  <template v-else-if="msg.type === 'composite'">
+                    <div class="flex flex-col gap-1.5">
+                      <div v-if="userImageList(msg).length" class="flex flex-wrap items-end gap-1.5">
+                        <a
+                          v-for="(im, idx) in userImageList(msg)"
+                          :key="(im.filename || 'img') + '-' + idx"
+                          :href="im.content"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          :title="`${im.filename || t('chat.imageUntitled')} — ${t('chat.openImageFullSize')}`"
+                          :aria-label="`${t('chat.openImageFullSize')}: ${im.filename || t('chat.imageUntitled')}`"
+                          class="block h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200/90 shadow-sm ring-1 ring-zinc-200/80 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 dark:bg-zinc-700/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                        >
+                          <img
+                            :src="im.content"
+                            :alt="imageItemAlt(im.filename)"
+                            class="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </a>
+                      </div>
+                      <div v-if="msg.dataAttachments?.length" class="flex flex-wrap items-end gap-1.5">
+                        <div
+                          v-for="(row, idx) in msg.dataAttachments"
+                          :key="(row.filename || 'data') + '-' + idx"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
+                          :title="row.filename"
+                        >
+                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
+                            {{ row.filename }}
+                          </span>
+                        </div>
+                      </div>
+                      <p
+                        v-if="msg.caption"
+                        class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
+                      >
+                        {{ msg.caption }}
+                      </p>
+                    </div>
                   </template>
                   <template v-else>
                     {{ msg.content }}
@@ -171,8 +262,17 @@
           </div>
 
           <div
-            v-else
-            class="h-screen flex items-center justify-center px-4 sm:px-10"
+            v-else-if="isChatRoute && messages.length === 0"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-6 pt-10"
+          >
+            <p class="max-w-sm text-center text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {{ t('home.chatEmptyHint') }}
+            </p>
+          </div>
+
+          <div
+            v-else-if="isHomeRoute"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
           >
             <div class="flex w-full max-w-3xl flex-col items-center text-center">
               <div class="flex flex-col items-center gap-4 animate-home-hero-in">
@@ -209,7 +309,7 @@
                   @select-mode="setComposerMode"
                 />
 
-                <!-- 附件列表（首页，不含图片——图片只在对话里展示） -->
+                <!-- 附件列表（首页）：会话中的文档/RAG 等；图片与数据文件仅在气泡内展示 -->
                 <div v-if="composerAttachments.length || uploading" class="mt-2 flex flex-wrap gap-2 justify-center">
                   <div
                     v-for="att in composerAttachments"
@@ -288,10 +388,10 @@
           </div>
 
           <div
-            v-if="messages.length > 0"
+            v-if="isChatRoute"
             class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
           >
-            <!-- 附件列表（对话模式，不含图片） -->
+            <!-- 附件列表（对话模式）：文档/RAG 等；图片与数据文件仅在气泡内展示 -->
             <div v-if="composerAttachments.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">
               <div v-if="composerAttachments.length || uploading" class="flex flex-wrap gap-2">
                 <div
@@ -347,7 +447,8 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import {
@@ -365,6 +466,13 @@ import HomeSidebar from '../components/HomeSidebar.vue'
 import SearchBar from '../components/SearchBar.vue'
 
 const { t, tm } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+const isHomeRoute = computed(() => route.name === 'home')
+const isChatRoute = computed(() => route.name === 'chat')
+
+const sidebarMobileOpen = ref(false)
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -373,11 +481,24 @@ function imageItemAlt(filename) {
   return t('chat.imageUploadedAltGeneric')
 }
 
-/** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string }} msg */
+/** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string, type?: string }} msg */
 function userImageList(msg) {
   if (msg?.images?.length) return msg.images
-  if (msg?.content) return [{ content: msg.content, filename: msg.filename }]
+  if ((msg?.type === 'image' || msg?.type === 'composite') && msg?.content) {
+    return [{ content: msg.content, filename: msg.filename }]
+  }
   return []
+}
+
+/** 用户气泡是否采用「附件」紧凑布局（图片 / 数据文件 / 混合） */
+function userBubbleUsesAttachLayout(msg) {
+  if (msg?.role !== 'user') return false
+  if (msg.type === 'image') return userImageList(msg).length > 0
+  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0
+  if (msg.type === 'composite') {
+    return userImageList(msg).length > 0 || (msg.dataAttachments?.length ?? 0) > 0
+  }
+  return false
 }
 
 function renderMarkdown(text) {
@@ -438,9 +559,9 @@ const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
 
-/** 输入区只展示文档/数据等非图片附件；图片仅在对话气泡中展示，避免“文件名像卡在输入框” */
+/** 输入区只展示文档等非图片、非数据会话附件；图片与数据文件仅在对话气泡中展示 */
 const composerAttachments = computed(() =>
-  attachmentList.value.filter((a) => a.mode !== 'image'),
+  attachmentList.value.filter((a) => a.mode !== 'image' && a.mode !== 'data'),
 )
 
 async function refreshAttachments() {
@@ -450,7 +571,6 @@ async function refreshAttachments() {
 }
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
-const DATA_EXTS = new Set(['.csv', '.xls', '.xlsx'])
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -474,15 +594,13 @@ async function handleFileSelected(file) {
           type: 'image',
           images: [{ content: url, filename: savedName || file.name }],
         })
+        ensureChatRoute()
         await scrollBottom()
         const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
         if (!loading.value) {
           await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
         }
       }
-    } else if (DATA_EXTS.has(ext)) {
-      await attachData(file, sessionId.value)
-      await refreshAttachments()
     } else {
       await attachFile(file, sessionId.value)
       await refreshAttachments()
@@ -503,10 +621,35 @@ async function deleteAttachment(filename) {
   }
 }
 
-provide(
-  'hasChatMessages',
-  computed(() => messages.value.length > 0),
+function resetConversationState() {
+  stopAssistantStream()
+  messages.value = []
+  sessionId.value = newSessionId()
+  loading.value = false
+  streamingMsg.value = null
+  attachmentList.value = []
+  uploadError.value = ''
+  activeShortcutId.value = ''
+  nextTick(() => {
+    searchRefHome.value?.clearPendingImage?.()
+    searchRefChat.value?.clearPendingImage?.()
+    searchRefHome.value?.clearPendingDataFiles?.()
+    searchRefChat.value?.clearPendingDataFiles?.()
+    ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  })
+}
+
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'home') resetConversationState()
+  },
 )
+
+function ensureChatRoute() {
+  if (route.name === 'home') router.replace({ name: 'chat' })
+}
 
 const PILL_BY_ID = {
   research: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:ring-rose-400/30',
@@ -585,6 +728,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
 
   if (!skipUserBubble) {
     messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+    ensureChatRoute()
   }
   loading.value = true
   await scrollBottom()
@@ -656,67 +800,104 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   }
 }
 
-async function handleSubmit({ message, imageFiles }) {
+async function handleSubmit({ message, imageFiles, dataFiles }) {
   if (loading.value || uploading.value) return
   const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
   const text = (message || '').trim()
-  const files = Array.isArray(imageFiles) ? imageFiles.filter((f) => f && f.size) : []
+  const imgs = Array.isArray(imageFiles) ? imageFiles.filter((f) => f && f.size) : []
+  const datas = Array.isArray(dataFiles) ? dataFiles.filter((f) => f && f.size) : []
 
-  if (files.length) {
-    uploadError.value = ''
-    uploading.value = true
-    try {
-      const uploaded = []
-      for (const imageFile of files) {
-        const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
-        const url = imageUrl(imageRef)
-        if (url) uploaded.push({ content: url, filename: savedName || imageFile.name })
-      }
-      await refreshAttachments()
-      if (uploaded.length) {
-        messages.value.push({
-          id: `${Date.now()}-u`,
-          role: 'user',
-          type: 'image',
-          images: uploaded,
-          ...(text ? { caption: text } : {}),
-        })
-        await scrollBottom()
-        const apiText =
-          text
-          || (uploaded.length > 1
-            ? t('chat.imageReplyPromptMulti')
-            : t('chat.imageReplyPrompt'))
-        await sendUserMessage(apiText, hint, { skipUserBubble: true })
-      }
-    } catch (err) {
-      uploadError.value = err.message || t('chat.uploadFailed')
-    } finally {
-      uploading.value = false
-      nextTick(() => {
-        searchRefHome.value?.clearPendingImage?.()
-        searchRefChat.value?.clearPendingImage?.()
-      })
-    }
+  if (!imgs.length && !datas.length) {
+    if (text) await sendUserMessage(text, hint)
     return
   }
 
-  if (text) {
-    await sendUserMessage(text, hint)
+  uploadError.value = ''
+  uploading.value = true
+  try {
+    const uploadedImages = []
+    for (const imageFile of imgs) {
+      const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
+      const url = imageUrl(imageRef)
+      if (url) uploadedImages.push({ content: url, filename: savedName || imageFile.name })
+    }
+    const uploadedDataMeta = []
+    for (const df of datas) {
+      const meta = await attachData(df, sessionId.value)
+      uploadedDataMeta.push({ filename: meta.filename || df.name })
+    }
+    await refreshAttachments()
+
+    const hasImages = uploadedImages.length > 0
+    const hasData = uploadedDataMeta.length > 0
+    if (!hasImages && !hasData) return
+
+    const caption = text || undefined
+    if (hasImages && !hasData) {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'image',
+        images: uploadedImages,
+        ...(caption ? { caption } : {}),
+      })
+    } else if (!hasImages && hasData) {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'data',
+        dataAttachments: uploadedDataMeta,
+        ...(caption ? { caption } : {}),
+      })
+    } else {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'composite',
+        images: uploadedImages,
+        dataAttachments: uploadedDataMeta,
+        ...(caption ? { caption } : {}),
+      })
+    }
+    await scrollBottom()
+    ensureChatRoute()
+
+    let apiText = text
+    if (!apiText) {
+      if (hasImages && hasData) apiText = t('chat.attachmentsReplyPrompt')
+      else if (hasImages) {
+        apiText =
+          uploadedImages.length > 1 ? t('chat.imageReplyPromptMulti') : t('chat.imageReplyPrompt')
+      } else {
+        apiText =
+          uploadedDataMeta.length > 1 ? t('chat.dataReplyPromptMulti') : t('chat.dataReplyPrompt')
+      }
+    }
+    await sendUserMessage(apiText, hint, { skipUserBubble: true })
+  } catch (err) {
+    uploadError.value = err.message || t('chat.uploadFailed')
+  } finally {
+    uploading.value = false
+    nextTick(() => {
+      searchRefHome.value?.clearPendingImage?.()
+      searchRefChat.value?.clearPendingImage?.()
+      searchRefHome.value?.clearPendingDataFiles?.()
+      searchRefChat.value?.clearPendingDataFiles?.()
+    })
   }
 }
 
 function toggleShortcut(id) {
   activeShortcutId.value = activeShortcutId.value === id ? '' : id
   nextTick(() => {
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
   })
 }
 
 function setComposerMode(id) {
   activeShortcutId.value = id
   nextTick(() => {
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
   })
 }
 
@@ -725,19 +906,7 @@ function clearShortcut() {
 }
 
 function onSidebarNew() {
-  stopAssistantStream()
-  messages.value = []
-  sessionId.value = newSessionId()
-  loading.value = false
-  streamingMsg.value = null
-  attachmentList.value = []
-  uploadError.value = ''
-  activeShortcutId.value = ''
-  nextTick(() => {
-    searchRefHome.value?.clearPendingImage?.()
-    searchRefChat.value?.clearPendingImage?.()
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
-  })
+  if (route.name === 'home') resetConversationState()
+  else router.push({ name: 'home' })
 }
 </script>

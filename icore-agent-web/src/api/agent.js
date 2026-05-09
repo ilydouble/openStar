@@ -1,6 +1,27 @@
 const BASE = '/api/v1/agent'
 
 /**
+ * 后端或代理有时会把整段回复塞进「一条」token。若前端一次性 append，Vue
+ * 会合并更新，表现成「唰一下整段出现」。将长串拆成多段 yield，让 for-await
+ * 每步都能 await，从而一帧一帧刷新。
+ * @param {string} text
+ * @yields {{ kind: 'token', text: string }}
+ */
+function *yieldTokenChunks(text) {
+  const t = String(text ?? '')
+  if (!t) return
+  // 4–8 字：打字感好，marked 重跑成本可接受
+  const SLICE = 6
+  if (t.length <= SLICE) {
+    yield { kind: 'token', text: t }
+    return
+  }
+  for (let i = 0; i < t.length; i += SLICE) {
+    yield { kind: 'token', text: t.slice(i, i + SLICE) }
+  }
+}
+
+/**
  * 流式对话 — 返回 AsyncGenerator，yield 类型化事件：
  *   { kind: 'token',  text: string }                                        — LLM 流式 token
  *   { kind: 'status', tool: string, input_preview: string, step: number }  — 子 agent 工具开始执行
@@ -12,8 +33,10 @@ const BASE = '/api/v1/agent'
  * @param {string} message
  * @param {string} sessionId
  * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
+ * @param {{ signal?: AbortSignal }} [options] 传入 signal 可中止 fetch / 流读取（用户点击停止）
  */
-export async function* chatStream(message, sessionId, agentHint = '') {
+export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
+  const signal = options && options.signal
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,6 +46,9 @@ export async function* chatStream(message, sessionId, agentHint = '') {
       stream: true,
       agent_hint: agentHint || '',
     }),
+    // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
+    cache: 'no-store',
+    signal,
   })
 
   if (!resp.ok) {
@@ -36,10 +62,6 @@ export async function* chatStream(message, sessionId, agentHint = '') {
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-
-    // [DIAG] 诊断：SSE 分片到达时刻与字节数。确认了实时性后删掉。
-    // eslint-disable-next-line no-console
-    console.log('[SSE chunk]', new Date().toISOString(), value?.byteLength ?? 0, 'bytes')
 
     buf += decoder.decode(value, { stream: true })
     const lines = buf.split('\n')
@@ -57,7 +79,7 @@ export async function* chatStream(message, sessionId, agentHint = '') {
         parsed = JSON.parse(payload)
       } catch {
         // 非 JSON：按裸文本处理
-        yield { kind: 'token', text: payload }
+        for (const ev of yieldTokenChunks(payload)) yield ev
         continue
       }
 
@@ -65,7 +87,7 @@ export async function* chatStream(message, sessionId, agentHint = '') {
       if (parsed && typeof parsed === 'object') {
         const type = parsed.type
         if (type === 'token') {
-          yield { kind: 'token', text: String(parsed.text ?? '') }
+          for (const ev of yieldTokenChunks(String(parsed.text ?? ''))) yield ev
         } else if (type === 'status') {
           yield {
             kind: 'status',
@@ -84,7 +106,7 @@ export async function* chatStream(message, sessionId, agentHint = '') {
       // 旧协议：裸字符串
       if (typeof parsed === 'string') {
         if (parsed.startsWith('[ERROR]')) throw new Error(parsed)
-        yield { kind: 'token', text: parsed }
+        for (const ev of yieldTokenChunks(parsed)) yield ev
       }
     }
   }

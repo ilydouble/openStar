@@ -329,7 +329,8 @@ async def _stream_agent(
         if kind == "token":
             text = payload if isinstance(payload, str) else str(payload)
             full_reply.append(text)
-            yield _sse({"type": "token", "text": text})
+            for ch in text:
+                yield _sse({"type": "token", "text": ch})
         elif kind == "status":
             step_idx += 1
             evt = {"type": "status", "step": step_idx}

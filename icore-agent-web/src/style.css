@@ -11,12 +11,46 @@
     @apply min-h-screen bg-zinc-100 font-sans text-zinc-950 antialiased transition-[background-color,color] duration-300 ease-out;
   }
 
-  .dark html {
+  /* Tailwind darkMode: class — `dark` 在 <html> 上，须用 html.dark */
+  html.dark {
+    @apply bg-zinc-950;
+    color-scheme: dark;
+  }
+
+  html.dark body {
+    @apply bg-zinc-950 text-zinc-100;
+  }
+
+  #app {
+    @apply min-h-screen bg-zinc-100 transition-[background-color] duration-300 ease-out;
+  }
+
+  html.dark #app {
     @apply bg-zinc-950;
   }
 
-  .dark body {
-    @apply bg-zinc-950 text-zinc-100;
+  /* 深色模式下统一滚动条，避免系统浅色轨道与页面割裂 */
+  html.dark {
+    scrollbar-color: rgb(63 63 70) rgb(9 9 11);
+  }
+
+  html.dark ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  html.dark ::-webkit-scrollbar-track {
+    background: rgb(9 9 11);
+  }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    background: rgb(63 63 70);
+    border-radius: 9999px;
+    border: 2px solid rgb(9 9 11);
+  }
+
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgb(82 82 91);
   }
 }
 

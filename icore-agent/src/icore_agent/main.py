@@ -1,9 +1,11 @@
 """FastAPI application entry point."""
 
-# load_dotenv 必须在所有其他 import 之前执行
-# 这样 LiteLLM、strands 等库初始化时就能从 os.environ 读到 API Key
-from dotenv import load_dotenv
-load_dotenv()
+# ruff: noqa: E402,I001
+
+# Split dotenv files must be loaded before LiteLLM/Strands import time.
+from .config.dotenv import load_domain_dotenvs
+
+load_domain_dotenvs()
 
 import litellm
 import structlog

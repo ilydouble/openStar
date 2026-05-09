@@ -11,8 +11,9 @@ This repository should be developed with clear domain boundaries and verified ch
 
 ## Environment
 
-- Do not commit `.env` files or real secrets.
-- Keep `.env.example` complete but use placeholders for credentials.
+- Do not commit `.env` files, `dotenv/.env.{domain}` files, or real secrets.
+- Keep `dotenv/.env.{domain}.example` complete and use placeholders for credentials.
+- Load backend environment through `icore-agent/compose.sh` so Docker Compose receives every split domain env file.
 - PostgreSQL local development uses Docker Compose and the `icore_db` named volume.
 
 ## Testing And Git

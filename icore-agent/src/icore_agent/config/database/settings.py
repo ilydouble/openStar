@@ -8,6 +8,8 @@ from ..base import DomainSettings
 
 
 class DatabaseSettings(DomainSettings):
+    env_domains = ("database",)
+
     db_host: str = "postgres"
     db_port: int = Field(5432, ge=1, le=65535)
     db_user: str = "icore_agent"

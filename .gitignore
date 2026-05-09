@@ -10,6 +10,8 @@ __pycache__/
 
 # environment variables
 .env
+icore-agent/dotenv/.env.*
+!icore-agent/dotenv/.env.*.example
 
 # ----------------------
 # Node.js / Frontend

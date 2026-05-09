@@ -16,8 +16,10 @@ venv/
 env/
 .env.local
 
-# ── 敏感配置（保留 .env.example）─────────────
+# ── 敏感配置 ─────────────────────────────────
 .env
+dotenv/.env.*
+!dotenv/.env.*.example
 
 # ── 测试 & 覆盖率 ──────────────────────────────
 .pytest_cache/

@@ -2,6 +2,7 @@
 
 from .app import AppSettings
 from .auth import AuthSettings
+from .base import _DOMAINS
 from .database import DatabaseSettings
 from .llm import LLMSettings
 from .media import MediaSettings
@@ -22,6 +23,8 @@ class Settings(
     ToolsSettings,
     MediaSettings,
 ):
+    env_domains = _DOMAINS
+
     @property
     def effective_sequential_model(self) -> str:
         return self.sequential_model or self.model_id

@@ -9,6 +9,8 @@ log = structlog.get_logger()
 
 
 class LLMSettings(DomainSettings):
+    env_domains = ("llm",)
+
     model_id: str = "zai/glm-4.7"
     model_id_fast: str = "zai/glm-4.7"
     model_api_base: str = ""

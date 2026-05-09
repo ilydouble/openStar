@@ -40,6 +40,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# Alembic migration files are runtime artifacts for database upgrades.
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
+
 # Sequential agent workspace
 RUN mkdir -p /tmp/icore-seq-workspace && chown icore:icore /tmp/icore-seq-workspace
 

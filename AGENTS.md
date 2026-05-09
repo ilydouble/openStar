@@ -23,3 +23,8 @@ This repository should be developed with clear domain boundaries and verified ch
 - Run the relevant test slice before broad verification.
 - Before handing off or committing, run the full applicable test suite and ensure it passes.
 - Commit only after tests pass. Keep git commits scoped to the completed change.
+
+## Code Comment
+- Write comment for function declaration, explain what a function does
+- Write necessary helpful comments for critical code lines
+- Don't write comment for all code lines, only write for those necessary

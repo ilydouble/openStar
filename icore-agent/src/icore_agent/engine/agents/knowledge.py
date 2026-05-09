@@ -145,7 +145,7 @@ def _create_knowledge_agent(tenant_code: str = "") -> Agent:
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": 0.1,
-            **settings.litellm_kwargs(),
+            **settings.litellm_kwargs(model_id=settings.model_id),
         },
     )
     return Agent(

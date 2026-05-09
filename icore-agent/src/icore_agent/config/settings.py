@@ -30,9 +30,10 @@ class Settings(BaseSettings):
     model_id: str = "zai/glm-4.7"
     model_id_fast: str = "zai/glm-4.7"
 
-    # OpenAI 兼容接口的自定义 base URL 和 API Key
-    # 留空则 LiteLLM 使用各 provider 的默认端点
-    model_api_base: str = ""   # e.g. https://api.z.ai/api/paas/v4
+    # OpenAI 兼容接口的自定义 base URL 和 API Key.
+    # MODEL_API_BASE 是通用覆盖；ZAI_BASE_URL 专门用于 zai/glm-* 模型。
+    model_api_base: str = ""
+    zai_base_url: str = ""
     model_api_key: str = ""    # e.g. Z.AI / 私有部署的 key
 
     # ── Sequential Agent (mini-SWE-agent style) ───────────
@@ -54,18 +55,27 @@ class Settings(BaseSettings):
     #     子 agent 多为工具编排，对链式思考依赖不高，默认关闭。
     disable_thinking: bool = True
 
-    # LiteLLM num_retries：指数退避重试同一模型的同一请求。
-    # 在我们这种"持续 RPM 超限"的失败模式下，重试只会拉长总耗时而几乎不
-    # 改变成功率，所以默认关掉；真兜底靠下面的 fallbacks 模型降级。
-    llm_num_retries: int = Field(0, ge=0, le=10)
+    # LiteLLM 请求保护：每次模型调用最多等待 timeout_interval 秒，
+    # 失败后最多重试 max_retries 次。
+    timeout_interval: int = Field(30, ge=1, le=600)
+    max_retries: int = Field(3, ge=0, le=10)
 
-    def litellm_kwargs(self) -> dict:
+    @staticmethod
+    def _is_zai_model(model_id: str) -> bool:
+        model = model_id.strip().lower()
+        return model.startswith("zai/") or model.startswith("glm-")
+
+    def litellm_kwargs(self, model_id: str | None = None) -> dict:
         """返回所有需要透传给 LiteLLMModel 的额外参数。"""
         kwargs: dict = {}
         if self.model_api_base:
             kwargs["api_base"] = self.model_api_base
+        elif self.zai_base_url and self._is_zai_model(model_id or self.model_id):
+            kwargs["api_base"] = self.zai_base_url
         if self.model_api_key:
             kwargs["api_key"] = self.model_api_key
+        kwargs["timeout"] = self.timeout_interval
+        kwargs["num_retries"] = self.max_retries
         if self.disable_thinking:
             # Z.AI Chat Completions 扩展字段（GLM-4.5+ / GLM-4.6V / GLM-4.7）。
             # 必须走 extra_body 注入请求 JSON —— 作为顶层 kwarg 会被 LiteLLM
@@ -77,8 +87,6 @@ class Settings(BaseSettings):
         # 能把请求救回来，且延迟更短（fast 首 token 快）。
         if self.model_id_fast and self.model_id_fast != self.model_id:
             kwargs["fallbacks"] = [self.model_id_fast]
-        if self.llm_num_retries > 0:
-            kwargs["num_retries"] = self.llm_num_retries
         log.info("litellm_kwargs_resolved", kwargs=kwargs)
         return kwargs
 

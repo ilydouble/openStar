@@ -240,7 +240,7 @@ def create_orchestrator(
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": settings.agent_temperature,
-            **settings.litellm_kwargs(),
+            **settings.litellm_kwargs(model_id=selected_model),
         },
     )
 

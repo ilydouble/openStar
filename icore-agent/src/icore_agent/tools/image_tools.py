@@ -23,8 +23,6 @@ from ..config import settings
 log = structlog.get_logger()
 
 _SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
-_VISION_TIMEOUT = 60
-_GEN_TIMEOUT = 60
 
 
 def _resolve_image_source(image_source: str) -> str:
@@ -87,13 +85,11 @@ def understand_image(image_source: str, question: str = "") -> str:
         ],
         "max_tokens": 2048,
         "temperature": 0.3,
-        "timeout": _VISION_TIMEOUT,
     }
+    litellm_params.update(settings.litellm_kwargs(model_id=settings.vision_model_id))
     # Route to the Z.AI / Zhipu endpoint via LiteLLM's OpenAI-compatible layer.
-    if settings.zai_api_key:
+    if settings.zai_api_key and "api_key" not in litellm_params:
         litellm_params["api_key"] = settings.zai_api_key
-    if settings.model_api_base:
-        litellm_params["api_base"] = settings.model_api_base
 
     try:
         resp = litellm_completion(**litellm_params)
@@ -148,7 +144,7 @@ def generate_image(
     }
 
     try:
-        with httpx.Client(timeout=_GEN_TIMEOUT) as client:
+        with httpx.Client(timeout=settings.timeout_interval) as client:
             resp = client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -172,7 +168,7 @@ def generate_image(
         session_dir = Path(settings.image_save_dir) / (session_id or "_shared")
         session_dir.mkdir(parents=True, exist_ok=True)
         filename = f"cogview_{os.urandom(6).hex()}.png"
-        with httpx.Client(timeout=_GEN_TIMEOUT) as client:
+        with httpx.Client(timeout=settings.timeout_interval) as client:
             r = client.get(remote_url)
             r.raise_for_status()
             (session_dir / filename).write_bytes(r.content)

@@ -36,7 +36,7 @@ def _create_code_agent() -> Agent:
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": 0.05,
-            **settings.litellm_kwargs(),
+            **settings.litellm_kwargs(model_id=settings.model_id),
         },
     )
     return Agent(

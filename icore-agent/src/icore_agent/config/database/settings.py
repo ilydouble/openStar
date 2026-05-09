@@ -11,7 +11,8 @@ class DatabaseSettings(DomainSettings):
     env_domains = ("database",)
 
     db_host: str = "postgres"
-    db_port: int = Field(5432, ge=1, le=65535)
+    db_internal_port: int = Field(5432, ge=1, le=65535)
+    db_host_port: int = Field(5432, ge=1, le=65535)
     db_user: str = "icore_agent"
     db_password: str = "change-me"
     db_name: str = "icore_agent_db"
@@ -22,7 +23,7 @@ class DatabaseSettings(DomainSettings):
         password = quote(self.db_password, safe="")
         return (
             f"postgresql+asyncpg://{user}:{password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+            f"@{self.db_host}:{self.db_internal_port}/{self.db_name}"
         )
 
 

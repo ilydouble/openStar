@@ -36,7 +36,8 @@ icore-agent
 | OPENAI_API_KEY | OpenAI API Key | - |
 | REDIS_URL | Redis 连接地址 | redis://redis:6379/0 |
 | DB_HOST | PostgreSQL 主机 | postgres |
-| DB_PORT | PostgreSQL 端口 | 5432 |
+| DB_INTERNAL_PORT | PostgreSQL 容器内部端口，也是后端连接端口 | 5432 |
+| DB_HOST_PORT | PostgreSQL 映射到宿主机的端口 | 5432 |
 | DB_USER | PostgreSQL 用户 | icore_agent |
 | DB_PASSWORD | PostgreSQL 密码 | change-me |
 | DB_NAME | PostgreSQL 数据库 | icore_agent_db |

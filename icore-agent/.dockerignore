@@ -1,0 +1,38 @@
+# Git and editor metadata
+.git/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python local artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.egg-info/
+dist/
+build/
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Local env files and secrets
+.env
+.env.*
+dotenv/.env.*
+!dotenv/.env.*.example
+
+# Runtime data and workspaces
+data/
+logs/
+tmp/
+/tmp/

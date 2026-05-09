@@ -105,7 +105,8 @@ MEMORY_TTL_SECONDS=86400
 
 # dotenv/.env.database
 DB_HOST=postgres
-DB_PORT=5432
+DB_INTERNAL_PORT=5432
+DB_HOST_PORT=5432
 DB_USER=icore_agent
 DB_PASSWORD=change-me
 DB_NAME=icore_agent_db

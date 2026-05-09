@@ -53,3 +53,39 @@ def test_compose_wrapper_loads_split_env_files():
     assert "docker compose" in text
     for domain in ("app", "database", "llm", "sequential", "memory", "auth", "rag", "tools", "media"):
         assert f"--env-file dotenv/.env.{domain}" in text
+
+
+def test_postgres_port_mapping_uses_split_database_ports():
+    compose = (AGENT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    database_example = (AGENT_ROOT / "dotenv" / ".env.database.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "${DB_HOST_PORT:-5432}:${DB_INTERNAL_PORT:-5432}" in compose
+    assert "DB_INTERNAL_PORT=5432" in database_example
+    assert "DB_HOST_PORT=5432" in database_example
+    assert "DB_PORT=" not in database_example
+
+
+def test_dockerfile_keeps_dependency_layer_before_source_copy():
+    dockerfile = (AGENT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    metadata_copy = dockerfile.index("COPY pyproject.toml")
+    dependency_install = dockerfile.index("requirements-runtime.txt")
+    source_copy = dockerfile.index("COPY src/")
+
+    assert metadata_copy < dependency_install < source_copy
+    assert "--prefix=/install/deps" in dockerfile
+    assert "--prefix=/install/app" in dockerfile
+    assert "COPY --from=builder /install/deps /usr/local" in dockerfile
+    assert "COPY --from=builder /install/app /usr/local" in dockerfile
+    assert "--no-deps dist/*.whl" in dockerfile
+
+
+def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():
+    dockerignore = (AGENT_ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert ".venv/" in dockerignore
+    assert "__pycache__/" in dockerignore
+    assert "dotenv/.env.*" in dockerignore
+    assert "!dotenv/.env.*.example" in dockerignore

@@ -6,7 +6,8 @@ from icore_agent.config.database import DatabaseSettings
 
 def test_database_settings_build_async_url(monkeypatch):
     monkeypatch.setenv("DB_HOST", "postgres")
-    monkeypatch.setenv("DB_PORT", "5432")
+    monkeypatch.setenv("DB_INTERNAL_PORT", "5432")
+    monkeypatch.setenv("DB_HOST_PORT", "15432")
     monkeypatch.setenv("DB_USER", "icore_agent")
     monkeypatch.setenv("DB_PASSWORD", "secret")
     monkeypatch.setenv("DB_NAME", "icore_agent_db")
@@ -14,7 +15,8 @@ def test_database_settings_build_async_url(monkeypatch):
     db_settings = Settings(_env_file=None)
 
     assert db_settings.db_host == "postgres"
-    assert db_settings.db_port == 5432
+    assert db_settings.db_internal_port == 5432
+    assert db_settings.db_host_port == 15432
     assert db_settings.db_user == "icore_agent"
     assert db_settings.db_password == "secret"
     assert db_settings.db_name == "icore_agent_db"
@@ -41,7 +43,8 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
         "\n".join(
             [
                 "DB_HOST=db.example",
-                "DB_PORT=15432",
+                "DB_INTERNAL_PORT=15432",
+                "DB_HOST_PORT=25432",
                 "DB_USER=split_user",
                 "DB_PASSWORD=split_secret",
                 "DB_NAME=split_db",
@@ -58,7 +61,8 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     for key in (
         "APP_NAME",
         "DB_HOST",
-        "DB_PORT",
+        "DB_INTERNAL_PORT",
+        "DB_HOST_PORT",
         "DB_USER",
         "DB_PASSWORD",
         "DB_NAME",
@@ -73,7 +77,8 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     assert split_settings.app_name == "Split Env App"
     assert split_settings.backend_port_bind == "10001:8080"
     assert split_settings.db_host == "db.example"
-    assert split_settings.db_port == 15432
+    assert split_settings.db_internal_port == 15432
+    assert split_settings.db_host_port == 25432
     assert split_settings.model_id == "zai/glm-4.7"
     assert split_settings.timeout_interval == 12
     assert split_settings.max_retries == 2

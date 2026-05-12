@@ -86,7 +86,7 @@ export default {
     results: {
       eyebrow: 'Proven Results',
       title: 'Let the data speak: AI ops that truly create value',
-      subtitle: 'iCore isn't a feature demo — it's a tool that helps cross-border teams cut costs, shorten cycles, and boost output for real.',
+      subtitle: 'iCore is not just a feature demo - it is a tool that helps cross-border teams cut costs, shorten cycles, and boost output for real.',
       items: [
         {
           emoji: '⏱️',
@@ -242,7 +242,7 @@ export default {
   },
   home: {
     title: 'iCore Agent Platform',
-    subtitle: 'Enterprise-grade intelligence — fast, focused, and ready when you are.',
+    subtitle: 'Enterprise-grade intelligence - fast, focused, and ready when you are.',
     description: 'Provide efficient, secure and controllable enterprise-level AI services for your business.',
     startChat: 'Start Chat',
     heroTitle: 'iCore AI Workspace',

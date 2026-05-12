@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import threading
 import time
@@ -11,6 +12,49 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
+
+log = logging.getLogger(__name__)
+
+
+def _send_verification_email(to_email: str, code: str) -> bool:
+    """通过 Resend 发送验证码邮件。如果未配置 API Key，则打印到日志。"""
+    if not settings.resend_api_key:
+        # 未配置时 fallback 到打印（本地开发用）
+        print(f"\n{'='*60}")
+        print(f"📧 [DEV] 验证码邮件 → {to_email}")
+        print(f"🔑 验证码: {code}  （10 分钟有效）")
+        print(f"{'='*60}\n")
+        return True
+
+    try:
+        import resend
+        resend.api_key = settings.resend_api_key
+
+        html_body = f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+          <h2 style="margin:0 0 8px;font-size:22px;color:#09090b">iCore 邮箱验证</h2>
+          <p style="color:#52525b;margin:0 0 24px">你的验证码是：</p>
+          <div style="background:#f4f4f5;border-radius:12px;padding:20px 32px;text-align:center;
+                      font-size:36px;font-weight:700;letter-spacing:8px;color:#09090b">
+            {code}
+          </div>
+          <p style="color:#71717a;font-size:13px;margin:20px 0 0">
+            验证码 10 分钟内有效，请勿转发给他人。<br>
+            如非本人操作，请忽略此邮件。
+          </p>
+        </div>
+        """
+
+        resend.Emails.send({
+            "from": f"{settings.resend_from_name} <{settings.resend_from_email}>",
+            "to": [to_email],
+            "subject": f"{code} 是你的 iCore 验证码",
+            "html": html_body,
+        })
+        return True
+    except Exception as exc:
+        log.error("resend_email_failed", error=str(exc), to=to_email)
+        return False
 
 _DEFAULT_USAGE = {
     "message_count": 0,
@@ -195,13 +239,9 @@ class ControlPlaneStore:
 
             self._save(data)
 
-            # TODO: 实际项目中应该调用邮件服务发送验证码
-            # 现在为了开发方便，直接在日志中打印
-            print(f"\n{'='*60}")
-            print(f"📧 验证码邮件发送到: {email}")
-            print(f"🔑 验证码: {code}")
-            print(f"⏰ 有效期: 10 分钟")
-            print(f"{'='*60}\n")
+            sent = _send_verification_email(email, code)
+            if not sent:
+                return False, "验证码发送失败，请稍后重试"
 
             return True, f"验证码已发送到 {email}，10 分钟内有效"
 

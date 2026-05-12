@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = "" # anthropic/* 模型使用
     openai_api_key: str = ""    # openai/* 模型使用
 
+    # ── 邮件服务（Resend）────────────────────────────────
+    resend_api_key: str = ""              # 从 resend.com 获取，留空则仅打印到日志
+    resend_from_email: str = "noreply@icore.ai"  # 发件人地址（需在 Resend 验证域名）
+    resend_from_name: str = "iCore"
+
     # ── Zhipu Embedding（供 ChromaDB RAG 使用）─────────────
     zhipu_api_base: str = "https://open.bigmodel.cn/api/paas/v4"
     zhipu_embed_model: str = "embedding-3"

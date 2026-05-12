@@ -12,6 +12,7 @@
       <HeroSection />
       <SignalsSection />
       <SolutionsSection />
+      <ResultsSection />
       <HowItWorksSection />
       <WhyICoreSection />
       <RelatedBusinessSection />
@@ -32,6 +33,7 @@ import LandingFooter from '../components/landing/LandingFooter.vue'
 import LandingNavbar from '../components/landing/LandingNavbar.vue'
 import PlansSection from '../components/landing/PlansSection.vue'
 import RelatedBusinessSection from '../components/landing/RelatedBusinessSection.vue'
+import ResultsSection from '../components/landing/ResultsSection.vue'
 import SignalsSection from '../components/landing/SignalsSection.vue'
 import SolutionsSection from '../components/landing/SolutionsSection.vue'
 import WhyICoreSection from '../components/landing/WhyICoreSection.vue'

@@ -248,6 +248,46 @@ class ControlPlaneStore:
             self._save(data)
             return user["byok"]
 
+    def update_user_plan(
+        self,
+        user_id: str,
+        new_plan: str,
+        byok_enabled: bool = False,
+        byok_api_key: str = "",
+        byok_api_base: str = "",
+        byok_model: str = "",
+    ) -> dict[str, Any]:
+        """更新用户套餐（手动升级或降级）"""
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            now = int(time.time())
+
+            old_plan = user["plan"]
+            user["plan"] = new_plan
+            user["plan_label"] = _PLAN_LIMITS[new_plan]["label"]
+
+            # 如果切换到 BYOK，更新配置
+            if byok_enabled:
+                user["byok"] = {
+                    "enabled": True,
+                    "api_key": byok_api_key.strip(),
+                    "api_base": byok_api_base.strip(),
+                    "model": byok_model.strip(),
+                }
+
+            user["updated_at"] = now
+            data["events"].append({
+                "type": "plan_updated",
+                "user_id": user_id,
+                "old_plan": old_plan,
+                "new_plan": new_plan,
+                "timestamp": now,
+            })
+            self._save(data)
+            return user
+
     def get_plan_summary(self, user_id: str) -> dict[str, Any]:
         with self._lock:
             data = self._load()

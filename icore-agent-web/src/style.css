@@ -5,6 +5,7 @@
 @layer base {
   html {
     @apply bg-zinc-100 font-sans antialiased transition-[background-color,color] duration-300 ease-out;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -21,6 +22,28 @@
 }
 
 @layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .font-landing-display {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Georgia", ui-serif, serif;
+    font-weight: 600;
+  }
+
+  .grid-paper {
+    background-image:
+      linear-gradient(rgba(24, 24, 27, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(24, 24, 27, 0.035) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+  }
+
   @keyframes home-hero-in {
     from {
       opacity: 0;
@@ -33,6 +56,29 @@
   }
   .animate-home-hero-in {
     animation: home-hero-in 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(22px);
+    transition:
+      opacity 720ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-on-scroll {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     .animate-home-hero-in {

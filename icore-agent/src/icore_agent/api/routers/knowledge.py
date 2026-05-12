@@ -12,11 +12,12 @@ import re
 import structlog
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ...memory.chroma_store import add_documents, list_documents, get_collection
 from ...config import settings
+from .account import get_current_user
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -92,12 +93,24 @@ class DocumentInfo(BaseModel):
     chunks: int
 
 
+def _resolve_tenant_code(user: dict, tenant_code: str, scope: str) -> str:
+    if tenant_code.strip():
+        return tenant_code.strip()
+    if scope == "private":
+        return user["id"]
+    if scope == "organization":
+        return f"org:{user.get('organization_id', '')}"
+    return ""
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/upload", response_model=UploadResponse, summary="Upload a document to the knowledge base")
 async def upload_document(
     file: Annotated[UploadFile, File(description="PDF, DOCX, TXT, or MD file")],
     tenant_code: Annotated[str, Form(description="Tenant identifier (leave empty for shared KB)")] = "",
+    scope: Annotated[str, Form(description="private | organization | shared")] = "organization",
+    user: dict = Depends(get_current_user),
 ) -> UploadResponse:
     ext = "." + file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
     if ext not in SUPPORTED_EXTENSIONS:
@@ -125,30 +138,43 @@ async def upload_document(
         for i in range(len(chunks))
     ]
 
+    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
+
     try:
-        stored = add_documents(chunks=chunks, metadatas=metadatas, tenant_code=tenant_code)
+        stored = add_documents(chunks=chunks, metadatas=metadatas, tenant_code=resolved_tenant)
     except Exception as exc:
         log.error("knowledge_store_error", filename=file.filename, error=str(exc))
         raise HTTPException(status_code=500, detail=f"Failed to store document: {exc}") from exc
 
-    log.info("knowledge_uploaded", filename=file.filename, tenant=tenant_code or "shared", chunks=stored)
-    return UploadResponse(filename=file.filename or "", tenant_code=tenant_code, chunks_stored=stored)
+    log.info("knowledge_uploaded", filename=file.filename, tenant=resolved_tenant or "shared", chunks=stored)
+    return UploadResponse(filename=file.filename or "", tenant_code=resolved_tenant, chunks_stored=stored)
 
 
 @router.get("/documents", response_model=list[DocumentInfo], summary="List uploaded documents")
-async def list_knowledge_documents(tenant_code: str = "") -> list[DocumentInfo]:
-    docs = list_documents(tenant_code=tenant_code)
+async def list_knowledge_documents(
+    tenant_code: str = "",
+    scope: Annotated[str, Query(description="private | organization | shared")] = "organization",
+    user: dict = Depends(get_current_user),
+) -> list[DocumentInfo]:
+    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
+    docs = list_documents(tenant_code=resolved_tenant)
     return [DocumentInfo(**d) for d in docs]
 
 
 @router.delete("/documents/{filename}", summary="Remove a document from the knowledge base")
-async def delete_document(filename: str, tenant_code: str = "") -> dict:
-    col = get_collection(tenant_code=tenant_code)
+async def delete_document(
+    filename: str,
+    tenant_code: str = "",
+    scope: Annotated[str, Query(description="private | organization | shared")] = "organization",
+    user: dict = Depends(get_current_user),
+) -> dict:
+    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
+    col = get_collection(tenant_code=resolved_tenant)
     # Get all chunk IDs for this filename
     results = col.get(where={"filename": filename}, include=["metadatas"])
     ids = results.get("ids") or []
     if not ids:
         raise HTTPException(status_code=404, detail=f"Document '{filename}' not found")
     col.delete(ids=ids)
-    log.info("knowledge_deleted", filename=filename, tenant=tenant_code or "shared", chunks=len(ids))
+    log.info("knowledge_deleted", filename=filename, tenant=resolved_tenant or "shared", chunks=len(ids))
     return {"deleted": True, "filename": filename, "chunks_removed": len(ids)}

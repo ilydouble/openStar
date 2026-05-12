@@ -232,14 +232,16 @@ def create_orchestrator(
     # Pure-chat turns (enable_tools=False) go to the lighter fast model to
     # avoid paying glm-4.7's first-token latency for greetings and small talk.
     # Tool-enabled turns keep the flagship model for better reasoning / routing.
-    selected_model = settings.model_id if enable_tools else (
-        settings.model_id_fast or settings.model_id
+    primary_model = settings.effective_model_id()
+    selected_model = primary_model if enable_tools else (
+        settings.model_id_fast or primary_model
     )
     model = LiteLLMModel(
         model_id=selected_model,
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": settings.agent_temperature,
+            "metadata": {"session_id": session_id},
             **settings.litellm_kwargs(),
         },
     )

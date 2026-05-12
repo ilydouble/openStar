@@ -141,7 +141,7 @@ def _create_knowledge_agent(tenant_code: str = "") -> Agent:
         return "\n\n".join(lines)
 
     model = LiteLLMModel(
-        model_id=settings.model_id,
+        model_id=settings.effective_model_id(),
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": 0.1,

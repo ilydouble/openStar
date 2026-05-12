@@ -117,7 +117,7 @@ def _make_budgeted_tools() -> list:
 
 def _create_research_agent() -> Agent:
     model = LiteLLMModel(
-        model_id=settings.model_id,
+        model_id=settings.effective_model_id(),
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": 0.2,

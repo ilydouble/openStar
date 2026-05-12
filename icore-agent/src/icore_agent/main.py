@@ -8,13 +8,16 @@ load_dotenv()
 import litellm
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .control_plane import control_plane_store, current_runtime_user
 from .api.routers import agent as agent_router
+from .api.routers import account as account_router
 from .api.routers import health as health_router
 from .api.routers import knowledge as knowledge_router
+from .api.routers.account import get_current_user
 from .api.middleware.auth import AuthMiddleware
 
 log = structlog.get_logger()
@@ -37,6 +40,18 @@ def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
         total_tokens=getattr(usage, "total_tokens", 0),
         elapsed_s=round(elapsed, 2),
     )
+    user = current_runtime_user()
+    if user:
+        total_tokens = int(getattr(usage, "total_tokens", 0) or 0)
+        control_plane_store.record_usage_event(
+            user_id=user["id"],
+            session_id=str(kwargs.get("metadata", {}).get("session_id", "")),
+            model=kwargs.get("model", "unknown"),
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            total_tokens=total_tokens,
+            estimated_cost=round(total_tokens / 1_000_000 * 2.0, 6),
+        )
 
 
 litellm.success_callback = [_log_token_usage]
@@ -69,8 +84,14 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])
+    app.include_router(account_router.router, prefix="/api/v1/account", tags=["account"])
     app.include_router(agent_router.router, prefix="/api/v1/agent", tags=["agent"])
-    app.include_router(knowledge_router.router, prefix="/api/v1/knowledge", tags=["knowledge"])
+    app.include_router(
+        knowledge_router.router,
+        prefix="/api/v1/knowledge",
+        tags=["knowledge"],
+        dependencies=[Depends(get_current_user)],
+    )
 
     # ── Lifecycle ─────────────────────────────────────────
     @app.on_event("startup")

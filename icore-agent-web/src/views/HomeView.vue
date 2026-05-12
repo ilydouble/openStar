@@ -2,7 +2,7 @@
   <div
     class="flex h-screen min-h-0 bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
-    <HomeSidebar @new="onSidebarNew" />
+    <HomeSidebar :recent-sessions="recentSessions" :recent-projects="recentProjects" @new="onSidebarNew" />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -18,19 +18,39 @@
       </div>
 
       <header
-        class="relative z-10 flex shrink-0 items-center justify-end gap-2 px-4 py-4 sm:px-8"
+        class="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-8"
       >
+        <div class="hidden items-center gap-2 md:flex">
+          <div
+            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+          >
+            <span class="font-semibold text-zinc-900 dark:text-white">
+              {{ t('home.quota.planPrefix') }}
+            </span>
+            {{ planSummary?.label || '...' }}
+          </div>
+          <div
+            v-for="item in quotaItems"
+            :key="item.label"
+            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+          >
+            <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
+            {{ item.value }}
+          </div>
+        </div>
         <button
           type="button"
+          @click="goAccount"
           class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
         >
-          {{ t('home.signIn') }}
+          {{ t('home.accountCenter') }}
         </button>
         <button
           type="button"
+          @click="handleSignOut"
           class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:shadow-black/30"
         >
-          {{ t('home.signUp') }}
+          {{ t('home.signOut') }}
         </button>
       </header>
 
@@ -243,6 +263,88 @@
                   </span>
                 </button>
               </div>
+
+              <div
+                v-if="activeScenarioTemplate"
+                class="mt-8 w-full rounded-[1.75rem] border border-zinc-200/80 bg-white/80 p-5 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                      {{ t('home.scenario.title') }}
+                    </p>
+                    <h2 class="mt-3 text-xl font-semibold text-zinc-950 dark:text-white">
+                      {{ activeScenarioTemplate.title }}
+                    </h2>
+                    <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                      {{ activeScenarioTemplate.description }}
+                    </p>
+                  </div>
+                  <div class="rounded-2xl bg-zinc-100 px-4 py-3 text-xs text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-300">
+                    {{ activeScenarioTemplate.label }}
+                  </div>
+                </div>
+
+                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                  <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                      {{ t('home.scenario.accepted') }}
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <span
+                        v-for="input in activeScenarioTemplate.accepted"
+                        :key="input"
+                        class="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                      >
+                        {{ input }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                      {{ t('home.scenario.outputs') }}
+                    </p>
+                    <ul class="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                      <li v-for="output in activeScenarioTemplate.outputs" :key="output">• {{ output }}</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="mt-5">
+                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                    {{ t('home.scenario.starters') }}
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                      v-for="starter in activeScenarioTemplate.starters"
+                      :key="starter"
+                      type="button"
+                      class="rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:text-white"
+                      @click="applyStarter(starter)"
+                    >
+                      {{ starter }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-6 w-full md:hidden">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                  {{ t('home.recent.title') }}
+                </p>
+                <div v-if="recentSessions.length" class="mt-3 space-y-2">
+                  <button
+                    v-for="item in recentSessions"
+                    :key="item.sessionId"
+                    type="button"
+                    class="w-full rounded-2xl border border-zinc-200/80 bg-white/80 px-4 py-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+                    @click="openRecentSession(item.sessionId)"
+                  >
+                    <p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ item.title }}</p>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ item.subtitle }}</p>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -308,11 +410,13 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   chatStream,
+  getSessionState,
   newSessionId,
   attachFile,
   attachImage,
@@ -322,10 +426,13 @@ import {
   removeAttachment,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
+import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import SearchBar from '../components/SearchBar.vue'
 
 const { t, locale, tm } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -370,7 +477,7 @@ const UI_BY_ID = {
 const messages = ref([])
 const loading = ref(false)
 const streamingMsg = ref(null)
-const sessionId = ref(newSessionId())
+const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
 const scrollEl = ref(null)
 const searchRefHome = ref(null)
 const searchRefChat = ref(null)
@@ -380,6 +487,20 @@ const dark = ref(typeof document !== 'undefined' && document.documentElement.cla
 const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
+const planSummary = ref(null)
+const recentSessions = ref([])
+const projectRecords = ref([])
+const recentProjects = computed(() => {
+  return projectRecords.value.map((project) => ({
+    id: project.id,
+    title: project.title,
+    sessions: project.sessions_count,
+    assets: project.assets_count,
+    updatedAt: project.updated_at,
+  }))
+})
+
+const RECENT_SESSIONS_KEY = 'icore_recent_sessions'
 
 async function refreshAttachments() {
   try {
@@ -408,6 +529,8 @@ async function handleFileSelected(file) {
       await attachFile(file, sessionId.value)
     }
     await refreshAttachments()
+    saveRecentSession()
+    await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || '上传失败'
   } finally {
@@ -419,6 +542,8 @@ async function deleteAttachment(filename) {
   try {
     await removeAttachment(sessionId.value, filename)
     await refreshAttachments()
+    saveRecentSession()
+    await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || '删除失败'
   }
@@ -458,9 +583,22 @@ const shortcutItems = computed(() => {
   })
 })
 
+const scenarioTemplates = computed(() => {
+  const raw = tm('home.templates')
+  if (!Array.isArray(raw)) return []
+  const labelById = Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label]))
+  return raw.map((row) => ({
+    ...row,
+    label: labelById[row.id] || row.title,
+  }))
+})
+
 const activeShortcutId = ref('')
 const activeShortcut = computed(
   () => shortcutItems.value.find((it) => it.id === activeShortcutId.value) || null,
+)
+const activeScenarioTemplate = computed(
+  () => scenarioTemplates.value.find((it) => it.id === activeShortcutId.value) || null,
 )
 const activeShortcutPill = computed(() => {
   const it = activeShortcut.value
@@ -472,6 +610,16 @@ const activeShortcutPill = computed(() => {
   }
 })
 
+const quotaItems = computed(() => {
+  const usage = planSummary.value?.usage || {}
+  const limits = planSummary.value?.limits || {}
+  return [
+    { label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` },
+    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
+    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
+  ]
+})
+
 function syncTheme() {
   dark.value = isDarkFn()
 }
@@ -479,11 +627,33 @@ function syncTheme() {
 onMounted(() => {
   syncTheme()
   window.addEventListener('icore-theme-change', syncTheme)
+  hydrateRecentSessions()
+  loadPlanSummary()
+  loadProjects()
+  hydrateCurrentSession()
 })
 
 onUnmounted(() => {
   window.removeEventListener('icore-theme-change', syncTheme)
 })
+
+watch(
+  () => route.params.sessionId,
+  async (nextSessionId) => {
+    const resolved = typeof nextSessionId === 'string' ? nextSessionId : newSessionId()
+    if (resolved === sessionId.value) return
+    messages.value = []
+    sessionId.value = resolved
+    loading.value = false
+    streamingMsg.value = null
+    attachmentList.value = []
+    uploadError.value = ''
+    activeShortcutId.value = ''
+    await hydrateCurrentSession()
+    await nextTick()
+    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  },
+)
 
 async function scrollBottom() {
   await nextTick()
@@ -500,9 +670,148 @@ const SHORTCUT_HINT = {
   data: 'data',
 }
 
+function hydrateRecentSessions() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_SESSIONS_KEY) || '[]')
+    recentSessions.value = Array.isArray(raw) ? raw : []
+  } catch {
+    recentSessions.value = []
+  }
+}
+
+async function loadProjects() {
+  try {
+    const payload = await fetchProjects()
+    projectRecords.value = payload.projects || []
+    if (Array.isArray(payload.recent_sessions) && payload.recent_sessions.length) {
+      recentSessions.value = payload.recent_sessions.map((item) => ({
+        sessionId: item.session_id,
+        title: item.title,
+        subtitle: item.subtitle,
+        scenarioId: item.scenario_id || '',
+        projectId: item.project_id,
+        projectTitle: item.project_title,
+        attachmentCount: item.attachment_count || 0,
+        updatedAt: item.updated_at,
+      }))
+      localStorage.setItem(RECENT_SESSIONS_KEY, JSON.stringify(recentSessions.value))
+    }
+  } catch {
+    projectRecords.value = []
+  }
+}
+
+function saveRecentSession(meta = {}) {
+  const template = activeScenarioTemplate.value
+  const title = meta.title || template?.title || t('home.heroTitle')
+  const subtitle = meta.subtitle || template?.description || t('home.subtitle')
+  const current = recentSessions.value.filter((item) => item.sessionId !== sessionId.value)
+  recentSessions.value = [
+    {
+      sessionId: sessionId.value,
+      title,
+      subtitle,
+      scenarioId: template?.id || meta.scenarioId || '',
+      projectId: meta.projectId || template?.id || 'general',
+      projectTitle: meta.projectTitle || template?.title || t('home.heroTitle'),
+      attachmentCount: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
+      updatedAt: Date.now(),
+    },
+    ...current,
+  ].slice(0, 8)
+  localStorage.setItem(RECENT_SESSIONS_KEY, JSON.stringify(recentSessions.value))
+}
+
+async function syncCurrentProject(meta = {}) {
+  const template = activeScenarioTemplate.value
+  const projectId = meta.projectId || template?.id || 'general'
+  const projectTitle = meta.projectTitle || template?.title || t('home.heroTitle')
+  const sessionTitle = meta.sessionTitle || meta.title || template?.title || t('home.heroTitle')
+  const sessionSubtitle = meta.sessionSubtitle || meta.subtitle || template?.description || t('home.subtitle')
+  try {
+    await syncProject({
+      project_id: projectId,
+      project_title: projectTitle,
+      scenario_id: template?.id || meta.scenarioId || '',
+      session_id: sessionId.value,
+      session_title: sessionTitle,
+      session_subtitle: sessionSubtitle,
+      attachment_count: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
+    })
+    await loadProjects()
+  } catch {
+    // Keep local continuity even if remote sync fails.
+  }
+}
+
+async function loadPlanSummary() {
+  try {
+    planSummary.value = await fetchPlan()
+  } catch {
+    planSummary.value = null
+  }
+}
+
+async function hydrateCurrentSession() {
+  const hasExplicitSession = typeof route.params.sessionId === 'string'
+  if (!hasExplicitSession) {
+    await refreshAttachments()
+    return
+  }
+  try {
+    const state = await getSessionState(sessionId.value)
+    messages.value = (state.messages || []).map((msg, index) => ({
+      id: `${sessionId.value}-${index}-${msg.role}`,
+      role: msg.role,
+      content: msg.content || '',
+      steps: [],
+      stepsCollapsed: true,
+      streaming: false,
+    }))
+    attachmentList.value = state.attachments || []
+    if (!activeShortcutId.value) {
+      const recent = recentSessions.value.find((item) => item.sessionId === sessionId.value)
+      const matched = scenarioTemplates.value.find((item) => item.title === recent?.title)
+      activeShortcutId.value = matched?.id || ''
+    }
+    saveRecentSession({
+      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
+      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
+      attachmentCount: (state.attachments || []).length,
+    })
+    await syncCurrentProject({
+      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
+      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
+      attachmentCount: (state.attachments || []).length,
+    })
+  } catch {
+    await refreshAttachments()
+  }
+}
+
+function composeScenarioPrompt(message) {
+  const template = activeScenarioTemplate.value
+  if (!template) return message
+  const outputSections = (template.outputs || []).map((item) => `- ${item}`).join('\n')
+  const markdownSections = (template.sections || [])
+    .map((item) => `## ${item}\n- Keep this section concise and actionable.`)
+    .join('\n\n')
+  return [
+    message,
+    '',
+    '---',
+    'Please answer in markdown using this exact section order when it fits the task:',
+    markdownSections,
+    '',
+    'Checklist:',
+    outputSections,
+  ].join('\n')
+}
+
 async function sendUserMessage(msg, agentHint = '') {
   if (!msg?.trim() || loading.value) return
   const text = msg.trim()
+  const requestText = composeScenarioPrompt(text)
 
   messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
   loading.value = true
@@ -520,7 +829,7 @@ async function sendUserMessage(msg, agentHint = '') {
   messages.value.push(reply)
 
   try {
-    for await (const evt of chatStream(text, sessionId.value, agentHint)) {
+    for await (const evt of chatStream(requestText, sessionId.value, agentHint)) {
       if (!evt) continue
       if (evt.kind === 'token') {
         reply.content += evt.text || ''
@@ -534,6 +843,10 @@ async function sendUserMessage(msg, agentHint = '') {
       await scrollBottom()
     }
   } catch (e) {
+    if (String(e.message || '').includes('401')) {
+      signOut()
+      router.push({ name: 'auth' })
+    }
     reply.content =
       locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
   } finally {
@@ -541,6 +854,17 @@ async function sendUserMessage(msg, agentHint = '') {
     reply.stepsCollapsed = true
     streamingMsg.value = null
     loading.value = false
+    await loadPlanSummary()
+    saveRecentSession({
+      title: activeScenarioTemplate.value?.title || text.slice(0, 36),
+      subtitle: text.slice(0, 80),
+    })
+    await syncCurrentProject({
+      title: activeScenarioTemplate.value?.title || text.slice(0, 36),
+      subtitle: text.slice(0, 80),
+      sessionTitle: activeScenarioTemplate.value?.title || text.slice(0, 36),
+      sessionSubtitle: text.slice(0, 80),
+    })
     await scrollBottom()
   }
 }
@@ -561,17 +885,45 @@ function clearShortcut() {
   activeShortcutId.value = ''
 }
 
+function applyStarter(starter) {
+  const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+  sendUserMessage(starter, hint)
+}
+
+function openRecentSession(targetSessionId) {
+  router.push({ name: 'workspace-session', params: { sessionId: targetSessionId } })
+}
+
 function onSidebarNew() {
   messages.value = []
-  sessionId.value = newSessionId()
+  const nextSessionId = newSessionId()
+  sessionId.value = nextSessionId
   loading.value = false
   streamingMsg.value = null
   attachmentList.value = []
   uploadError.value = ''
   activeShortcutId.value = ''
+  router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  saveRecentSession({
+    title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
+    subtitle: t('home.subtitle'),
+  })
+  syncCurrentProject({
+    title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
+    subtitle: t('home.subtitle'),
+  })
   nextTick(() => {
     ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
+}
+
+function goAccount() {
+  router.push({ name: 'account' })
+}
+
+function handleSignOut() {
+  signOut()
+  router.push({ name: 'auth' })
 }
 </script>

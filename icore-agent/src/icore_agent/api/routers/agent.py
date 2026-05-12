@@ -16,7 +16,7 @@ from pathlib import Path
 import structlog
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -25,16 +25,24 @@ from typing import Annotated
 from fastapi import File, Form, UploadFile
 
 from ...config import settings
-from ...engine.orchestrator import VALID_AGENT_HINTS, create_orchestrator
+from ...control_plane import clear_runtime_user, control_plane_store, set_runtime_user
+from ...api.routers.account import get_current_user
 from ...engine.callback_ctx import set_parent_callback, reset_parent_callback
 from ...engine.sequential import SequentialAgent
 from ...memory.conversation import memory
 from ...memory.attachment_store import attachments
-from ...tools.image_tools import _SUPPORTED_IMAGE_EXTS
 from ...api.routers.knowledge import _parse_file, SUPPORTED_EXTENSIONS
 
 log = structlog.get_logger()
 router = APIRouter()
+VALID_AGENT_HINTS = {"research", "code", "knowledge", "image", "data", "chat"}
+_SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+
+
+def create_orchestrator(*args, **kwargs):
+    from ...engine.orchestrator import create_orchestrator as _create_orchestrator
+
+    return _create_orchestrator(*args, **kwargs)
 
 # ── Intent classifier ─────────────────────────────────────────────────────
 # Purely rule-based: zero latency, zero cost.
@@ -132,6 +140,13 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class SessionStateResponse(BaseModel):
+    session_id: str
+    summary: str | None = None
+    messages: list[dict]
+    attachments: list[dict]
+
+
 class SequentialRequest(BaseModel):
     task: str = Field(..., min_length=1, max_length=8_000)
     use_docker: bool = False
@@ -166,13 +181,17 @@ async def _load_context(
     Returns:
         (summary, strands_history, inline_text, has_rag, image_refs, data_refs)
     """
-    (summary, history), inline_text, has_rag, image_refs, data_refs = await asyncio.gather(
-        memory.get_context(session_id),
-        attachments.get_inline_text(session_id),
-        attachments.has_rag_docs(session_id),
-        attachments.get_image_refs(session_id),
-        attachments.get_data_refs(session_id),
-    )
+    try:
+        (summary, history), inline_text, has_rag, image_refs, data_refs = await asyncio.gather(
+            memory.get_context(session_id),
+            attachments.get_inline_text(session_id),
+            attachments.has_rag_docs(session_id),
+            attachments.get_image_refs(session_id),
+            attachments.get_data_refs(session_id),
+        )
+    except Exception as exc:
+        log.warning("load_context_fallback", session_id=session_id, error=str(exc))
+        return (None, [], None, False, [], [])
     return (
         summary or None,
         _to_strands_messages(history),
@@ -213,7 +232,7 @@ def _sse(event: dict) -> str:
 
 
 async def _stream_agent(
-    message: str, session_id: str, agent_hint: str = ""
+    message: str, session_id: str, agent_hint: str = "", runtime_user: dict | None = None
 ) -> AsyncGenerator[str, None]:
     """Token 级 SSE 流 + 工具步骤状态推送 + 心跳防超时。
 
@@ -287,7 +306,8 @@ async def _stream_agent(
             asyncio.run_coroutine_threadsafe(q.put(("token", token)), loop)
 
     def run_agent():
-        token = set_parent_callback(on_stream_event)
+        callback_token = set_parent_callback(on_stream_event)
+        runtime_token = set_runtime_user(runtime_user)
         try:
             orchestrator = create_orchestrator(
                 callback_handler=on_stream_event,
@@ -304,7 +324,8 @@ async def _stream_agent(
         except Exception as exc:
             asyncio.run_coroutine_threadsafe(q.put(("error", str(exc))), loop)
         finally:
-            reset_parent_callback(token)
+            clear_runtime_user(runtime_token)
+            reset_parent_callback(callback_token)
             asyncio.run_coroutine_threadsafe(q.put(("done", "")), loop)
 
     threading.Thread(target=run_agent, daemon=True).start()
@@ -363,7 +384,10 @@ async def _stream_agent(
 
 
 @router.post("/chat", summary="Chat with the agent (SSE streaming)")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
+    allowed, reason = control_plane_store.check_quota(user["id"], "messages")
+    if not allowed:
+        raise HTTPException(status_code=402, detail=reason)
     intent, enable_tools, effective_hint = _resolve_routing(req.message, req.agent_hint)
     log.info(
         "chat_request",
@@ -375,8 +399,9 @@ async def chat(req: ChatRequest):
     )
 
     if req.stream:
+        control_plane_store.consume_quota(user["id"], "messages")
         return StreamingResponse(
-            _stream_agent(req.message, req.session_id, req.agent_hint),
+            _stream_agent(req.message, req.session_id, req.agent_hint, runtime_user=user),
             media_type="text/event-stream",
             headers={
                 "X-Session-Id": req.session_id,
@@ -395,19 +420,28 @@ async def chat(req: ChatRequest):
         await _load_context(req.session_id)
     if has_rag or image_refs or data_refs:
         enable_tools = True
-    orchestrator = create_orchestrator(
-        summary=summary,
-        attachments_text=inline_text,
-        image_attachments=image_refs,
-        data_attachments=data_refs,
-        enable_tools=enable_tools,
-        agent_hint=effective_hint,
-        session_id=req.session_id,
-    )
-    orchestrator.messages = strands_history
     loop = asyncio.get_event_loop()
     try:
-        result = await loop.run_in_executor(None, orchestrator, req.message)
+        control_plane_store.consume_quota(user["id"], "messages")
+
+        def _invoke() -> str:
+            runtime_token = set_runtime_user(user)
+            try:
+                orchestrator = create_orchestrator(
+                    summary=summary,
+                    attachments_text=inline_text,
+                    image_attachments=image_refs,
+                    data_attachments=data_refs,
+                    enable_tools=enable_tools,
+                    agent_hint=effective_hint,
+                    session_id=req.session_id,
+                )
+                orchestrator.messages = strands_history
+                return str(orchestrator(req.message))
+            finally:
+                clear_runtime_user(runtime_token)
+
+        result = await loop.run_in_executor(None, _invoke)
         reply = str(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -421,7 +455,10 @@ async def chat(req: ChatRequest):
 
 @router.post("/sequential", response_model=SequentialResponse,
              summary="Run a sequential bash task (mini-SWE-agent style)")
-async def run_sequential(req: SequentialRequest) -> SequentialResponse:
+async def run_sequential(
+    req: SequentialRequest, user: dict = Depends(get_current_user)
+) -> SequentialResponse:
+    _ = user
     log.info("sequential_request", task_preview=req.task[:100])
 
     if req.use_docker:
@@ -491,7 +528,11 @@ _SUPPORTED_DATA_EXTS = {".csv", ".xlsx", ".xls"}
 async def attach_document(
     file: Annotated[UploadFile, File(description="PDF, DOCX, TXT, or MD file")],
     session_id: Annotated[str, Form(description="Session ID to attach the document to")],
+    user: dict = Depends(get_current_user),
 ) -> AttachResponse:
+    allowed, reason = control_plane_store.check_quota(user["id"], "attachments")
+    if not allowed:
+        raise HTTPException(status_code=402, detail=reason)
     ext = "." + file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(status_code=415,
@@ -508,6 +549,7 @@ async def attach_document(
         raise HTTPException(status_code=422, detail="File appears to be empty or unreadable")
 
     att = await attachments.add(session_id, file.filename or "upload", text)
+    control_plane_store.consume_quota(user["id"], "attachments")
     log.info("attachment_added", session_id=session_id,
              filename=att["filename"], mode=att["mode"], chars=att["char_count"])
     return AttachResponse(filename=att["filename"], char_count=att["char_count"], mode=att["mode"])
@@ -515,14 +557,14 @@ async def attach_document(
 
 @router.get("/attachments/{session_id}", response_model=list[AttachmentInfo],
             summary="List documents attached to a session")
-async def list_attachments(session_id: str) -> list[AttachmentInfo]:
+async def list_attachments(session_id: str, user: dict = Depends(get_current_user)) -> list[AttachmentInfo]:
     info = await attachments.list_info(session_id)
     return [AttachmentInfo(**a) for a in info]
 
 
 @router.delete("/attachments/{session_id}/{filename}",
                summary="Remove a document from session context")
-async def remove_attachment(session_id: str, filename: str) -> dict:
+async def remove_attachment(session_id: str, filename: str, user: dict = Depends(get_current_user)) -> dict:
     removed = await attachments.remove(session_id, filename)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
@@ -536,7 +578,11 @@ async def remove_attachment(session_id: str, filename: str) -> dict:
 async def attach_image(
     file: Annotated[UploadFile, File(description="JPG, PNG, WEBP, BMP or GIF image")],
     session_id: Annotated[str, Form(description="Session ID to attach the image to")],
+    user: dict = Depends(get_current_user),
 ) -> ImageAttachResponse:
+    allowed, reason = control_plane_store.check_quota(user["id"], "images")
+    if not allowed:
+        raise HTTPException(status_code=402, detail=reason)
     filename = file.filename or "image"
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in _SUPPORTED_IMAGE_EXTS:
@@ -552,6 +598,7 @@ async def attach_image(
             detail=f"Image exceeds {settings.image_upload_max_mb} MB limit",
         )
     record = await attachments.add_image(session_id, filename, data)
+    control_plane_store.consume_quota(user["id"], "images")
     return ImageAttachResponse(
         filename=record["filename"], ref=record["ref"], size=record["size"]
     )
@@ -559,7 +606,7 @@ async def attach_image(
 
 @router.get("/images/{session_id}/{filename}",
             summary="Serve a session-scoped image")
-async def get_image(session_id: str, filename: str):
+async def get_image(session_id: str, filename: str, user: dict = Depends(get_current_user)):
     # Prevent path traversal — filename must not contain separators.
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -576,7 +623,11 @@ async def get_image(session_id: str, filename: str):
 async def attach_data(
     file: Annotated[UploadFile, File(description="CSV, XLSX or XLS file")],
     session_id: Annotated[str, Form(description="Session ID to attach the data file to")],
+    user: dict = Depends(get_current_user),
 ) -> DataAttachResponse:
+    allowed, reason = control_plane_store.check_quota(user["id"], "attachments")
+    if not allowed:
+        raise HTTPException(status_code=402, detail=reason)
     filename = file.filename or "data"
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in _SUPPORTED_DATA_EXTS:
@@ -592,6 +643,7 @@ async def attach_data(
             detail=f"Data file exceeds {settings.data_upload_max_mb} MB limit",
         )
     record = await attachments.add_data(session_id, filename, data)
+    control_plane_store.consume_quota(user["id"], "attachments")
     return DataAttachResponse(
         filename=record["filename"],
         ref=record["ref"],
@@ -607,6 +659,22 @@ async def attach_data(
 # ── Session management ────────────────────────────────────────────────────
 
 @router.delete("/session/{session_id}", summary="Clear conversation memory for a session")
-async def clear_session(session_id: str) -> dict:
+async def clear_session(session_id: str, user: dict = Depends(get_current_user)) -> dict:
     await asyncio.gather(memory.clear(session_id), attachments.clear(session_id))
     return {"cleared": True, "session_id": session_id}
+
+
+@router.get("/session/{session_id}", response_model=SessionStateResponse,
+            summary="Read recent messages and attachments for a session")
+async def get_session_state(
+    session_id: str, user: dict = Depends(get_current_user)
+) -> SessionStateResponse:
+    _ = user
+    summary, messages = await memory.get_context(session_id)
+    att_list = await attachments.list_info(session_id)
+    return SessionStateResponse(
+        session_id=session_id,
+        summary=summary or None,
+        messages=messages,
+        attachments=att_list,
+    )

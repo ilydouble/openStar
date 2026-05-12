@@ -1,3 +1,5 @@
+import { buildAuthHeaders } from '../auth/session.js'
+
 const BASE = '/api/v1/agent'
 
 /**
@@ -16,7 +18,7 @@ const BASE = '/api/v1/agent'
 export async function* chatStream(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -96,7 +98,7 @@ export async function* chatStream(message, sessionId, agentHint = '') {
 export async function chat(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -114,7 +116,7 @@ export async function chat(message, sessionId, agentHint = '') {
 export async function runSequential(task, useDocker = false) {
   const resp = await fetch(`${BASE}/sequential`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
   })
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
@@ -125,7 +127,18 @@ export async function runSequential(task, useDocker = false) {
  * 清除会话记忆
  */
 export async function clearSession(sessionId) {
-  const resp = await fetch(`${BASE}/session/${sessionId}`, { method: 'DELETE' })
+  const resp = await fetch(`${BASE}/session/${sessionId}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders(),
+  })
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+export async function getSessionState(sessionId) {
+  const resp = await fetch(`${BASE}/session/${sessionId}`, {
+    headers: buildAuthHeaders(),
+  })
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -147,7 +160,11 @@ export async function attachFile(file, sessionId) {
   const form = new FormData()
   form.append('file', file)
   form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach`, { method: 'POST', body: form })
+  const resp = await fetch(`${BASE}/attach`, {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: form,
+  })
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
     throw new Error(detail.detail || `HTTP ${resp.status}`)
@@ -165,7 +182,11 @@ export async function attachImage(file, sessionId) {
   const form = new FormData()
   form.append('file', file)
   form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/image`, { method: 'POST', body: form })
+  const resp = await fetch(`${BASE}/attach/image`, {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: form,
+  })
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
     throw new Error(detail.detail || `HTTP ${resp.status}`)
@@ -185,7 +206,11 @@ export async function attachData(file, sessionId) {
   const form = new FormData()
   form.append('file', file)
   form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/data`, { method: 'POST', body: form })
+  const resp = await fetch(`${BASE}/attach/data`, {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: form,
+  })
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
     throw new Error(detail.detail || `HTTP ${resp.status}`)
@@ -206,7 +231,9 @@ export function imageUrl(ref) {
  * @returns {Promise<Array<{filename: string, char_count: number, mode: string, uploaded_at: number}>>}
  */
 export async function listAttachments(sessionId) {
-  const resp = await fetch(`${BASE}/attachments/${sessionId}`)
+  const resp = await fetch(`${BASE}/attachments/${sessionId}`, {
+    headers: buildAuthHeaders(),
+  })
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -219,7 +246,7 @@ export async function listAttachments(sessionId) {
 export async function removeAttachment(sessionId, filename) {
   const resp = await fetch(
     `${BASE}/attachments/${sessionId}/${encodeURIComponent(filename)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', headers: buildAuthHeaders() },
   )
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()

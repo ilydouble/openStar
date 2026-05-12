@@ -43,7 +43,17 @@ class Settings(BaseSettings):
 
     @property
     def effective_sequential_model(self) -> str:
-        return self.sequential_model or self.model_id
+        return self.sequential_model or self.effective_model_id()
+
+    def effective_model_id(self) -> str:
+        try:
+            from ..control_plane.context import current_runtime_user
+
+            user = current_runtime_user()
+        except Exception:
+            user = None
+        byok = (user or {}).get("byok") or {}
+        return byok.get("model") or self.model_id
 
     # 关闭 Z.AI GLM 系列的思考模式（thinking=disabled）。
     # 关闭后：
@@ -62,10 +72,19 @@ class Settings(BaseSettings):
     def litellm_kwargs(self) -> dict:
         """返回所有需要透传给 LiteLLMModel 的额外参数。"""
         kwargs: dict = {}
-        if self.model_api_base:
-            kwargs["api_base"] = self.model_api_base
-        if self.model_api_key:
-            kwargs["api_key"] = self.model_api_key
+        try:
+            from ..control_plane.context import current_runtime_user
+
+            user = current_runtime_user()
+        except Exception:
+            user = None
+        byok = (user or {}).get("byok") or {}
+        api_base = byok.get("api_base") or self.model_api_base
+        api_key = byok.get("api_key") or self.model_api_key
+        if api_base:
+            kwargs["api_base"] = api_base
+        if api_key:
+            kwargs["api_key"] = api_key
         if self.disable_thinking:
             # Z.AI Chat Completions 扩展字段（GLM-4.5+ / GLM-4.6V / GLM-4.7）。
             # 必须走 extra_body 注入请求 JSON —— 作为顶层 kwarg 会被 LiteLLM
@@ -97,6 +116,7 @@ class Settings(BaseSettings):
     icore_base_url: str = ""
     icore_secret: str = ""
     auth_enabled: bool = False          # set True in production
+    control_plane_store_path: str = "/tmp/icore-control-plane.json"
 
     # ── API Keys（由 load_dotenv 写入 os.environ，LiteLLM 自动读取）──
     zai_api_key: str = ""       # zai/glm-* 模型使用，对应 ZAI_API_KEY

@@ -16,22 +16,31 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ...config import settings
+from ...control_plane import control_plane_store
 
 log = structlog.get_logger()
 
 # Paths that skip auth entirely
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}
+_PUBLIC_PREFIXES = ("/api/v1/account/register-trial", "/api/v1/account/leads")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         # Skip public paths
-        if request.url.path in _PUBLIC_PATHS:
+        if request.url.path in _PUBLIC_PATHS or any(
+            request.url.path.startswith(prefix) for prefix in _PUBLIC_PREFIXES
+        ):
             return await call_next(request)
 
         token = self._extract_token(request)
         if not token:
             return JSONResponse({"code": 401, "message": "Missing Bearer token"}, status_code=401)
+
+        local_user = control_plane_store.get_user_by_token(token)
+        if local_user is not None:
+            request.state.user = local_user
+            return await call_next(request)
 
         user_info = await self._validate_token(token)
         if user_info is None:

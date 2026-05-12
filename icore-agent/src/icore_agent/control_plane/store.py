@@ -1,0 +1,604 @@
+"""Small JSON-backed account and usage store for the first commercialization milestone."""
+
+from __future__ import annotations
+
+import json
+import secrets
+import threading
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+
+from ..config import settings
+
+_DEFAULT_USAGE = {
+    "message_count": 0,
+    "token_count": 0,
+    "image_count": 0,
+    "attachment_count": 0,
+}
+
+_PLAN_LIMITS = {
+    "trial": {
+        "message_limit": 40,
+        "token_limit": 120_000,
+        "image_limit": 10,
+        "attachment_limit": 24,
+        "label": "Trial",
+    },
+    "free": {
+        "message_limit": 80,
+        "token_limit": 240_000,
+        "image_limit": 20,
+        "attachment_limit": 40,
+        "label": "Free",
+    },
+    "team": {
+        "message_limit": 800,
+        "token_limit": 2_000_000,
+        "image_limit": 200,
+        "attachment_limit": 400,
+        "label": "Team",
+    },
+    "enterprise": {
+        "message_limit": 10_000,
+        "token_limit": 20_000_000,
+        "image_limit": 2_000,
+        "attachment_limit": 10_000,
+        "label": "Enterprise",
+    },
+    "byok": {
+        "message_limit": 800,
+        "token_limit": 0,
+        "image_limit": 200,
+        "attachment_limit": 400,
+        "label": "BYOK",
+    },
+}
+
+
+class ControlPlaneStore:
+    def __init__(self) -> None:
+        self._path = Path(settings.control_plane_store_path)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def _load(self) -> dict[str, Any]:
+        if not self._path.exists():
+            return {
+                "users": {},
+                "tokens": {},
+                "usage_events": [],
+                "events": [],
+                "projects": {},
+                "organizations": {},
+                "leads": [],
+            }
+        try:
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+            data.setdefault("users", {})
+            data.setdefault("tokens", {})
+            data.setdefault("usage_events", [])
+            data.setdefault("events", [])
+            data.setdefault("projects", {})
+            data.setdefault("organizations", {})
+            data.setdefault("leads", [])
+            return data
+        except Exception:
+            return {
+                "users": {},
+                "tokens": {},
+                "usage_events": [],
+                "events": [],
+                "projects": {},
+                "organizations": {},
+                "leads": [],
+            }
+
+    def _save(self, data: dict[str, Any]) -> None:
+        self._path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _ensure_org_for_user(self, data: dict[str, Any], user: dict[str, Any]) -> None:
+        org_id = user.get("organization_id", "")
+        if org_id and org_id in data.get("organizations", {}):
+            return
+        now = int(time.time())
+        org_id = org_id or f"org_{uuid.uuid4().hex[:12]}"
+        org_name = user.get("organization_name") or f"{user.get('name') or 'Team'} Team"
+        user["organization_id"] = org_id
+        user["organization_name"] = org_name
+        data.setdefault("organizations", {})[org_id] = {
+            "id": org_id,
+            "name": org_name,
+            "owner_user_id": user["id"],
+            "knowledge_scope": "organization",
+            "members": [
+                {
+                    "user_id": user["id"],
+                    "name": user.get("name", ""),
+                    "email": user.get("email", ""),
+                    "role": (user.get("roles") or ["owner"])[0],
+                    "status": "active",
+                    "created_at": user.get("created_at", now),
+                }
+            ],
+            "created_at": user.get("created_at", now),
+            "updated_at": now,
+        }
+
+    def register_trial(self, name: str, email: str) -> tuple[dict[str, Any], str]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            for user in data["users"].values():
+                if user["email"].lower() == email.lower():
+                    self._ensure_org_for_user(data, user)
+                    user["updated_at"] = now
+                    token = self._issue_token(data, user["id"])
+                    self._save(data)
+                    return user, token
+
+            user_id = str(uuid.uuid4())
+            org_id = f"org_{uuid.uuid4().hex[:12]}"
+            user = {
+                "id": user_id,
+                "name": name.strip(),
+                "email": email.strip().lower(),
+                "plan": "trial",
+                "plan_label": _PLAN_LIMITS["trial"]["label"],
+                "organization_id": org_id,
+                "organization_name": f"{name.strip() or 'Trial'} Team",
+                "roles": ["owner"],
+                "byok": {"enabled": False, "api_key": "", "api_base": "", "model": ""},
+                "usage": dict(_DEFAULT_USAGE),
+                "created_at": now,
+                "updated_at": now,
+            }
+            data["users"][user_id] = user
+            data.setdefault("organizations", {})[org_id] = {
+                "id": org_id,
+                "name": user["organization_name"],
+                "owner_user_id": user_id,
+                "knowledge_scope": "organization",
+                "members": [
+                    {
+                        "user_id": user_id,
+                        "name": user["name"],
+                        "email": user["email"],
+                        "role": "owner",
+                        "status": "active",
+                        "created_at": now,
+                    }
+                ],
+                "created_at": now,
+                "updated_at": now,
+            }
+            token = self._issue_token(data, user_id)
+            data["events"].append({"type": "trial_registered", "user_id": user_id, "timestamp": now})
+            self._save(data)
+            return user, token
+
+    def _issue_token(self, data: dict[str, Any], user_id: str) -> str:
+        token = f"icore_{secrets.token_urlsafe(24)}"
+        data["tokens"][token] = {"user_id": user_id, "issued_at": int(time.time())}
+        return token
+
+    def get_user_by_token(self, token: str) -> dict[str, Any] | None:
+        with self._lock:
+            data = self._load()
+            token_record = data["tokens"].get(token)
+            if not token_record:
+                return None
+            user = data["users"].get(token_record["user_id"])
+            if user:
+                self._ensure_org_for_user(data, user)
+                self._save(data)
+            return user
+
+    def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            user["byok"] = {
+                "enabled": bool(api_key),
+                "api_key": api_key.strip(),
+                "api_base": api_base.strip(),
+                "model": model.strip(),
+            }
+            user["updated_at"] = now
+            data["events"].append({"type": "byok_updated", "user_id": user_id, "timestamp": now})
+            self._save(data)
+            return user["byok"]
+
+    def get_plan_summary(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            limits = _PLAN_LIMITS[user["plan"]]
+            usage = user.get("usage") or dict(_DEFAULT_USAGE)
+            return {
+                "plan": user["plan"],
+                "label": limits["label"],
+                "limits": {
+                    "messages": limits["message_limit"],
+                    "tokens": limits["token_limit"],
+                    "images": limits["image_limit"],
+                    "attachments": limits["attachment_limit"],
+                },
+                "usage": {
+                    "messages": usage["message_count"],
+                    "tokens": usage["token_count"],
+                    "images": usage["image_count"],
+                    "attachments": usage["attachment_count"],
+                },
+                "byok": user.get("byok") or {"enabled": False, "api_key": "", "api_base": "", "model": ""},
+            }
+
+    def get_team_profile(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            org_id = user.get("organization_id", "")
+            organization = data.get("organizations", {}).get(org_id) or {
+                "id": org_id,
+                "name": user.get("organization_name", ""),
+                "knowledge_scope": "organization",
+                "members": [],
+            }
+            return {
+                "organization": {
+                    "id": organization["id"],
+                    "name": organization.get("name", ""),
+                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
+                },
+                "members": organization.get("members", []),
+                "current_user_id": user_id,
+            }
+
+    def rename_organization(self, user_id: str, organization_name: str) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            org_id = user["organization_id"]
+            organization = data["organizations"][org_id]
+            organization["name"] = organization_name.strip()
+            organization["updated_at"] = now
+            for member in organization.get("members", []):
+                if member.get("user_id") == user_id:
+                    break
+            user["organization_name"] = organization["name"]
+            user["updated_at"] = now
+            self._save(data)
+            return {
+                "organization": {
+                    "id": organization["id"],
+                    "name": organization["name"],
+                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
+                },
+                "members": organization.get("members", []),
+                "current_user_id": user_id,
+            }
+
+    def add_team_member(self, user_id: str, *, name: str, email: str, role: str) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            org_id = user["organization_id"]
+            organization = data["organizations"][org_id]
+            member = {
+                "user_id": f"member_{uuid.uuid4().hex[:12]}",
+                "name": name.strip(),
+                "email": email.strip().lower(),
+                "role": role.strip() or "viewer",
+                "status": "invited",
+                "created_at": now,
+            }
+            organization.setdefault("members", []).append(member)
+            organization["updated_at"] = now
+            self._save(data)
+            return member
+
+    def update_knowledge_scope(self, user_id: str, scope: str) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            org_id = user["organization_id"]
+            organization = data["organizations"][org_id]
+            organization["knowledge_scope"] = scope
+            organization["updated_at"] = now
+            self._save(data)
+            return {
+                "organization": {
+                    "id": organization["id"],
+                    "name": organization.get("name", ""),
+                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
+                },
+                "members": organization.get("members", []),
+                "current_user_id": user_id,
+            }
+
+    def check_quota(self, user_id: str, kind: str, amount: int = 1) -> tuple[bool, str | None]:
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            plan = user["plan"]
+            usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+            limits = _PLAN_LIMITS[plan]
+            if kind == "messages":
+                limit = limits["message_limit"]
+                used = usage["message_count"]
+            elif kind == "tokens":
+                limit = limits["token_limit"]
+                used = usage["token_count"]
+            elif kind == "images":
+                limit = limits["image_limit"]
+                used = usage["image_count"]
+            else:
+                limit = limits["attachment_limit"]
+                used = usage["attachment_count"]
+
+            if limit and used + amount > limit:
+                return False, f"{kind} quota exceeded for {plan}"
+            return True, None
+
+    def consume_quota(self, user_id: str, kind: str, amount: int = 1) -> None:
+        with self._lock:
+            data = self._load()
+            user = data["users"][user_id]
+            self._ensure_org_for_user(data, user)
+            usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+            if kind == "messages":
+                usage["message_count"] += amount
+            elif kind == "tokens":
+                usage["token_count"] += amount
+            elif kind == "images":
+                usage["image_count"] += amount
+            else:
+                usage["attachment_count"] += amount
+            user["updated_at"] = int(time.time())
+            self._save(data)
+
+    def record_usage_event(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+        estimated_cost: float,
+    ) -> None:
+        with self._lock:
+            data = self._load()
+            data["usage_events"].append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "model": model,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "estimated_cost": estimated_cost,
+                    "timestamp": int(time.time()),
+                }
+            )
+            user = data["users"].get(user_id)
+            if user:
+                usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+                usage["token_count"] += total_tokens
+                user["updated_at"] = int(time.time())
+            self._save(data)
+
+    def usage_summary(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            data = self._load()
+            events = [evt for evt in data["usage_events"] if evt["user_id"] == user_id]
+            total_cost = round(sum(evt["estimated_cost"] for evt in events), 6)
+            total_tokens = sum(evt["total_tokens"] for evt in events)
+            by_model: dict[str, dict[str, Any]] = {}
+            for evt in events:
+                entry = by_model.setdefault(evt["model"], {"tokens": 0, "cost": 0.0, "calls": 0})
+                entry["tokens"] += evt["total_tokens"]
+                entry["cost"] += evt["estimated_cost"]
+                entry["calls"] += 1
+            for entry in by_model.values():
+                entry["cost"] = round(entry["cost"], 6)
+            return {"total_tokens": total_tokens, "total_cost": total_cost, "by_model": by_model, "events": events[-20:]}
+
+    def admin_overview(self) -> dict[str, Any]:
+        with self._lock:
+            data = self._load()
+            users = list(data["users"].values())
+            usage_events = data["usage_events"]
+            leads = data.get("leads", [])
+            now = int(time.time())
+            active_window = now - 7 * 24 * 3600
+            recent_trials = sum(1 for evt in data["events"] if evt.get("type") == "trial_registered" and evt.get("timestamp", 0) >= active_window)
+            by_model: dict[str, dict[str, Any]] = {}
+            total_cost = 0.0
+            total_tokens = 0
+            for evt in usage_events:
+                total_cost += float(evt.get("estimated_cost", 0.0) or 0.0)
+                total_tokens += int(evt.get("total_tokens", 0) or 0)
+                entry = by_model.setdefault(evt["model"], {"calls": 0, "tokens": 0, "cost": 0.0})
+                entry["calls"] += 1
+                entry["tokens"] += int(evt.get("total_tokens", 0) or 0)
+                entry["cost"] += float(evt.get("estimated_cost", 0.0) or 0.0)
+            for entry in by_model.values():
+                entry["cost"] = round(entry["cost"], 6)
+            heavy_users = sorted(
+                (
+                    {
+                        "user_id": user["id"],
+                        "email": user["email"],
+                        "tokens": int((user.get("usage") or {}).get("token_count", 0)),
+                        "messages": int((user.get("usage") or {}).get("message_count", 0)),
+                        "plan": user.get("plan", "trial"),
+                    }
+                    for user in users
+                ),
+                key=lambda item: (item["tokens"], item["messages"]),
+                reverse=True,
+            )[:5]
+            return {
+                "users": {
+                    "total": len(users),
+                    "active_7d": sum(1 for user in users if int(user.get("updated_at", 0) or 0) >= active_window),
+                    "trial": sum(1 for user in users if user.get("plan") == "trial"),
+                    "byok_enabled": sum(1 for user in users if (user.get("byok") or {}).get("enabled")),
+                    "new_trials_7d": recent_trials,
+                },
+                "leads": {
+                    "total": len(leads),
+                    "enterprise": sum(1 for lead in leads if lead.get("intent") == "enterprise"),
+                    "demo": sum(1 for lead in leads if lead.get("intent") == "demo"),
+                },
+                "usage": {
+                    "total_calls": len(usage_events),
+                    "total_tokens": total_tokens,
+                    "total_cost": round(total_cost, 6),
+                    "by_model": by_model,
+                },
+                "heavy_users": heavy_users,
+            }
+
+    def create_lead(
+        self,
+        *,
+        name: str,
+        email: str,
+        company: str,
+        team_size: str,
+        use_case: str,
+        needs_byok: bool,
+        needs_private_deploy: bool,
+        source: str,
+        intent: str,
+    ) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            lead = {
+                "id": f"lead_{uuid.uuid4().hex[:12]}",
+                "name": name.strip(),
+                "email": email.strip().lower(),
+                "company": company.strip(),
+                "team_size": team_size.strip(),
+                "use_case": use_case.strip(),
+                "needs_byok": bool(needs_byok),
+                "needs_private_deploy": bool(needs_private_deploy),
+                "source": source.strip(),
+                "intent": intent.strip() or "demo",
+                "created_at": now,
+            }
+            data.setdefault("leads", []).append(lead)
+            data["events"].append({"type": "lead_created", "email": lead["email"], "intent": lead["intent"], "timestamp": now})
+            self._save(data)
+            return lead
+
+    def sync_project_session(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        project_title: str,
+        scenario_id: str,
+        session_id: str,
+        session_title: str,
+        session_subtitle: str,
+        attachment_count: int,
+    ) -> dict[str, Any]:
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            self._ensure_org_for_user(data, data["users"][user_id])
+            projects_by_user = data.setdefault("projects", {}).setdefault(user_id, {})
+            project = projects_by_user.setdefault(
+                project_id,
+                {
+                    "id": project_id,
+                    "title": project_title,
+                    "scenario_id": scenario_id,
+                    "organization_id": data["users"][user_id].get("organization_id", ""),
+                    "updated_at": now,
+                    "sessions": {},
+                },
+            )
+            project["title"] = project_title or project["title"]
+            project["scenario_id"] = scenario_id or project.get("scenario_id", "")
+            project["organization_id"] = data["users"][user_id].get("organization_id", "")
+            project["updated_at"] = now
+            project["sessions"][session_id] = {
+                "session_id": session_id,
+                "title": session_title,
+                "subtitle": session_subtitle,
+                "attachment_count": max(int(attachment_count or 0), 0),
+                "updated_at": now,
+            }
+            self._save(data)
+            return self._serialize_project(project)
+
+    def list_projects(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            data = self._load()
+            self._ensure_org_for_user(data, data["users"][user_id])
+            org_id = data["users"][user_id].get("organization_id", "")
+            all_projects = []
+            for owner_user_id, projects_by_user in data.get("projects", {}).items():
+                for project in projects_by_user.values():
+                    if project.get("organization_id") == org_id:
+                        serialized = self._serialize_project(project)
+                        serialized["owner_user_id"] = owner_user_id
+                        all_projects.append(serialized)
+            projects = all_projects
+            projects.sort(key=lambda item: item["updated_at"], reverse=True)
+            recent_sessions: list[dict[str, Any]] = []
+            for project in projects:
+                for session in project["sessions"]:
+                    recent_sessions.append(
+                        {
+                            **session,
+                            "project_id": project["id"],
+                            "project_title": project["title"],
+                            "scenario_id": project.get("scenario_id", ""),
+                        }
+                    )
+            recent_sessions.sort(key=lambda item: item["updated_at"], reverse=True)
+            return {
+                "projects": projects[:10],
+                "recent_sessions": recent_sessions[:12],
+            }
+
+    @staticmethod
+    def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
+        sessions = sorted(
+            project.get("sessions", {}).values(),
+            key=lambda item: item.get("updated_at", 0),
+            reverse=True,
+        )
+        return {
+            "id": project["id"],
+            "title": project["title"],
+            "scenario_id": project.get("scenario_id", ""),
+            "updated_at": project.get("updated_at", 0),
+            "sessions_count": len(sessions),
+            "assets_count": sum(int(item.get("attachment_count", 0) or 0) for item in sessions),
+            "sessions": sessions[:6],
+        }
+
+
+control_plane_store = ControlPlaneStore()

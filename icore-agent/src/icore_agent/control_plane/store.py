@@ -22,10 +22,10 @@ _DEFAULT_USAGE = {
 
 _PLAN_LIMITS = {
     "trial": {
-        "message_limit": 40,
-        "token_limit": 120_000,
-        "image_limit": 10,
-        "attachment_limit": 24,
+        "message_limit": 10,
+        "token_limit": 30_000,
+        "image_limit": 3,
+        "attachment_limit": 5,
         "label": "Trial",
     },
     "free": {

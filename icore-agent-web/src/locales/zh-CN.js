@@ -417,6 +417,43 @@ export default {
       { title: '随时切到 BYOK', body: '如果你有自己的 provider key，可以在账户中心接入。' },
     ],
   },
+  onboarding: {
+    eyebrow: 'Welcome to iCore',
+    title: '选择你的首个场景，快速上手',
+    subtitle: '我们为出海运营团队准备了多个高频场景，选择一个开始，或跳过直接探索。',
+    skip: '跳过，稍后再选',
+    explore: '自由探索工作台',
+    scenarios: [
+      {
+        emoji: '🔍',
+        title: '竞品研究',
+        body: '输入产品或竞品信息，获取市场定位、功能对比和增长策略分析。',
+        agentHint: 'research',
+        bgClass: 'bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-500/20 dark:to-blue-950/40',
+      },
+      {
+        emoji: '✍️',
+        title: '内容本地化',
+        body: '上传中文素材，批量生成英文落地页、广告文案或 SEO 文章。',
+        agentHint: 'content',
+        bgClass: 'bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-500/20 dark:to-emerald-950/40',
+      },
+      {
+        emoji: '📚',
+        title: '知识库问答',
+        body: '上传团队文档、FAQ 或客服资料，构建可检索的知识库。',
+        agentHint: 'knowledge',
+        bgClass: 'bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-500/20 dark:to-violet-950/40',
+      },
+      {
+        emoji: '📊',
+        title: '周度复盘',
+        body: '整理数据、截图和行动项，生成一份结构化的增长复盘报告。',
+        agentHint: 'review',
+        bgClass: 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-950/40',
+      },
+    ],
+  },
   enterprise: {
     eyebrow: 'Enterprise',
     title: '预约 Demo、企业咨询，或定制交付沟通',

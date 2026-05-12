@@ -417,6 +417,43 @@ export default {
       { title: 'BYOK ready', body: 'Bring your own model gateway or provider key whenever you are ready.' },
     ],
   },
+  onboarding: {
+    eyebrow: 'Welcome to iCore',
+    title: 'Pick your first scenario and get started',
+    subtitle: 'We have prepared common workflows for cross-border ops teams. Choose one to start, or skip to explore freely.',
+    skip: 'Skip for now',
+    explore: 'Explore workspace',
+    scenarios: [
+      {
+        emoji: '🔍',
+        title: 'Competitor Research',
+        body: 'Enter product or competitor info to get market positioning, feature comparisons, and growth strategy analysis.',
+        agentHint: 'research',
+        bgClass: 'bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-500/20 dark:to-blue-950/40',
+      },
+      {
+        emoji: '✍️',
+        title: 'Content Localization',
+        body: 'Upload Chinese materials and batch-generate English landing pages, ad copy, or SEO articles.',
+        agentHint: 'content',
+        bgClass: 'bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-500/20 dark:to-emerald-950/40',
+      },
+      {
+        emoji: '📚',
+        title: 'Knowledge Q&A',
+        body: 'Upload team docs, FAQs, or support materials to build a searchable knowledge base.',
+        agentHint: 'knowledge',
+        bgClass: 'bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-500/20 dark:to-violet-950/40',
+      },
+      {
+        emoji: '📊',
+        title: 'Weekly Review',
+        body: 'Gather data, screenshots, and action items into one structured growth review report.',
+        agentHint: 'review',
+        bgClass: 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-950/40',
+      },
+    ],
+  },
   enterprise: {
     eyebrow: 'Enterprise',
     title: 'Talk to us about team rollout, enterprise delivery, or private deployment',

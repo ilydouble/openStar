@@ -2,6 +2,8 @@
   <div
     class="flex h-screen min-h-0 bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
+    <OnboardingModal :show="showOnboarding" @select-scenario="handleOnboardingScenario" @close="showOnboarding = false" />
+
     <HomeSidebar :recent-sessions="recentSessions" :recent-projects="recentProjects" @new="onSidebarNew" />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -428,11 +430,37 @@ import {
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
+import OnboardingModal from '../components/OnboardingModal.vue'
 import SearchBar from '../components/SearchBar.vue'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
 const router = useRouter()
+
+// Onboarding: 首次访问时弹出场景选择引导
+const showOnboarding = ref(false)
+const ONBOARDING_KEY = 'icore_onboarding_completed'
+
+onMounted(() => {
+  const completed = localStorage.getItem(ONBOARDING_KEY)
+  if (!completed && !route.params.sessionId) {
+    // 延迟 500ms 弹出，让用户先看到工作台界面
+    setTimeout(() => {
+      showOnboarding.value = true
+    }, 500)
+  }
+})
+
+function handleOnboardingScenario(agentHint) {
+  // 用户选择场景后，自动填充对应的 agent hint
+  const scenario = scenarios.value.find(s => s.agentHint === agentHint)
+  if (scenario) {
+    activeShortcutId.value = agentHint
+    searchRefHome.value?.focus?.()
+  }
+  localStorage.setItem(ONBOARDING_KEY, 'true')
+  showOnboarding.value = false
+}
 
 marked.setOptions({ breaks: true, gfm: true })
 

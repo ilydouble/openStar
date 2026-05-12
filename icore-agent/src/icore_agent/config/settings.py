@@ -128,7 +128,9 @@ class Settings(BaseSettings):
 
     # ── 邮件服务（Resend）────────────────────────────────
     resend_api_key: str = ""              # 从 resend.com 获取，留空则仅打印到日志
-    resend_from_email: str = "noreply@icore.ai"  # 发件人地址（需在 Resend 验证域名）
+    # 测试阶段用 onboarding@resend.dev（无需验证域名）
+    # 生产阶段换成自己的域名邮箱并在 Resend 控制台完成 DNS 验证
+    resend_from_email: str = "onboarding@resend.dev"
     resend_from_name: str = "iCore"
 
     # ── Zhipu Embedding（供 ChromaDB RAG 使用）─────────────

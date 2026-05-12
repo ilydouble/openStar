@@ -843,12 +843,20 @@ async function sendUserMessage(msg, agentHint = '') {
       await scrollBottom()
     }
   } catch (e) {
-    if (String(e.message || '').includes('401')) {
+    const errorMsg = String(e.message || '')
+    if (errorMsg.includes('401')) {
       signOut()
       router.push({ name: 'auth' })
+    } else if (errorMsg.includes('402') || errorMsg.toLowerCase().includes('quota exceeded')) {
+      // 额度超限：显示升级引导
+      reply.content =
+        locale.value === 'zh-CN'
+          ? `⚠️ 您的配额已用完。[点击这里升级套餐](/enterprise?intent=upgrade-team) 或 [查看账户详情](/account) 了解更多。`
+          : `⚠️ Your quota has been exceeded. [Upgrade your plan here](/enterprise?intent=upgrade-team) or [view account details](/account) for more info.`
+    } else {
+      reply.content =
+        locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
     }
-    reply.content =
-      locale.value === 'zh-CN' ? `请求失败：${e.message}` : `Request failed: ${e.message}`
   } finally {
     reply.streaming = false
     reply.stepsCollapsed = true

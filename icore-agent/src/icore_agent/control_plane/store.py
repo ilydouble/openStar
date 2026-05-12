@@ -17,6 +17,7 @@ _DEFAULT_USAGE = {
     "token_count": 0,
     "image_count": 0,
     "attachment_count": 0,
+    "quota_period_start": 0,  # Unix timestamp of current quota period start
 }
 
 _PLAN_LIMITS = {
@@ -98,6 +99,40 @@ class ControlPlaneStore:
 
     def _save(self, data: dict[str, Any]) -> None:
         self._path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _should_reset_quota(self, quota_period_start: int) -> bool:
+        """检查是否需要重置配额周期（每月 1 号 00:00 重置）。
+
+        Args:
+            quota_period_start: 当前周期开始时间戳
+
+        Returns:
+            True 如果当前时间已跨越到新的月份周期
+        """
+        if quota_period_start == 0:
+            return True  # 首次使用，需要初始化
+
+        from datetime import datetime, timezone
+
+        period_start = datetime.fromtimestamp(quota_period_start, tz=timezone.utc)
+        now = datetime.now(timezone.utc)
+
+        # 如果当前月份大于周期开始月份，或者年份不同，需要重置
+        if now.year > period_start.year:
+            return True
+        if now.year == period_start.year and now.month > period_start.month:
+            return True
+
+        return False
+
+    def _get_quota_period_start(self) -> int:
+        """获取当前配额周期的开始时间戳（当月 1 号 00:00 UTC）。"""
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        # 本月 1 号 00:00:00 UTC
+        period_start = datetime(now.year, now.month, 1, 0, 0, 0, tzinfo=timezone.utc)
+        return int(period_start.timestamp())
 
     def _ensure_org_for_user(self, data: dict[str, Any], user: dict[str, Any]) -> None:
         org_id = user.get("organization_id", "")
@@ -220,6 +255,15 @@ class ControlPlaneStore:
             self._ensure_org_for_user(data, user)
             limits = _PLAN_LIMITS[user["plan"]]
             usage = user.get("usage") or dict(_DEFAULT_USAGE)
+
+            # 计算下次重置时间（下月 1 号 00:00 UTC）
+            from datetime import datetime, timedelta, timezone
+            now = datetime.now(timezone.utc)
+            if now.month == 12:
+                next_reset = datetime(now.year + 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            else:
+                next_reset = datetime(now.year, now.month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
             return {
                 "plan": user["plan"],
                 "label": limits["label"],
@@ -234,6 +278,10 @@ class ControlPlaneStore:
                     "tokens": usage["token_count"],
                     "images": usage["image_count"],
                     "attachments": usage["attachment_count"],
+                },
+                "quota_period": {
+                    "start": usage.get("quota_period_start", 0),
+                    "next_reset": int(next_reset.timestamp()),
                 },
                 "byok": user.get("byok") or {"enabled": False, "api_key": "", "api_base": "", "model": ""},
             }
@@ -335,6 +383,19 @@ class ControlPlaneStore:
             self._ensure_org_for_user(data, user)
             plan = user["plan"]
             usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+
+            # 检查是否需要重置配额周期
+            quota_period_start = usage.get("quota_period_start", 0)
+            if self._should_reset_quota(quota_period_start):
+                # 重置所有计数器，但保留 quota_period_start 字段
+                usage["message_count"] = 0
+                usage["token_count"] = 0
+                usage["image_count"] = 0
+                usage["attachment_count"] = 0
+                usage["quota_period_start"] = self._get_quota_period_start()
+                user["updated_at"] = int(time.time())
+                self._save(data)
+
             limits = _PLAN_LIMITS[plan]
             if kind == "messages":
                 limit = limits["message_limit"]
@@ -359,6 +420,16 @@ class ControlPlaneStore:
             user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
             usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+
+            # 检查是否需要重置配额周期（consume 时也需要检查）
+            quota_period_start = usage.get("quota_period_start", 0)
+            if self._should_reset_quota(quota_period_start):
+                usage["message_count"] = 0
+                usage["token_count"] = 0
+                usage["image_count"] = 0
+                usage["attachment_count"] = 0
+                usage["quota_period_start"] = self._get_quota_period_start()
+
             if kind == "messages":
                 usage["message_count"] += amount
             elif kind == "tokens":

@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     icore_base_url: str = ""
     icore_secret: str = ""
     auth_enabled: bool = False          # set True in production
+    # Control Plane 数据存储路径（用户、额度、组织、线索等）
+    # 警告：默认 /tmp 路径在系统重启后会清空，生产环境务必改为持久化路径
+    # 建议：./data/control-plane.json 或 /var/lib/icore/control-plane.json
     control_plane_store_path: str = "/tmp/icore-control-plane.json"
 
     # ── API Keys（由 load_dotenv 写入 os.environ，LiteLLM 自动读取）──

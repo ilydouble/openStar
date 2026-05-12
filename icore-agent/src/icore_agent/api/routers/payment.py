@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ...config import settings
-from ...control_plane.context import current_user_claims
 from ...control_plane.store import ControlPlaneStore
+from ..routers.account import get_current_user
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
@@ -54,7 +54,7 @@ class OrderResponse(BaseModel):
 @router.post("/create-checkout-session", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
     req: CreateCheckoutSessionRequest,
-    claims: dict = Depends(current_user_claims),
+    user: dict = Depends(get_current_user),
 ):
     """
     创建 Stripe Checkout Session（当前 Mock）
@@ -64,12 +64,12 @@ async def create_checkout_session(
     - 配置 success_url / cancel_url
     - 设置 metadata: user_id, plan, billing_period
     """
-    user_id = claims["user_id"]
-    
+    user_id = user["id"]
+
     # Mock: 返回模拟的 checkout URL
     mock_session_id = f"cs_mock_{user_id[:8]}"
     mock_url = f"{settings.icore_base_url or 'http://localhost:8080'}/payment/mock-checkout?session={mock_session_id}"
-    
+
     return CheckoutSessionResponse(
         checkout_url=mock_url,
         session_id=mock_session_id,
@@ -96,14 +96,14 @@ async def stripe_webhook(
 @router.post("/upgrade-plan")
 async def upgrade_plan(
     req: UpgradePlanRequest,
-    claims: dict = Depends(current_user_claims),
+    user: dict = Depends(get_current_user),
 ):
     """
     手动升级套餐（适用于 BYOK 或线下付款场景）
 
     不经过 Stripe，直接更新用户套餐。
     """
-    user_id = claims["user_id"]
+    user_id = user["id"]
     store = ControlPlaneStore(settings.control_plane_store_path)
     
     if req.plan not in ("team", "enterprise", "byok"):
@@ -131,7 +131,7 @@ async def upgrade_plan(
 
 @router.get("/orders", response_model=list[OrderResponse])
 async def get_user_orders(
-    claims: dict = Depends(current_user_claims),
+    user: dict = Depends(get_current_user),
 ):
     """
     获取用户的订单列表

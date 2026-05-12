@@ -56,9 +56,11 @@ log_success "前端构建完成 → dist/"
 log_info "启动后端服务 (端口 8080)..."
 cd ../icore-agent
 mkdir -p logs
-nohup uvicorn icore_agent.main:app \
+# 必须从 src/ 父目录启动，或者用 python -m 模式
+nohup python -m uvicorn icore_agent.main:app \
     --host 0.0.0.0 \
     --port 8080 \
+    --app-dir src \
     > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 log_success "后端已启动 (PID: $BACKEND_PID)"

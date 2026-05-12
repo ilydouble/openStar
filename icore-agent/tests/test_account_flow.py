@@ -15,31 +15,78 @@ def client():
         yield c
 
 
-def _trial_headers(client: TestClient) -> dict[str, str]:
-    email = f"trial-{uuid4().hex[:8]}@example.com"
+def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
+    """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
+    from icore_agent.control_plane import control_plane_store
+
+    email = email or f"trial-{uuid4().hex[:8]}@example.com"
+    code = "123456"
+    # 注入验证码并清除 127.0.0.1 的 IP 注册记录，使每次测试都能通过
+    import time
+    with control_plane_store._lock:
+        data = control_plane_store._load()
+        data.setdefault("verification_codes", {})[email.lower()] = {
+            "code": code,
+            "expires_at": int(time.time()) + 600,
+            "ip": "127.0.0.1",
+            "timestamp": int(time.time()),
+        }
+        # 清除测试 IP 的注册记录，让每个测试用例都能独立注册
+        data.setdefault("ip_registrations", {}).pop("127.0.0.1", None)
+        data.setdefault("ip_registrations", {}).pop("testclient", None)
+        control_plane_store._save(data)
+
     resp = client.post(
         "/api/v1/account/register-trial",
-        json={"name": "Trial User", "email": email},
+        json={"name": name, "email": email, "verification_code": code},
     )
-    assert resp.status_code == 200
-    token = resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    assert resp.status_code == 200, resp.json()
+    return resp.json()
+
+
+def _trial_headers(client: TestClient) -> dict[str, str]:
+    payload = _register_trial_direct(client)
+    return {"Authorization": f"Bearer {payload['access_token']}"}
 
 
 def test_register_trial_and_fetch_account_profile(client: TestClient):
     email = f"trial-{uuid4().hex[:8]}@example.com"
-    resp = client.post(
-        "/api/v1/account/register-trial",
-        json={"name": "Trial User", "email": email},
-    )
-    assert resp.status_code == 200
-    payload = resp.json()
+    payload = _register_trial_direct(client, email=email)
     assert payload["access_token"]
     assert payload["user"]["plan"] == "trial"
 
     me = client.get("/api/v1/account/me", headers={"Authorization": f"Bearer {payload['access_token']}"})
     assert me.status_code == 200
     assert me.json()["email"] == email
+
+
+def test_register_trial_requires_verification_code(client: TestClient):
+    email = f"trial-{uuid4().hex[:8]}@example.com"
+    # 不提供验证码，应该被 Pydantic 拒绝
+    resp = client.post(
+        "/api/v1/account/register-trial",
+        json={"name": "Trial User", "email": email},
+    )
+    assert resp.status_code == 422  # 缺少 verification_code 字段
+
+
+def test_register_trial_wrong_code_rejected(client: TestClient):
+    email = f"trial-{uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/api/v1/account/register-trial",
+        json={"name": "Trial User", "email": email, "verification_code": "000000"},
+    )
+    assert resp.status_code == 400
+
+
+def test_send_verification_code_endpoint(client: TestClient):
+    email = f"trial-{uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
 
 
 @patch("icore_agent.api.routers.agent.create_orchestrator")

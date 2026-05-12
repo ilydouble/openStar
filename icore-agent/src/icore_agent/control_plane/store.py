@@ -22,10 +22,10 @@ _DEFAULT_USAGE = {
 
 _PLAN_LIMITS = {
     "trial": {
-        "message_limit": 10,
-        "token_limit": 30_000,
-        "image_limit": 3,
-        "attachment_limit": 5,
+        "message_limit": 0,
+        "token_limit": 0,
+        "image_limit": 0,
+        "attachment_limit": 0,
         "label": "Trial",
     },
     "free": {
@@ -75,6 +75,8 @@ class ControlPlaneStore:
                 "projects": {},
                 "organizations": {},
                 "leads": [],
+                "verification_codes": {},  # {email: {code, expires_at, ip, send_count}}
+                "ip_registrations": {},  # {ip: [timestamp1, timestamp2, ...]}
             }
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
@@ -162,7 +164,89 @@ class ControlPlaneStore:
             "updated_at": now,
         }
 
-    def register_trial(self, name: str, email: str) -> tuple[dict[str, Any], str]:
+    def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
+        """发送邮箱验证码（同一 IP 24 小时内最多发送 3 次）"""
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            codes = data.setdefault("verification_codes", {})
+
+            # 清理过期的验证码
+            expired_emails = [e for e, info in codes.items() if info.get("expires_at", 0) < now]
+            for e in expired_emails:
+                del codes[e]
+
+            # 检查同一 IP 24 小时内发送次数（最多 3 次）
+            ip_sends = [
+                info for info in codes.values()
+                if info.get("ip") == client_ip and info.get("timestamp", 0) > now - 86400
+            ]
+            if len(ip_sends) >= 3:
+                return False, "同一 IP 24 小时内最多发送 3 次验证码"
+
+            # 生成 6 位数字验证码
+            code = f"{secrets.randbelow(1000000):06d}"
+            codes[email.lower()] = {
+                "code": code,
+                "expires_at": now + 600,  # 10 分钟有效期
+                "ip": client_ip,
+                "timestamp": now,
+            }
+
+            self._save(data)
+
+            # TODO: 实际项目中应该调用邮件服务发送验证码
+            # 现在为了开发方便，直接在日志中打印
+            print(f"\n{'='*60}")
+            print(f"📧 验证码邮件发送到: {email}")
+            print(f"🔑 验证码: {code}")
+            print(f"⏰ 有效期: 10 分钟")
+            print(f"{'='*60}\n")
+
+            return True, f"验证码已发送到 {email}，10 分钟内有效"
+
+    def verify_code(self, email: str, code: str) -> bool:
+        """验证邮箱验证码"""
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            codes = data.setdefault("verification_codes", {})
+            info = codes.get(email.lower())
+
+            if not info:
+                return False
+
+            if info.get("expires_at", 0) < now:
+                del codes[email.lower()]
+                self._save(data)
+                return False
+
+            if info.get("code") != code:
+                return False
+
+            # 验证成功后删除验证码（一次性使用）
+            del codes[email.lower()]
+            self._save(data)
+            return True
+
+    def check_ip_registration_limit(self, client_ip: str) -> bool:
+        """检查 IP 注册限制（24 小时内只能注册 1 次）"""
+        now = int(time.time())
+        with self._lock:
+            data = self._load()
+            ip_regs = data.setdefault("ip_registrations", {})
+
+            # 清理 24 小时之前的记录
+            for ip in list(ip_regs.keys()):
+                ip_regs[ip] = [ts for ts in ip_regs[ip] if ts > now - 86400]
+                if not ip_regs[ip]:
+                    del ip_regs[ip]
+
+            # 检查是否已达到限制
+            recent_count = len(ip_regs.get(client_ip, []))
+            return recent_count < 1
+
+    def register_trial(self, name: str, email: str, client_ip: str = "unknown") -> tuple[dict[str, Any], str]:
         now = int(time.time())
         with self._lock:
             data = self._load()
@@ -211,6 +295,11 @@ class ControlPlaneStore:
             }
             token = self._issue_token(data, user_id)
             data["events"].append({"type": "trial_registered", "user_id": user_id, "timestamp": now})
+
+            # 记录 IP 注册
+            ip_regs = data.setdefault("ip_registrations", {})
+            ip_regs.setdefault(client_ip, []).append(now)
+
             self._save(data)
             return user, token
 

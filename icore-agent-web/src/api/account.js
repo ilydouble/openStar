@@ -10,11 +10,20 @@ async function parseJson(resp) {
   return payload
 }
 
-export async function registerTrial({ name, email }) {
+export async function sendVerificationCode({ email }) {
+  const resp = await fetch(`${BASE}/send-verification-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  return parseJson(resp)
+}
+
+export async function registerTrial({ name, email, verification_code }) {
   const resp = await fetch(`${BASE}/register-trial`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email }),
+    body: JSON.stringify({ name, email, verification_code }),
   })
   const payload = await parseJson(resp)
   setSession(payload.access_token, payload.user)

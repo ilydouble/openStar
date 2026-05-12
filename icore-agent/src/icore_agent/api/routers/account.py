@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from ...control_plane import control_plane_store
@@ -10,9 +10,19 @@ from ...control_plane import control_plane_store
 router = APIRouter()
 
 
+class SendVerificationCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class SendVerificationCodeResponse(BaseModel):
+    success: bool
+    message: str
+
+
 class TrialRegistrationRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     email: EmailStr
+    verification_code: str = Field(..., min_length=6, max_length=6)
 
 
 class TrialRegistrationResponse(BaseModel):
@@ -73,9 +83,32 @@ def get_current_user(authorization: str = Header(default="")) -> dict:
     return user
 
 
+@router.post("/send-verification-code", response_model=SendVerificationCodeResponse)
+async def send_verification_code(req: SendVerificationCodeRequest, request: Request) -> SendVerificationCodeResponse:
+    """发送邮箱验证码（同一 IP 24 小时内最多发送 3 次）"""
+    client_ip = request.client.host if request.client else "unknown"
+
+    success, message = control_plane_store.send_verification_code(req.email, client_ip)
+    if not success:
+        raise HTTPException(status_code=429, detail=message)
+
+    return SendVerificationCodeResponse(success=True, message=message)
+
+
 @router.post("/register-trial", response_model=TrialRegistrationResponse)
-async def register_trial(req: TrialRegistrationRequest) -> TrialRegistrationResponse:
-    user, token = control_plane_store.register_trial(req.name, req.email)
+async def register_trial(req: TrialRegistrationRequest, request: Request) -> TrialRegistrationResponse:
+    """注册试用账号（需要邮箱验证码 + IP 限流：同一 IP 24 小时内只能注册 1 次）"""
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 验证验证码
+    if not control_plane_store.verify_code(req.email, req.verification_code):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # IP 限流检查
+    if not control_plane_store.check_ip_registration_limit(client_ip):
+        raise HTTPException(status_code=429, detail="同一 IP 24 小时内只能注册 1 次账号")
+
+    user, token = control_plane_store.register_trial(req.name, req.email, client_ip)
     return TrialRegistrationResponse(access_token=token, user=user)
 
 

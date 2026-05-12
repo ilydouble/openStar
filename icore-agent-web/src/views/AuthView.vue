@@ -35,31 +35,73 @@
             </RouterLink>
           </div>
 
-          <form class="mt-8 space-y-5" @submit.prevent="submit">
+          <form class="mt-8 space-y-5" @submit.prevent="step === 1 ? sendCode() : submit()">
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.name') }}</span>
               <input
                 v-model="form.name"
                 type="text"
                 required
-                class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                :disabled="step === 2"
+                class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
               />
             </label>
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.email') }}</span>
-              <input
-                v-model="form.email"
-                type="email"
-                required
-                class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
-              />
+              <div class="flex gap-2">
+                <input
+                  v-model="form.email"
+                  type="email"
+                  required
+                  :disabled="step === 2"
+                  class="flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                />
+                <button
+                  v-if="step === 2"
+                  type="button"
+                  @click="resetStep"
+                  class="shrink-0 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                >
+                  {{ t('auth.changeEmail') }}
+                </button>
+              </div>
             </label>
+
+            <label v-if="step === 2" class="block">
+              <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.verificationCode') }}</span>
+              <div class="flex gap-2">
+                <input
+                  v-model="form.verification_code"
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="6"
+                  required
+                  :placeholder="t('auth.codePlaceholder')"
+                  class="flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm tracking-widest outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                />
+                <button
+                  type="button"
+                  :disabled="resendCooldown > 0 || sending"
+                  @click="sendCode"
+                  class="shrink-0 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                >
+                  {{ resendCooldown > 0 ? `${resendCooldown}s` : t('auth.resendCode') }}
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ t('auth.codeHint') }}</p>
+            </label>
+
+            <p v-if="codeSent && step === 2" class="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-300">
+              {{ t('auth.codeSent', { email: form.email }) }}
+            </p>
+
             <button
               type="submit"
-              :disabled="submitting"
+              :disabled="submitting || sending"
               class="w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950"
             >
-              {{ submitting ? t('auth.loading') : t('auth.submit') }}
+              <span v-if="step === 1">{{ sending ? t('auth.sending') : t('auth.sendCode') }}</span>
+              <span v-else>{{ submitting ? t('auth.loading') : t('auth.submit') }}</span>
             </button>
             <p v-if="error" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
               {{ error }}
@@ -80,22 +122,54 @@
 import { reactive, ref, computed } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { registerTrial } from '../api/account.js'
+import { registerTrial, sendVerificationCode } from '../api/account.js'
 
 const { t, tm } = useI18n()
 const router = useRouter()
 
-const form = reactive({
-  name: '',
-  email: '',
-})
+const step = ref(1)  // 1=填信息发验证码, 2=填验证码注册
+const form = reactive({ name: '', email: '', verification_code: '' })
 const submitting = ref(false)
+const sending = ref(false)
+const codeSent = ref(false)
 const error = ref('')
+const resendCooldown = ref(0)
 
 const featureCards = computed(() => {
   const raw = tm('auth.features')
   return Array.isArray(raw) ? raw : []
 })
+
+function startCooldown(seconds = 60) {
+  resendCooldown.value = seconds
+  const timer = setInterval(() => {
+    resendCooldown.value -= 1
+    if (resendCooldown.value <= 0) clearInterval(timer)
+  }, 1000)
+}
+
+function resetStep() {
+  step.value = 1
+  form.verification_code = ''
+  codeSent.value = false
+  error.value = ''
+}
+
+async function sendCode() {
+  if (sending.value || !form.name.trim() || !form.email) return
+  sending.value = true
+  error.value = ''
+  try {
+    await sendVerificationCode({ email: form.email })
+    step.value = 2
+    codeSent.value = true
+    startCooldown(60)
+  } catch (err) {
+    error.value = err.message || t('auth.failed')
+  } finally {
+    sending.value = false
+  }
+}
 
 async function submit() {
   if (submitting.value) return

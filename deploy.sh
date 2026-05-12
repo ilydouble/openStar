@@ -79,7 +79,7 @@ log_info "等待服务启动..."
 sleep 5
 
 # 检查后端健康
-if curl -sf http://localhost:8080/api/v1/health > /dev/null 2>&1; then
+if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
     log_success "✅ 后端服务正常"
 else
     log_warn "⚠️  后端可能未就绪，查看日志: tail -f icore-agent/logs/backend.log"

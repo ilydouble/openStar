@@ -19,7 +19,7 @@
       </button>
 
       <RouterLink
-        :to="{ name: 'home' }"
+        :to="{ name: 'workspace' }"
         custom
         v-slot="{ href, navigate, isExactActive }"
       >

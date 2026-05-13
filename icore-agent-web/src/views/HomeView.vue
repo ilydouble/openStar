@@ -578,8 +578,8 @@ const { t, locale, tm } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const isHomeRoute = computed(() => route.name === 'home')
-const isChatRoute = computed(() => route.name === 'chat')
+const isHomeRoute = computed(() => route.name === 'workspace')
+const isChatRoute = computed(() => route.name === 'workspace-session')
 
 // 移动端侧边栏开关状态
 const sidebarMobileOpen = ref(false)
@@ -796,12 +796,14 @@ function resetConversationState() {
 watch(
   () => route.name,
   (name) => {
-    if (name === 'home') resetConversationState()
+    if (name === 'workspace') resetConversationState()
   },
 )
 
 function ensureChatRoute() {
-  if (route.name === 'home') router.replace({ name: 'chat' })
+  if (route.name === 'workspace') {
+    router.replace({ name: 'workspace-session', params: { sessionId: sessionId.value } })
+  }
 }
 
 const PILL_BY_ID = {

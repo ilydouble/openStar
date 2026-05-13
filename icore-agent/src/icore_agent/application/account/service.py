@@ -33,9 +33,15 @@ class AccountStore(Protocol):
 class AccountService:
     """Coordinate account workflows while hiding the storage implementation."""
 
-    def __init__(self, store: AccountStore) -> None:
-        """Create an account service bound to one persistence adapter."""
+    def __init__(
+        self,
+        store: AccountStore,
+        *,
+        usage_store: AccountStore | None = None,
+    ) -> None:
+        """Create an account service bound to account and usage persistence adapters."""
         self._store = store
+        self._usage_store = usage_store or store
 
     def get_current_user(self, authorization: str) -> dict[str, Any]:
         """Resolve the bearer token into the current user payload."""
@@ -85,7 +91,7 @@ class AccountService:
 
     def get_usage_summary(self, user_id: str) -> dict[str, Any]:
         """Load the usage summary for one user."""
-        return self._store.usage_summary(user_id)
+        return self._usage_store.usage_summary(user_id)
 
     def get_admin_overview(self, user: dict[str, Any]) -> dict[str, Any]:
         """Return admin-only usage metrics after a role check."""
@@ -94,7 +100,7 @@ class AccountService:
             raise PermissionError(
                 "Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."
             )
-        return self._store.admin_overview()
+        return self._usage_store.admin_overview()
 
     def get_plan(self, user_id: str) -> dict[str, Any]:
         """Return the billing plan summary for a user."""
@@ -130,8 +136,8 @@ class AccountService:
 
     def check_quota(self, user_id: str, resource: str) -> tuple[bool, str]:
         """Read a quota decision without consuming the quota yet."""
-        return self._store.check_quota(user_id, resource)
+        return self._usage_store.check_quota(user_id, resource)
 
     def consume_quota(self, user_id: str, resource: str) -> None:
         """Consume one quota unit after a request is accepted."""
-        self._store.consume_quota(user_id, resource)
+        self._usage_store.consume_quota(user_id, resource)

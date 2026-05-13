@@ -7,15 +7,26 @@ from fastapi import Depends, Header, HTTPException
 from ..application.account import AccountService
 from ..application.billing import BillingService
 from ..application.knowledge import KnowledgeService
+from ..application.usage import UsageService
 from ..config import settings
 from ..control_plane import control_plane_store
+from ..infrastructure.control_plane import (
+    ControlPlaneAccountRepository,
+    ControlPlaneBillingRepository,
+    ControlPlaneUsageRepository,
+)
 from ..memory.chroma_store import add_documents, get_collection, list_documents
 
-account_service = AccountService(control_plane_store)
+account_repository = ControlPlaneAccountRepository(control_plane_store)
+usage_repository = ControlPlaneUsageRepository(control_plane_store)
+billing_repository = ControlPlaneBillingRepository(control_plane_store)
+
+account_service = AccountService(account_repository, usage_store=usage_repository)
 billing_service = BillingService(
-    control_plane_store,
+    billing_repository,
     settings.icore_base_url or "http://localhost:8080",
 )
+usage_service = UsageService(usage_repository)
 knowledge_service = KnowledgeService(
     add_documents=add_documents,
     list_documents=list_documents,
@@ -34,6 +45,11 @@ def get_account_service() -> AccountService:
 def get_billing_service() -> BillingService:
     """Return the singleton billing service used by HTTP handlers."""
     return billing_service
+
+
+def get_usage_service() -> UsageService:
+    """Return the singleton usage service used by infrastructure and app wiring."""
+    return usage_service
 
 
 def get_knowledge_service() -> KnowledgeService:

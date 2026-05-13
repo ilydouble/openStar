@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .control_plane import control_plane_store, current_runtime_user
+from .control_plane import current_runtime_user
 from .api.routers import agent as agent_router
 from .api.routers import account as account_router
 from .api.routers import health as health_router
@@ -23,6 +23,7 @@ from .api.routers import knowledge as knowledge_router
 from .api.routers import payment as payment_router
 from .api.routers.account import get_current_user
 from .api.middleware.auth import AuthMiddleware
+from .api.dependencies import usage_service
 
 log = structlog.get_logger()
 
@@ -46,15 +47,13 @@ def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
     )
     user = current_runtime_user()
     if user:
-        total_tokens = int(getattr(usage, "total_tokens", 0) or 0)
-        control_plane_store.record_usage_event(
+        usage_service.record_llm_usage(
             user_id=user["id"],
             session_id=str(kwargs.get("metadata", {}).get("session_id", "")),
             model=kwargs.get("model", "unknown"),
             prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            total_tokens=total_tokens,
-            estimated_cost=round(total_tokens / 1_000_000 * 2.0, 6),
+            total_tokens=int(getattr(usage, "total_tokens", 0) or 0),
         )
 
 

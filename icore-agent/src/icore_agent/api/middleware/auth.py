@@ -17,8 +17,10 @@ from starlette.responses import JSONResponse, Response
 
 from ...config import settings
 from ...control_plane import control_plane_store
+from ...infrastructure.control_plane import ControlPlaneAccountRepository
 
 log = structlog.get_logger()
+account_repository = ControlPlaneAccountRepository(control_plane_store)
 
 # Paths that skip auth entirely
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}
@@ -42,7 +44,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not token:
             return JSONResponse({"code": 401, "message": "Missing Bearer token"}, status_code=401)
 
-        local_user = control_plane_store.get_user_by_token(token)
+        local_user = account_repository.get_user_by_token(token)
         if local_user is not None:
             request.state.user = local_user
             return await call_next(request)

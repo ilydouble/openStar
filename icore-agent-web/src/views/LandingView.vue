@@ -15,7 +15,6 @@
       <ResultsSection />
       <HowItWorksSection />
       <WhyICoreSection />
-      <RelatedBusinessSection />
       <PlansSection />
       <FinalCtaSection />
     </main>
@@ -32,7 +31,6 @@ import HowItWorksSection from '../components/landing/HowItWorksSection.vue'
 import LandingFooter from '../components/landing/LandingFooter.vue'
 import LandingNavbar from '../components/landing/LandingNavbar.vue'
 import PlansSection from '../components/landing/PlansSection.vue'
-import RelatedBusinessSection from '../components/landing/RelatedBusinessSection.vue'
 import ResultsSection from '../components/landing/ResultsSection.vue'
 import SignalsSection from '../components/landing/SignalsSection.vue'
 import SolutionsSection from '../components/landing/SolutionsSection.vue'

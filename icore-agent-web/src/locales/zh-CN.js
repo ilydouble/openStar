@@ -231,7 +231,16 @@ export default {
       title: 'iCore 面向真正要跑业务结果的出海团队',
       subtitle: '先把市场、内容、知识和复盘接到一个工作台里，再逐步补齐登录、配额、运营和后台能力。',
       primaryDomainLabel: '正式访问域名',
-      relatedSiteLabel: '相关独立业务',
+      extraServicesLabel: '额外服务',
+      extraServicesIntro: '以下服务为独立业务线，放在官网底部单独展示，不作为 iCore 核心功能模块叙述。',
+      extraServices: [
+        {
+          name: 'api.stellarmesh.net',
+          href: 'https://api.stellarmesh.net',
+          tag: 'Token Relay',
+          description: '独立的 Token 中转服务，拥有专属入口、独立业务定位与完整技术运营体系。',
+        },
+      ],
       language: '语言',
       links: {
         solutions: '场景方案',

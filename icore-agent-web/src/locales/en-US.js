@@ -231,7 +231,16 @@ export default {
       title: 'iCore is for teams that need business output, not just AI demos',
       subtitle: 'Start by connecting market, content, knowledge, and reviews in one workspace, then grow into accounts, quotas, operations, and admin modules.',
       primaryDomainLabel: 'Primary domain',
-      relatedSiteLabel: 'Related business',
+      extraServicesLabel: 'Extra services',
+      extraServicesIntro: 'These services are separate business lines and are listed at the bottom instead of being framed as core iCore product modules.',
+      extraServices: [
+        {
+          name: 'api.stellarmesh.net',
+          href: 'https://api.stellarmesh.net',
+          tag: 'Token Relay',
+          description: 'A standalone token relay service with its own entry point, business positioning, and operating model.',
+        },
+      ],
       language: 'Language',
       links: {
         solutions: 'Solutions',

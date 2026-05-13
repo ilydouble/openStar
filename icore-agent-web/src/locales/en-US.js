@@ -274,6 +274,7 @@ export default {
       modePickerBack: 'Back',
     },
     accountCenter: 'Account',
+    signIn: 'Sign In',
     signOut: 'Sign out',
     sidebar: {
       new: 'New',

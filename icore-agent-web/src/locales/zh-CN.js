@@ -274,6 +274,7 @@ export default {
       modePickerBack: '返回',
     },
     accountCenter: '账户中心',
+    signIn: '登录',
     signOut: '退出登录',
     sidebar: {
       new: '新建',

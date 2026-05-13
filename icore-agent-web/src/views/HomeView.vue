@@ -1127,12 +1127,8 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
         signOut()
         router.push({ name: 'auth' })
       } else if (errorMsg.includes('402') || errorMsg.toLowerCase().includes('quota exceeded')) {
-        // 额度超限：显示升级引导
-        commitAssistant({
-          content: locale.value === 'zh-CN'
-            ? `⚠️ 您的配额已用完。[点击这里升级套餐](/enterprise?intent=upgrade-team) 或 [查看账户详情](/account) 了解更多。`
-            : `⚠️ Your quota has been exceeded. [Upgrade your plan here](/enterprise?intent=upgrade-team) or [view account details](/account) for more info.`,
-        })
+        // 额度超限：跳转到账户页面查看配额
+        router.push({ name: 'account' })
       } else {
         commitAssistant({
           content: t('chat.requestFailed', { msg: errorMsg }),

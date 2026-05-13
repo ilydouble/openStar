@@ -27,16 +27,47 @@
         <section class="rounded-[2rem] border border-zinc-200/80 bg-white/92 p-8 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-zinc-950/72">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ t('auth.formTitle') }}</p>
-              <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ t('auth.formHint') }}</p>
+              <p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                {{ isLoginMode ? '邮箱登录' : t('auth.formTitle') }}
+              </p>
+              <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                {{ isLoginMode ? '已注册用户请输入邮箱获取验证码' : t('auth.formHint') }}
+              </p>
             </div>
             <RouterLink to="/" class="text-sm font-medium text-zinc-500 transition hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white">
               {{ t('auth.backHome') }}
             </RouterLink>
           </div>
 
-          <form class="mt-8 space-y-5" @submit.prevent="step === 1 ? sendCode() : submit()">
-            <label class="block">
+          <div class="mt-6 flex gap-2">
+            <button
+              type="button"
+              @click="isLoginMode = false"
+              :class="[
+                'flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition',
+                !isLoginMode
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-150 dark:bg-white/5 dark:text-zinc-400'
+              ]"
+            >
+              免费试用
+            </button>
+            <button
+              type="button"
+              @click="isLoginMode = true"
+              :class="[
+                'flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition',
+                isLoginMode
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-150 dark:bg-white/5 dark:text-zinc-400'
+              ]"
+            >
+              已有账号登录
+            </button>
+          </div>
+
+          <form class="mt-6 space-y-5" @submit.prevent="step === 1 ? sendCode() : submit()">
+            <label v-if="!isLoginMode" class="block">
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.name') }}</span>
               <input
                 v-model="form.name"
@@ -119,21 +150,27 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { registerTrial, sendVerificationCode } from '../api/account.js'
+import { registerTrial, sendVerificationCode, emailLogin } from '../api/account.js'
 
 const { t, tm } = useI18n()
 const router = useRouter()
 
-const step = ref(1)  // 1=填信息发验证码, 2=填验证码注册
+const isLoginMode = ref(false)  // 登录/注册模式切换
+const step = ref(1)  // 1=填信息发验证码, 2=填验证码注册/登录
 const form = reactive({ name: '', email: '', verification_code: '' })
 const submitting = ref(false)
 const sending = ref(false)
 const codeSent = ref(false)
 const error = ref('')
 const resendCooldown = ref(0)
+
+// 切换模式时重置状态
+watch(isLoginMode, () => {
+  resetStep()
+})
 
 const featureCards = computed(() => {
   const raw = tm('auth.features')
@@ -156,7 +193,7 @@ function resetStep() {
 }
 
 async function sendCode() {
-  if (sending.value || !form.name.trim() || !form.email) return
+  if (sending.value || (!isLoginMode.value && !form.name.trim()) || !form.email) return
   sending.value = true
   error.value = ''
   try {
@@ -176,7 +213,13 @@ async function submit() {
   submitting.value = true
   error.value = ''
   try {
-    await registerTrial(form)
+    if (isLoginMode.value) {
+      // 登录模式：只需邮箱 + 验证码
+      await emailLogin({ email: form.email, verification_code: form.verification_code })
+    } else {
+      // 注册模式：需要姓名 + 邮箱 + 验证码
+      await registerTrial(form)
+    }
     router.push({ name: 'workspace' })
   } catch (err) {
     error.value = err.message || t('auth.failed')

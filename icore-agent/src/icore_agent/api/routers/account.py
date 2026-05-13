@@ -31,6 +31,18 @@ class TrialRegistrationResponse(BaseModel):
     user: dict
 
 
+class EmailLoginRequest(BaseModel):
+    """邮箱 + 验证码登录（已注册用户）"""
+    email: EmailStr
+    verification_code: str = Field(..., min_length=6, max_length=6)
+
+
+class EmailLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
+
+
 class ByokRequest(BaseModel):
     api_key: str = ""
     api_base: str = ""
@@ -95,6 +107,23 @@ async def send_verification_code(req: SendVerificationCodeRequest, request: Requ
     return SendVerificationCodeResponse(success=True, message=message)
 
 
+@router.post("/login", response_model=EmailLoginResponse)
+async def email_login(req: EmailLoginRequest) -> EmailLoginResponse:
+    """邮箱 + 验证码登录（已注册用户，无 IP 限流）"""
+    # 验证验证码
+    if not control_plane_store.verify_code(req.email, req.verification_code):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 查找已有用户
+    user = control_plane_store.get_user_by_email(req.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="该邮箱尚未注册，请先注册试用账号")
+
+    # 签发新 token
+    token = control_plane_store.issue_token_for_user(user["id"])
+    return EmailLoginResponse(access_token=token, user=user)
+
+
 @router.post("/register-trial", response_model=TrialRegistrationResponse)
 async def register_trial(req: TrialRegistrationRequest, request: Request) -> TrialRegistrationResponse:
     """注册试用账号（需要邮箱验证码 + IP 限流：同一 IP 24 小时内只能注册 1 次）"""
@@ -104,7 +133,15 @@ async def register_trial(req: TrialRegistrationRequest, request: Request) -> Tri
     if not control_plane_store.verify_code(req.email, req.verification_code):
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
-    # IP 限流检查
+    # 检查是否已注册（如果已注册，引导去登录）
+    existing_user = control_plane_store.get_user_by_email(req.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="该邮箱已注册，请使用「邮箱登录」功能"
+        )
+
+    # IP 限流检查（仅针对新注册）
     if not control_plane_store.check_ip_registration_limit(client_ip):
         raise HTTPException(status_code=429, detail="同一 IP 24 小时内只能注册 1 次账号")
 

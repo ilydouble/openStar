@@ -30,6 +30,17 @@ export async function registerTrial({ name, email, verification_code }) {
   return payload
 }
 
+export async function emailLogin({ email, verification_code }) {
+  const resp = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, verification_code }),
+  })
+  const payload = await parseJson(resp)
+  setSession(payload.access_token, payload.user)
+  return payload
+}
+
 export async function captureLead(payload) {
   const resp = await fetch(`${BASE}/leads`, {
     method: 'POST',

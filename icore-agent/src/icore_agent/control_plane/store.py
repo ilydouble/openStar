@@ -370,6 +370,24 @@ class ControlPlaneStore:
                 self._save(data)
             return user
 
+    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        """根据邮箱查找用户（不存在返回 None）"""
+        with self._lock:
+            data = self._load()
+            for user in data["users"].values():
+                if user["email"].lower() == email.lower():
+                    self._ensure_org_for_user(data, user)
+                    user["updated_at"] = int(time.time())
+                    self._save(data)
+                    return user
+            return None
+
+    def issue_token_for_user(self, user_id: str) -> str:
+        """为指定用户签发新 token（用于登录）"""
+        with self._lock:
+            data = self._load()
+            return self._issue_token(data, user_id)
+
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
         now = int(time.time())
         with self._lock:

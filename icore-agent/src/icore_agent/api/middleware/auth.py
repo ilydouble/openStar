@@ -24,6 +24,7 @@ log = structlog.get_logger()
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}
 _PUBLIC_PREFIXES = (
     "/api/v1/account/register-trial",
+    "/api/v1/account/login",
     "/api/v1/account/send-verification-code",
     "/api/v1/account/leads",
 )

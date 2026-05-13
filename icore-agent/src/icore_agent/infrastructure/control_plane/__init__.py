@@ -1,13 +1,25 @@
 """Control-plane-backed infrastructure adapters."""
 
 from .adapters import (
-    ControlPlaneAccountRepository,
     ControlPlaneBillingRepository,
+    ControlPlaneBillingSummaryRepository,
+    ControlPlaneIdentityRepository,
+    ControlPlaneLeadRepository,
+    ControlPlaneProjectRepository,
+    ControlPlaneRegistrationRepository,
+    ControlPlaneTeamRepository,
     ControlPlaneUsageRepository,
+    ControlPlaneVerificationRepository,
 )
 
 __all__ = [
-    "ControlPlaneAccountRepository",
     "ControlPlaneBillingRepository",
+    "ControlPlaneBillingSummaryRepository",
+    "ControlPlaneIdentityRepository",
+    "ControlPlaneLeadRepository",
+    "ControlPlaneProjectRepository",
+    "ControlPlaneRegistrationRepository",
+    "ControlPlaneTeamRepository",
     "ControlPlaneUsageRepository",
+    "ControlPlaneVerificationRepository",
 ]

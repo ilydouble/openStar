@@ -7,24 +7,16 @@ from typing import Any
 from ...control_plane.store import ControlPlaneStore
 
 
-class ControlPlaneAccountRepository:
-    """Adapter exposing only account/team/project operations from the control-plane store."""
+class ControlPlaneIdentityRepository:
+    """Adapter exposing only identity and token lookup operations."""
 
     def __init__(self, store: ControlPlaneStore) -> None:
-        """Create an account repository adapter bound to one control-plane store."""
+        """Create an identity repository adapter bound to one control-plane store."""
         self._store = store
 
     def get_user_by_token(self, token: str) -> dict[str, Any] | None:
         """Load a user by bearer token."""
         return self._store.get_user_by_token(token)
-
-    def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
-        """Request an email verification code."""
-        return self._store.send_verification_code(email, client_ip)
-
-    def verify_code(self, email: str, code: str) -> bool:
-        """Validate an email verification code."""
-        return self._store.verify_code(email, code)
 
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         """Load a user by email address."""
@@ -34,6 +26,30 @@ class ControlPlaneAccountRepository:
         """Issue a new access token for an existing user."""
         return self._store.issue_token_for_user(user_id)
 
+
+class ControlPlaneVerificationRepository:
+    """Adapter exposing verification delivery and validation operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a verification repository adapter bound to one control-plane store."""
+        self._store = store
+
+    def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
+        """Request an email verification code."""
+        return self._store.send_verification_code(email, client_ip)
+
+    def verify_code(self, email: str, code: str) -> bool:
+        """Validate an email verification code."""
+        return self._store.verify_code(email, code)
+
+
+class ControlPlaneRegistrationRepository:
+    """Adapter exposing registration-specific persistence operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a registration repository adapter bound to one control-plane store."""
+        self._store = store
+
     def check_ip_registration_limit(self, client_ip: str) -> bool:
         """Check whether the IP-based registration limit still allows one more signup."""
         return self._store.check_ip_registration_limit(client_ip)
@@ -42,9 +58,25 @@ class ControlPlaneAccountRepository:
         """Register a new trial/free account."""
         return self._store.register_trial(name, email, client_ip)
 
+
+class ControlPlaneLeadRepository:
+    """Adapter exposing lead capture operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a lead repository adapter bound to one control-plane store."""
+        self._store = store
+
     def create_lead(self, **payload: Any) -> dict[str, Any]:
         """Store a lead capture record."""
         return self._store.create_lead(**payload)
+
+
+class ControlPlaneTeamRepository:
+    """Adapter exposing organization and team management operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a team repository adapter bound to one control-plane store."""
+        self._store = store
 
     def get_team_profile(self, user_id: str) -> dict[str, Any]:
         """Return the organization profile for one user."""
@@ -62,6 +94,14 @@ class ControlPlaneAccountRepository:
         """Persist the team's knowledge sharing scope."""
         return self._store.update_knowledge_scope(user_id, scope)
 
+
+class ControlPlaneProjectRepository:
+    """Adapter exposing project and session metadata operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a project repository adapter bound to one control-plane store."""
+        self._store = store
+
     def sync_project_session(self, **payload: Any) -> dict[str, Any]:
         """Sync project and session metadata."""
         return self._store.sync_project_session(**payload)
@@ -69,6 +109,14 @@ class ControlPlaneAccountRepository:
     def list_projects(self, user_id: str) -> dict[str, Any]:
         """List projects owned by a user."""
         return self._store.list_projects(user_id)
+
+
+class ControlPlaneBillingSummaryRepository:
+    """Adapter exposing plan summary and BYOK operations."""
+
+    def __init__(self, store: ControlPlaneStore) -> None:
+        """Create a billing summary repository adapter bound to one control-plane store."""
+        self._store = store
 
     def get_plan_summary(self, user_id: str) -> dict[str, Any]:
         """Return the current billing plan summary for one user."""

@@ -17,10 +17,10 @@ from starlette.responses import JSONResponse, Response
 
 from ...config import settings
 from ...control_plane import control_plane_store
-from ...infrastructure.control_plane import ControlPlaneAccountRepository
+from ...infrastructure.control_plane import ControlPlaneIdentityRepository
 
 log = structlog.get_logger()
-account_repository = ControlPlaneAccountRepository(control_plane_store)
+account_repository = ControlPlaneIdentityRepository(control_plane_store)
 
 # Paths that skip auth entirely
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}

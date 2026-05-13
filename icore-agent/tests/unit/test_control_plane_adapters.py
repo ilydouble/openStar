@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from icore_agent.infrastructure.control_plane.adapters import (
-    ControlPlaneAccountRepository,
     ControlPlaneBillingRepository,
+    ControlPlaneBillingSummaryRepository,
+    ControlPlaneIdentityRepository,
+    ControlPlaneLeadRepository,
+    ControlPlaneProjectRepository,
+    ControlPlaneRegistrationRepository,
+    ControlPlaneTeamRepository,
     ControlPlaneUsageRepository,
+    ControlPlaneVerificationRepository,
 )
 
 
@@ -100,14 +106,33 @@ class FakeControlPlaneStore:
         self.calls.append(("record_usage_event", (), payload))
 
 
-def test_account_adapter_delegates_account_and_project_calls():
+def test_split_account_adapters_delegate_to_the_expected_store_methods():
     store = FakeControlPlaneStore()
-    repo = ControlPlaneAccountRepository(store)
+    identity_repo = ControlPlaneIdentityRepository(store)
+    verification_repo = ControlPlaneVerificationRepository(store)
+    registration_repo = ControlPlaneRegistrationRepository(store)
+    lead_repo = ControlPlaneLeadRepository(store)
+    team_repo = ControlPlaneTeamRepository(store)
+    project_repo = ControlPlaneProjectRepository(store)
+    billing_summary_repo = ControlPlaneBillingSummaryRepository(store)
 
-    assert repo.get_user_by_token("tok") == {"id": "u1"}
-    repo.sync_project_session(user_id="u1", project_id="p1")
+    assert identity_repo.get_user_by_token("tok") == {"id": "u1"}
+    verification_repo.send_verification_code("a@example.com", "127.0.0.1")
+    registration_repo.register_trial("Trial", "a@example.com", "127.0.0.1")
+    lead_repo.create_lead(email="lead@example.com")
+    team_repo.get_team_profile("u1")
+    project_repo.sync_project_session(user_id="u1", project_id="p1")
+    billing_summary_repo.get_plan_summary("u1")
 
-    assert [name for name, *_ in store.calls[:2]] == ["get_user_by_token", "sync_project_session"]
+    assert [name for name, *_ in store.calls] == [
+        "get_user_by_token",
+        "send_verification_code",
+        "register_trial",
+        "create_lead",
+        "get_team_profile",
+        "sync_project_session",
+        "get_plan_summary",
+    ]
 
 
 def test_usage_and_billing_adapters_delegate_to_control_plane_store():

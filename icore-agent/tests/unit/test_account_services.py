@@ -3,8 +3,8 @@ from __future__ import annotations
 from icore_agent.application.account.service import AccountService
 
 
-class FakeAccountStore:
-    """Minimal store double used to verify account service orchestration."""
+class FakeIdentityRepository:
+    """Repository double for user identity and token lookup flows."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple, dict]] = []
@@ -26,6 +26,36 @@ class FakeAccountStore:
         self.calls.append(("get_user_by_email", (email,), {}))
         return None
 
+    def issue_token_for_user(self, user_id: str) -> str:
+        self.calls.append(("issue_token_for_user", (user_id,), {}))
+        return f"issued:{user_id}"
+
+
+class FakeVerificationRepository:
+    """Repository double for email verification flows."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
+    def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
+        self.calls.append(("send_verification_code", (email, client_ip), {}))
+        return True, f"sent:{email}:{client_ip}"
+
+    def check_ip_registration_limit(self, client_ip: str) -> bool:
+        self.calls.append(("check_ip_registration_limit", (client_ip,), {}))
+        return True
+
+    def verify_code(self, email: str, code: str) -> bool:
+        self.calls.append(("verify_code", (email, code), {}))
+        return code == "123456"
+
+
+class FakeRegistrationRepository:
+    """Repository double for registration-specific persistence."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
     def check_ip_registration_limit(self, client_ip: str) -> bool:
         self.calls.append(("check_ip_registration_limit", (client_ip,), {}))
         return True
@@ -34,13 +64,23 @@ class FakeAccountStore:
         self.calls.append(("register_trial", (name, email, client_ip), {}))
         return {"id": "u1", "email": email, "plan": "free"}, "tok"
 
-    def issue_token_for_user(self, user_id: str) -> str:
-        self.calls.append(("issue_token_for_user", (user_id,), {}))
-        return f"issued:{user_id}"
+
+class FakeLeadRepository:
+    """Repository double for lead capture persistence."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
 
     def create_lead(self, **payload) -> dict:
         self.calls.append(("create_lead", (), payload))
         return payload | {"id": "lead-1"}
+
+
+class FakeUsageRepository:
+    """Repository double for usage and quota related operations."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
 
     def usage_summary(self, user_id: str) -> dict:
         self.calls.append(("usage_summary", (user_id,), {}))
@@ -50,6 +90,20 @@ class FakeAccountStore:
         self.calls.append(("admin_overview", (), {}))
         return {"users": {"total": 1}}
 
+    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str | None]:
+        self.calls.append(("check_quota", (user_id, resource), {}))
+        return True, None
+
+    def consume_quota(self, user_id: str, resource: str) -> None:
+        self.calls.append(("consume_quota", (user_id, resource), {}))
+
+
+class FakeBillingSummaryRepository:
+    """Repository double for plan summary and BYOK settings."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
     def get_plan_summary(self, user_id: str) -> dict:
         self.calls.append(("get_plan_summary", (user_id,), {}))
         return {"user_id": user_id, "plan": "free"}
@@ -58,6 +112,13 @@ class FakeAccountStore:
         self.calls.append(("update_byok", (user_id, api_key, api_base, model), {}))
         return {"enabled": True, "model": model}
 
+
+class FakeProjectRepository:
+    """Repository double for project/session metadata."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
     def sync_project_session(self, **payload) -> dict:
         self.calls.append(("sync_project_session", (), payload))
         return payload
@@ -65,6 +126,13 @@ class FakeAccountStore:
     def list_projects(self, user_id: str) -> dict:
         self.calls.append(("list_projects", (user_id,), {}))
         return {"projects": [{"id": "p1"}]}
+
+
+class FakeTeamRepository:
+    """Repository double for team and organization management."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
 
     def get_team_profile(self, user_id: str) -> dict:
         self.calls.append(("get_team_profile", (user_id,), {}))
@@ -84,8 +152,19 @@ class FakeAccountStore:
 
 
 def test_account_service_registers_trial_after_validation():
-    store = FakeAccountStore()
-    service = AccountService(store)
+    identity = FakeIdentityRepository()
+    verification = FakeVerificationRepository()
+    registration = FakeRegistrationRepository()
+    service = AccountService(
+        identity_repository=identity,
+        verification_repository=verification,
+        registration_repository=registration,
+        lead_repository=FakeLeadRepository(),
+        team_repository=FakeTeamRepository(),
+        project_repository=FakeProjectRepository(),
+        billing_summary_repository=FakeBillingSummaryRepository(),
+        usage_repository=FakeUsageRepository(),
+    )
 
     user, token = service.register_trial(
         name="Trial User",
@@ -96,16 +175,25 @@ def test_account_service_registers_trial_after_validation():
 
     assert token == "tok"
     assert user["email"] == "trial@example.com"
-    assert [call[0] for call in store.calls[:4]] == [
-        "verify_code",
-        "get_user_by_email",
+    assert [call[0] for call in verification.calls] == ["verify_code"]
+    assert [call[0] for call in identity.calls] == ["get_user_by_email"]
+    assert [call[0] for call in registration.calls] == [
         "check_ip_registration_limit",
         "register_trial",
     ]
 
 
 def test_account_service_rejects_missing_bearer_token():
-    service = AccountService(FakeAccountStore())
+    service = AccountService(
+        identity_repository=FakeIdentityRepository(),
+        verification_repository=FakeVerificationRepository(),
+        registration_repository=FakeRegistrationRepository(),
+        lead_repository=FakeLeadRepository(),
+        team_repository=FakeTeamRepository(),
+        project_repository=FakeProjectRepository(),
+        billing_summary_repository=FakeBillingSummaryRepository(),
+        usage_repository=FakeUsageRepository(),
+    )
 
     try:
         service.get_current_user("")
@@ -113,3 +201,23 @@ def test_account_service_rejects_missing_bearer_token():
         assert str(exc) == "Missing Bearer token"
     else:
         raise AssertionError("expected missing bearer token to be rejected")
+
+
+def test_account_service_uses_usage_repository_for_quota_checks():
+    usage = FakeUsageRepository()
+    service = AccountService(
+        identity_repository=FakeIdentityRepository(),
+        verification_repository=FakeVerificationRepository(),
+        registration_repository=FakeRegistrationRepository(),
+        lead_repository=FakeLeadRepository(),
+        team_repository=FakeTeamRepository(),
+        project_repository=FakeProjectRepository(),
+        billing_summary_repository=FakeBillingSummaryRepository(),
+        usage_repository=usage,
+    )
+
+    allowed, reason = service.check_quota("u1", "messages")
+    service.consume_quota("u1", "messages")
+
+    assert (allowed, reason) == (True, None)
+    assert [call[0] for call in usage.calls] == ["check_quota", "consume_quota"]

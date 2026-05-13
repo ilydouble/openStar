@@ -78,10 +78,10 @@ _PLAN_LIMITS = {
         "label": "Trial",
     },
     "free": {
-        "message_limit": 80,
-        "token_limit": 240_000,
-        "image_limit": 20,
-        "attachment_limit": 40,
+        "message_limit": 5,
+        "token_limit": 3_000,
+        "image_limit": 1,
+        "attachment_limit": 1,
         "label": "Free",
     },
     "team": {

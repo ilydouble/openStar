@@ -189,16 +189,16 @@ export default {
       cta: '进入工作台',
       tiers: [
         {
-          name: '免费版',
+          name: '体验版',
           price: '¥0',
           period: '/月',
-          audience: '适合个人开发者与初创小团队试用',
-          description: '零门槛体验iCore核心工作流与多语言出海能力。',
+          audience: '适合首次体验产品功能',
+          description: '极限额度体验iCore核心工作流，完成产品验证后可升级套餐。',
           badge: '',
           featured: false,
           link: '/auth',
-          cta: '开始试用',
-          features: ['每月80条消息', '每月24万Token', '核心出海场景体验'],
+          cta: '开始体验',
+          features: ['限 5 条消息', '限 3,000 Token', '每月重置'],
         },
         {
           name: '团队版',

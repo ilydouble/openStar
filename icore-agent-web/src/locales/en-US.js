@@ -189,16 +189,16 @@ export default {
       cta: 'Open workspace',
       tiers: [
         {
-          name: 'Free',
+          name: 'Starter',
           price: '¥0',
           period: '/mo',
-          audience: 'For individual developers and early-stage teams',
-          description: 'A low-friction way to experience iCore core workflows and multilingual growth capabilities.',
+          audience: 'For first-time product exploration',
+          description: 'Very limited quota to experience iCore core workflows. Upgrade to a paid plan after validation.',
           badge: '',
           featured: false,
           link: '/auth',
-          cta: 'Start free',
-          features: ['80 messages/mo', '240K tokens/mo', 'Core cross-border workflow experience'],
+          cta: 'Start exploring',
+          features: ['5 messages only', '3,000 tokens only', 'Resets monthly'],
         },
         {
           name: 'Team',

@@ -60,6 +60,7 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     monkeypatch.setenv("ICORE_AGENT_DOTENV_DIR", str(dotenv_dir))
     for key in (
         "APP_NAME",
+        "BACKEND_PORT_BIND",
         "DB_HOST",
         "DB_INTERNAL_PORT",
         "DB_HOST_PORT",

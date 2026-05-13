@@ -10,6 +10,7 @@ load_domain_dotenvs()
 import litellm
 import structlog
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -60,7 +61,23 @@ def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
 litellm.success_callback = [_log_token_usage]
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Log startup and shutdown without relying on deprecated FastAPI events."""
+    log.info(
+        "icore_agent_started",
+        version=settings.app_version,
+        debug=settings.debug,
+        model=settings.model_id,
+    )
+    try:
+        yield
+    finally:
+        log.info("icore_agent_stopped")
+
+
 def create_app() -> FastAPI:
+    """Build the FastAPI application with all middleware and routers attached."""
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
@@ -70,6 +87,7 @@ def create_app() -> FastAPI:
         ),
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
+        lifespan=lifespan,
     )
 
     # ── CORS ──────────────────────────────────────────────
@@ -101,20 +119,6 @@ def create_app() -> FastAPI:
         tags=["payment"],
         dependencies=[Depends(get_current_user)],
     )
-
-    # ── Lifecycle ─────────────────────────────────────────
-    @app.on_event("startup")
-    async def _startup() -> None:
-        log.info(
-            "icore_agent_started",
-            version=settings.app_version,
-            debug=settings.debug,
-            model=settings.model_id,
-        )
-
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        log.info("icore_agent_stopped")
 
     return app
 

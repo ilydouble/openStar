@@ -21,6 +21,13 @@ def client():
         yield c
 
 
+def _auth_headers(client: TestClient) -> dict[str, str]:
+    from .test_account_flow import _register_trial_direct
+
+    payload = _register_trial_direct(client)
+    return {"Authorization": f"Bearer {payload['access_token']}"}
+
+
 # ── Health endpoints ───────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
@@ -56,6 +63,7 @@ def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, cli
     resp = client.post(
         "/api/v1/agent/chat",
         json={"message": "Hello", "stream": False, "session_id": "test-session"},
+        headers=_auth_headers(client),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -77,6 +85,7 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
     resp = client.post(
         "/api/v1/agent/sequential",
         json={"task": "ls -la", "use_docker": False},
+        headers=_auth_headers(client),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -91,7 +100,7 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 def test_clear_session(mock_memory, mock_attachments, client):
     mock_memory.clear = AsyncMock()
     mock_attachments.clear = AsyncMock()
-    resp = client.delete("/api/v1/agent/session/my-session")
+    resp = client.delete("/api/v1/agent/session/my-session", headers=_auth_headers(client))
     assert resp.status_code == 200
     assert resp.json()["cleared"] is True
     mock_memory.clear.assert_awaited_once_with("my-session")
@@ -104,6 +113,7 @@ def test_clear_session(mock_memory, mock_attachments, client):
 @patch("icore_agent.engine.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
+
     create_orchestrator()
     _, model_kwargs = mock_model_cls.call_args
     assert model_kwargs["model_id"] == settings.model_id

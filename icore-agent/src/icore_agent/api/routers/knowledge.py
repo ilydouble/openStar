@@ -7,77 +7,19 @@ DELETE /api/v1/knowledge/documents/{filename} — remove a document
 
 from __future__ import annotations
 
-import io
-import re
 import structlog
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from ...memory.chroma_store import add_documents, list_documents, get_collection
-from ...config import settings
-from .account import get_current_user
+from ...application.knowledge import SUPPORTED_EXTENSIONS
+from ...application.knowledge.service import KnowledgeService
+from ..dependencies import get_current_user, get_knowledge_service
 
 log = structlog.get_logger()
 router = APIRouter()
 
-SUPPORTED_TYPES = {
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-    "text/markdown",
-}
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
-
-
-# ── Document parsing ──────────────────────────────────────────────────────────
-
-def _parse_txt(data: bytes) -> str:
-    return data.decode("utf-8", errors="replace")
-
-
-def _parse_pdf(data: bytes) -> str:
-    from pypdf import PdfReader
-    reader = PdfReader(io.BytesIO(data))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
-
-
-def _parse_docx(data: bytes) -> str:
-    from docx import Document
-    doc = Document(io.BytesIO(data))
-    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-
-
-def _parse_file(filename: str, data: bytes) -> str:
-    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext == ".pdf":
-        return _parse_pdf(data)
-    if ext == ".docx":
-        return _parse_docx(data)
-    return _parse_txt(data)   # .txt / .md / fallback
-
-
-# ── Chunking ──────────────────────────────────────────────────────────────────
-
-def _chunk_text(text: str, size: int, overlap: int) -> list[str]:
-    """Split text into overlapping character-level chunks, breaking on whitespace."""
-    if not text.strip():
-        return []
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + size, len(text))
-        # Try to break on whitespace boundary
-        if end < len(text):
-            boundary = text.rfind(" ", start, end)
-            if boundary > start:
-                end = boundary
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        start = end - overlap if end - overlap > start else end
-    return chunks
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -93,16 +35,6 @@ class DocumentInfo(BaseModel):
     chunks: int
 
 
-def _resolve_tenant_code(user: dict, tenant_code: str, scope: str) -> str:
-    if tenant_code.strip():
-        return tenant_code.strip()
-    if scope == "private":
-        return user["id"]
-    if scope == "organization":
-        return f"org:{user.get('organization_id', '')}"
-    return ""
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/upload", response_model=UploadResponse, summary="Upload a document to the knowledge base")
@@ -111,6 +43,7 @@ async def upload_document(
     tenant_code: Annotated[str, Form(description="Tenant identifier (leave empty for shared KB)")] = "",
     scope: Annotated[str, Form(description="private | organization | shared")] = "organization",
     user: dict = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
 ) -> UploadResponse:
     ext = "." + file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
     if ext not in SUPPORTED_EXTENSIONS:
@@ -120,28 +53,25 @@ async def upload_document(
         )
 
     data = await file.read()
-    if len(data) > settings.file_ops_max_size_mb * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"File exceeds {settings.file_ops_max_size_mb} MB limit")
-
     try:
-        text = _parse_file(file.filename or "upload", data)
+        service.ensure_file_size(data)
+        text = service.parse_document(file.filename or "upload", data)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except Exception as exc:
         log.error("knowledge_parse_error", filename=file.filename, error=str(exc))
         raise HTTPException(status_code=422, detail=f"Failed to parse file: {exc}") from exc
 
-    chunks = _chunk_text(text, settings.rag_chunk_size, settings.rag_chunk_overlap)
-    if not chunks:
-        raise HTTPException(status_code=422, detail="File appears to be empty or unreadable")
-
-    metadatas = [
-        {"filename": file.filename, "chunk_index": i, "source": file.filename}
-        for i in range(len(chunks))
-    ]
-
-    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
+    resolved_tenant = service.resolve_tenant_code(user, tenant_code=tenant_code, scope=scope)
 
     try:
-        stored = add_documents(chunks=chunks, metadatas=metadatas, tenant_code=resolved_tenant)
+        stored = service.store_document(
+            filename=file.filename or "",
+            text=text,
+            tenant_code=resolved_tenant,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         log.error("knowledge_store_error", filename=file.filename, error=str(exc))
         raise HTTPException(status_code=500, detail=f"Failed to store document: {exc}") from exc
@@ -155,9 +85,10 @@ async def list_knowledge_documents(
     tenant_code: str = "",
     scope: Annotated[str, Query(description="private | organization | shared")] = "organization",
     user: dict = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
 ) -> list[DocumentInfo]:
-    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
-    docs = list_documents(tenant_code=resolved_tenant)
+    resolved_tenant = service.resolve_tenant_code(user, tenant_code=tenant_code, scope=scope)
+    docs = service.list_documents(tenant_code=resolved_tenant)
     return [DocumentInfo(**d) for d in docs]
 
 
@@ -167,14 +98,12 @@ async def delete_document(
     tenant_code: str = "",
     scope: Annotated[str, Query(description="private | organization | shared")] = "organization",
     user: dict = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
 ) -> dict:
-    resolved_tenant = _resolve_tenant_code(user, tenant_code, scope)
-    col = get_collection(tenant_code=resolved_tenant)
-    # Get all chunk IDs for this filename
-    results = col.get(where={"filename": filename}, include=["metadatas"])
-    ids = results.get("ids") or []
-    if not ids:
-        raise HTTPException(status_code=404, detail=f"Document '{filename}' not found")
-    col.delete(ids=ids)
-    log.info("knowledge_deleted", filename=filename, tenant=resolved_tenant or "shared", chunks=len(ids))
-    return {"deleted": True, "filename": filename, "chunks_removed": len(ids)}
+    resolved_tenant = service.resolve_tenant_code(user, tenant_code=tenant_code, scope=scope)
+    try:
+        deleted = service.delete_document(filename=filename, tenant_code=resolved_tenant)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    log.info("knowledge_deleted", filename=filename, tenant=resolved_tenant or "shared", chunks=deleted)
+    return {"deleted": True, "filename": filename, "chunks_removed": deleted}

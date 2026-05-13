@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from '../auth/session.js'
+import { readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
 
@@ -9,21 +10,8 @@ const BASE = '/api/v1/agent'
  * @returns {Promise<never>}
  */
 export async function readAgentError(resp) {
-  let detail = ''
-
-  try {
-    const contentType = resp.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      const payload = await resp.json()
-      detail = String(payload?.detail || payload?.message || '').trim()
-    } else {
-      detail = String(await resp.text()).trim()
-    }
-  } catch {
-    detail = ''
-  }
-
-  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
+  await readJsonResponse(resp)
+  throw new Error(`HTTP ${resp.status}`)
 }
 
 /**

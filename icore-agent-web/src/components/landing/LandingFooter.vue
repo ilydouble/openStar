@@ -66,6 +66,7 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { setLocalePreference } from '../../stores/preferences.js'
 
 const { t, tm, locale } = useI18n()
 const currentLocale = computed(() => locale.value)
@@ -81,6 +82,6 @@ const extraServices = computed(() => {
  */
 function toggleLocale() {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
-  localStorage.setItem('locale', locale.value)
+  setLocalePreference(locale.value)
 }
 </script>

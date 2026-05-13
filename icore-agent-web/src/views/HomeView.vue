@@ -570,6 +570,12 @@ import {
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
+import {
+  getRecentSessions,
+  getWorkspaceOnboardingComplete,
+  setRecentSessions,
+  setWorkspaceOnboardingComplete,
+} from '../stores/workspace.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import SearchBar from '../components/SearchBar.vue'
@@ -586,10 +592,9 @@ const sidebarMobileOpen = ref(false)
 
 // Onboarding: 首次访问时弹出场景选择引导
 const showOnboarding = ref(false)
-const ONBOARDING_KEY = 'icore_onboarding_completed'
 
 onMounted(() => {
-  const completed = localStorage.getItem(ONBOARDING_KEY)
+  const completed = getWorkspaceOnboardingComplete()
   if (!completed && !route.params.sessionId) {
     // 延迟 500ms 弹出，让用户先看到工作台界面
     setTimeout(() => {
@@ -605,7 +610,7 @@ function handleOnboardingScenario(agentHint) {
     activeShortcutId.value = agentHint
     searchRefHome.value?.focus?.()
   }
-  localStorage.setItem(ONBOARDING_KEY, 'true')
+  setWorkspaceOnboardingComplete(undefined, true)
   showOnboarding.value = false
 }
 
@@ -705,8 +710,6 @@ const recentProjects = computed(() => {
     updatedAt: project.updated_at,
   }))
 })
-
-const RECENT_SESSIONS_KEY = 'icore_recent_sessions'
 
 /** 输入区只展示文档等非图片、非数据会话附件；图片与数据文件仅在对话气泡中展示 */
 const composerAttachments = computed(() =>
@@ -923,12 +926,7 @@ const SHORTCUT_HINT = {
 }
 
 function hydrateRecentSessions() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RECENT_SESSIONS_KEY) || '[]')
-    recentSessions.value = Array.isArray(raw) ? raw : []
-  } catch {
-    recentSessions.value = []
-  }
+  recentSessions.value = getRecentSessions()
 }
 
 async function loadProjects() {
@@ -946,7 +944,7 @@ async function loadProjects() {
         attachmentCount: item.attachment_count || 0,
         updatedAt: item.updated_at,
       }))
-      localStorage.setItem(RECENT_SESSIONS_KEY, JSON.stringify(recentSessions.value))
+      setRecentSessions(undefined, recentSessions.value)
     }
   } catch {
     projectRecords.value = []
@@ -971,7 +969,7 @@ function saveRecentSession(meta = {}) {
     },
     ...current,
   ].slice(0, 8)
-  localStorage.setItem(RECENT_SESSIONS_KEY, JSON.stringify(recentSessions.value))
+  setRecentSessions(undefined, recentSessions.value)
 }
 
 async function syncCurrentProject(meta = {}) {

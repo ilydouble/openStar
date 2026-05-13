@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
-from ...control_plane import control_plane_store
+from ...application.account import AccountService
+from ..dependencies import get_account_service
 
 router = APIRouter()
 
@@ -85,22 +86,29 @@ class LeadCaptureRequest(BaseModel):
     intent: str = Field(default="demo", pattern="^(demo|enterprise|upgrade-team|upgrade-enterprise)$")
 
 
-def get_current_user(authorization: str = Header(default="")) -> dict:
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Bearer token")
-    token = authorization[7:].strip()
-    user = control_plane_store.get_user_by_token(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return user
+def get_current_user(
+    authorization: str = Header(default=""),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    """Resolve the current user through the account application service."""
+    try:
+        return service.get_current_user(authorization)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 @router.post("/send-verification-code", response_model=SendVerificationCodeResponse)
-async def send_verification_code(req: SendVerificationCodeRequest, request: Request) -> SendVerificationCodeResponse:
+async def send_verification_code(
+    req: SendVerificationCodeRequest,
+    request: Request,
+    service: AccountService = Depends(get_account_service),
+) -> SendVerificationCodeResponse:
     """发送邮箱验证码（同一 IP 24 小时内最多发送 3 次）"""
     client_ip = request.client.host if request.client else "unknown"
 
-    success, message = control_plane_store.send_verification_code(req.email, client_ip)
+    success, message = service.send_verification_code(req.email, client_ip)
     if not success:
         raise HTTPException(status_code=429, detail=message)
 
@@ -108,50 +116,49 @@ async def send_verification_code(req: SendVerificationCodeRequest, request: Requ
 
 
 @router.post("/login", response_model=EmailLoginResponse)
-async def email_login(req: EmailLoginRequest) -> EmailLoginResponse:
+async def email_login(
+    req: EmailLoginRequest,
+    service: AccountService = Depends(get_account_service),
+) -> EmailLoginResponse:
     """邮箱 + 验证码登录（已注册用户，无 IP 限流）"""
-    # 验证验证码
-    if not control_plane_store.verify_code(req.email, req.verification_code):
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
-
-    # 查找已有用户
-    user = control_plane_store.get_user_by_email(req.email)
-    if not user:
-        raise HTTPException(status_code=404, detail="该邮箱尚未注册，请先注册试用账号")
-
-    # 签发新 token
-    token = control_plane_store.issue_token_for_user(user["id"])
+    try:
+        user, token = service.login_with_email_code(req.email, req.verification_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return EmailLoginResponse(access_token=token, user=user)
 
 
 @router.post("/register-trial", response_model=TrialRegistrationResponse)
-async def register_trial(req: TrialRegistrationRequest, request: Request) -> TrialRegistrationResponse:
+async def register_trial(
+    req: TrialRegistrationRequest,
+    request: Request,
+    service: AccountService = Depends(get_account_service),
+) -> TrialRegistrationResponse:
     """注册试用账号（需要邮箱验证码 + IP 限流：同一 IP 24 小时内只能注册 1 次）"""
     client_ip = request.client.host if request.client else "unknown"
 
-    # 验证验证码
-    if not control_plane_store.verify_code(req.email, req.verification_code):
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
-
-    # 检查是否已注册（如果已注册，引导去登录）
-    existing_user = control_plane_store.get_user_by_email(req.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=400,
-            detail="该邮箱已注册，请使用「邮箱登录」功能"
+    try:
+        user, token = service.register_trial(
+            name=req.name,
+            email=req.email,
+            verification_code=req.verification_code,
+            client_ip=client_ip,
         )
-
-    # IP 限流检查（仅针对新注册）
-    if not control_plane_store.check_ip_registration_limit(client_ip):
-        raise HTTPException(status_code=429, detail="同一 IP 24 小时内只能注册 1 次账号")
-
-    user, token = control_plane_store.register_trial(req.name, req.email, client_ip)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     return TrialRegistrationResponse(access_token=token, user=user)
 
 
 @router.post("/leads")
-async def capture_lead(req: LeadCaptureRequest) -> dict:
-    lead = control_plane_store.create_lead(
+async def capture_lead(
+    req: LeadCaptureRequest,
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    lead = service.capture_lead(
         name=req.name,
         email=req.email,
         company=req.company,
@@ -171,36 +178,48 @@ async def get_me(user: dict = Depends(get_current_user)) -> dict:
 
 
 @router.get("/usage/summary")
-async def get_usage_summary(user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.usage_summary(user["id"])
+async def get_usage_summary(
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.get_usage_summary(user["id"])
 
 
 @router.get("/admin/overview")
-async def get_admin_overview(user: dict = Depends(get_current_user)) -> dict:
-    # 只允许拥有 owner 或 admin 角色的用户访问运营总览
-    roles = user.get("roles") or []
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."
-        )
-    return control_plane_store.admin_overview()
+async def get_admin_overview(
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    try:
+        return service.get_admin_overview(user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.get("/billing/plan")
-async def get_plan(user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.get_plan_summary(user["id"])
+async def get_plan(
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.get_plan(user["id"])
 
 
 @router.post("/billing/byok")
-async def update_byok(req: ByokRequest, user: dict = Depends(get_current_user)) -> dict:
-    byok = control_plane_store.update_byok(user["id"], req.api_key, req.api_base, req.model)
-    return byok
+async def update_byok(
+    req: ByokRequest,
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.update_byok(user["id"], req.api_key, req.api_base, req.model)
 
 
 @router.post("/projects/sync")
-async def sync_project(req: ProjectSyncRequest, user: dict = Depends(get_current_user)) -> dict:
-    project = control_plane_store.sync_project_session(
+async def sync_project(
+    req: ProjectSyncRequest,
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    project = service.sync_project(
         user_id=user["id"],
         project_id=req.project_id,
         project_title=req.project_title,
@@ -214,28 +233,46 @@ async def sync_project(req: ProjectSyncRequest, user: dict = Depends(get_current
 
 
 @router.get("/projects")
-async def list_projects(user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.list_projects(user["id"])
+async def list_projects(
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.list_projects(user["id"])
 
 
 @router.get("/team")
-async def get_team(user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.get_team_profile(user["id"])
+async def get_team(
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.get_team(user["id"])
 
 
 @router.post("/team/rename")
-async def rename_team(req: OrganizationRenameRequest, user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.rename_organization(user["id"], req.organization_name)
+async def rename_team(
+    req: OrganizationRenameRequest,
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.rename_team(user["id"], req.organization_name)
 
 
 @router.post("/team/members")
-async def add_team_member(req: TeamMemberRequest, user: dict = Depends(get_current_user)) -> dict:
-    member = control_plane_store.add_team_member(
+async def add_team_member(
+    req: TeamMemberRequest,
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    member = service.add_team_member(
         user["id"], name=req.name, email=req.email, role=req.role
     )
     return {"member": member}
 
 
 @router.post("/team/knowledge-scope")
-async def update_team_knowledge_scope(req: KnowledgeScopeRequest, user: dict = Depends(get_current_user)) -> dict:
-    return control_plane_store.update_knowledge_scope(user["id"], req.scope)
+async def update_team_knowledge_scope(
+    req: KnowledgeScopeRequest,
+    user: dict = Depends(get_current_user),
+    service: AccountService = Depends(get_account_service),
+) -> dict:
+    return service.update_team_knowledge_scope(user["id"], req.scope)

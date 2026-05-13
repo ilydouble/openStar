@@ -16,20 +16,51 @@ the sub-agent's reply into a final user-facing response.
 from typing import TYPE_CHECKING
 
 import structlog
-from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
-from strands.agent.conversation_manager.sliding_window_conversation_manager import (
-    SlidingWindowConversationManager,
-)
-from strands.tools.executors import SequentialToolExecutor
+
+try:
+    from strands import Agent, tool
+    from strands.models.litellm import LiteLLMModel
+    from strands.agent.conversation_manager.sliding_window_conversation_manager import (
+        SlidingWindowConversationManager,
+    )
+    from strands.tools.executors import SequentialToolExecutor
+    _STRANDS_IMPORT_ERROR: ModuleNotFoundError | None = None
+except ModuleNotFoundError as exc:
+    _STRANDS_IMPORT_ERROR = exc
+
+    class Agent:  # type: ignore[no-redef]
+        """Fallback placeholder that keeps imports patchable in tests."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    class LiteLLMModel:  # type: ignore[no-redef]
+        """Fallback placeholder mirroring the real model constructor."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    class SlidingWindowConversationManager:  # type: ignore[no-redef]
+        """Fallback placeholder for conversation manager construction."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    class SequentialToolExecutor:  # type: ignore[no-redef]
+        """Fallback placeholder for the tool executor dependency."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    def tool(func):  # type: ignore[no-redef]
+        """Return the function unchanged when Strands is unavailable in tests."""
+        return func
 
 from ..config import settings
-from .agents.research import research_agent_tool
-from .agents.code import code_agent_tool
-from .agents.knowledge import knowledge_agent_tool as _knowledge_agent_tool_raw
-from .agents.image import image_agent_tool as _image_agent_tool_raw
-from .agents.data import data_agent_tool
-
 if TYPE_CHECKING:
     pass
 
@@ -152,6 +183,10 @@ def _build_system_prompt(
 
 def _make_scoped_image_tool(session_id: str):
     """Bind session_id into image_agent_tool so the LLM doesn't have to pass it."""
+    try:
+        from .agents.image import image_agent_tool as _image_agent_tool_raw
+    except ModuleNotFoundError:
+        return _missing_tool("image_agent_tool")
 
     @tool
     def image_agent_tool(task: str, image_source: str = "") -> str:
@@ -183,6 +218,10 @@ def _make_scoped_knowledge_tool(session_id: str):
     tenant_code=session_id; without this closure the LLM passes "" and hits
     the shared collection, missing every session-scoped upload.
     """
+    try:
+        from .agents.knowledge import knowledge_agent_tool as _knowledge_agent_tool_raw
+    except ModuleNotFoundError:
+        return _missing_tool("knowledge_agent_tool")
 
     @tool
     def knowledge_agent_tool(query: str) -> str:
@@ -202,6 +241,16 @@ def _make_scoped_knowledge_tool(session_id: str):
         return _knowledge_agent_tool_raw(query=query, tenant_code=session_id)
 
     return knowledge_agent_tool
+
+
+def _missing_tool(name: str):
+    """Create a placeholder tool when optional agent dependencies are unavailable."""
+
+    def _tool(*args, **kwargs) -> str:
+        raise RuntimeError(f"{name} is unavailable because optional agent dependencies are missing")
+
+    _tool.__name__ = name
+    return _tool
 
 
 def create_orchestrator(
@@ -252,6 +301,15 @@ def create_orchestrator(
     conversation_manager = SlidingWindowConversationManager(window_size=40)
 
     if enable_tools:
+        try:
+            from .agents.code import code_agent_tool
+            from .agents.data import data_agent_tool
+            from .agents.research import research_agent_tool
+        except ModuleNotFoundError:
+            research_agent_tool = _missing_tool("research_agent_tool")
+            code_agent_tool = _missing_tool("code_agent_tool")
+            data_agent_tool = _missing_tool("data_agent_tool")
+
         tools = [
             research_agent_tool,
             code_agent_tool,

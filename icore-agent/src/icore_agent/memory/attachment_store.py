@@ -18,6 +18,7 @@ import structlog
 import redis.asyncio as aioredis
 from typing import Any
 
+from ..application.knowledge.text import chunk_text
 from ..config import settings
 
 log = structlog.get_logger()
@@ -110,12 +111,11 @@ class AttachmentStore:
     async def _migrate_to_rag(self, session_id: str, att: dict[str, Any]) -> None:
         """Move an inline attachment into ChromaDB (tenant scoped by session_id)."""
         from ..memory.chroma_store import add_documents
-        from ..api.routers.knowledge import _chunk_text  # reuse existing chunker
 
         text = att.get("text", "")
         if not text:
             return
-        chunks = _chunk_text(text, settings.rag_chunk_size, settings.rag_chunk_overlap)
+        chunks = chunk_text(text, settings.rag_chunk_size, settings.rag_chunk_overlap)
         metadatas = [
             {"filename": att["filename"], "chunk_index": i, "source": att["filename"]}
             for i in range(len(chunks))

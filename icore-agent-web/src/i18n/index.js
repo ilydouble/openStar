@@ -1,6 +1,7 @@
 import { createI18n } from 'vue-i18n'
 import zhCN from '../locales/zh-CN.js'
 import enUS from '../locales/en-US.js'
+import { getLocalePreference } from '../stores/preferences.js'
 
 const messages = {
   'zh-CN': zhCN,
@@ -9,7 +10,7 @@ const messages = {
 
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('locale') || 'zh-CN',
+  locale: getLocalePreference(),
   fallbackLocale: 'en-US',
   messages,
 })

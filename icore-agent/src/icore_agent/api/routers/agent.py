@@ -24,14 +24,15 @@ from typing import Annotated
 
 from fastapi import File, Form, UploadFile
 
+from ...application.account import AccountService
+from ...application.knowledge import SUPPORTED_EXTENSIONS, parse_file
 from ...config import settings
-from ...control_plane import clear_runtime_user, control_plane_store, set_runtime_user
-from ...api.routers.account import get_current_user
+from ...control_plane import clear_runtime_user, set_runtime_user
 from ...engine.callback_ctx import set_parent_callback, reset_parent_callback
 from ...engine.sequential import SequentialAgent
 from ...memory.conversation import memory
 from ...memory.attachment_store import attachments
-from ...api.routers.knowledge import _parse_file, SUPPORTED_EXTENSIONS
+from ..dependencies import get_account_service, get_current_user
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -385,8 +386,12 @@ async def _stream_agent(
 
 
 @router.post("/chat", summary="Chat with the agent (SSE streaming)")
-async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
-    allowed, reason = control_plane_store.check_quota(user["id"], "messages")
+async def chat(
+    req: ChatRequest,
+    user: dict = Depends(get_current_user),
+    account_service: AccountService = Depends(get_account_service),
+):
+    allowed, reason = account_service.check_quota(user["id"], "messages")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
     intent, enable_tools, effective_hint = _resolve_routing(req.message, req.agent_hint)
@@ -400,7 +405,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     )
 
     if req.stream:
-        control_plane_store.consume_quota(user["id"], "messages")
+        account_service.consume_quota(user["id"], "messages")
         return StreamingResponse(
             _stream_agent(req.message, req.session_id, req.agent_hint, runtime_user=user),
             media_type="text/event-stream",
@@ -423,7 +428,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         enable_tools = True
     loop = asyncio.get_event_loop()
     try:
-        control_plane_store.consume_quota(user["id"], "messages")
+        account_service.consume_quota(user["id"], "messages")
 
         def _invoke() -> str:
             runtime_token = set_runtime_user(user)
@@ -530,8 +535,9 @@ async def attach_document(
     file: Annotated[UploadFile, File(description="PDF, DOCX, TXT, or MD file")],
     session_id: Annotated[str, Form(description="Session ID to attach the document to")],
     user: dict = Depends(get_current_user),
+    account_service: AccountService = Depends(get_account_service),
 ) -> AttachResponse:
-    allowed, reason = control_plane_store.check_quota(user["id"], "attachments")
+    allowed, reason = account_service.check_quota(user["id"], "attachments")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
     ext = "." + file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
@@ -543,14 +549,14 @@ async def attach_document(
         raise HTTPException(status_code=413,
                             detail=f"File exceeds {settings.file_ops_max_size_mb} MB limit")
     try:
-        text = _parse_file(file.filename or "upload", data)
+        text = parse_file(file.filename or "upload", data)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Failed to parse file: {exc}") from exc
     if not text.strip():
         raise HTTPException(status_code=422, detail="File appears to be empty or unreadable")
 
     att = await attachments.add(session_id, file.filename or "upload", text)
-    control_plane_store.consume_quota(user["id"], "attachments")
+    account_service.consume_quota(user["id"], "attachments")
     log.info("attachment_added", session_id=session_id,
              filename=att["filename"], mode=att["mode"], chars=att["char_count"])
     return AttachResponse(filename=att["filename"], char_count=att["char_count"], mode=att["mode"])
@@ -580,8 +586,9 @@ async def attach_image(
     file: Annotated[UploadFile, File(description="JPG, PNG, WEBP, BMP or GIF image")],
     session_id: Annotated[str, Form(description="Session ID to attach the image to")],
     user: dict = Depends(get_current_user),
+    account_service: AccountService = Depends(get_account_service),
 ) -> ImageAttachResponse:
-    allowed, reason = control_plane_store.check_quota(user["id"], "images")
+    allowed, reason = account_service.check_quota(user["id"], "images")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
     filename = file.filename or "image"
@@ -599,7 +606,7 @@ async def attach_image(
             detail=f"Image exceeds {settings.image_upload_max_mb} MB limit",
         )
     record = await attachments.add_image(session_id, filename, data)
-    control_plane_store.consume_quota(user["id"], "images")
+    account_service.consume_quota(user["id"], "images")
     return ImageAttachResponse(
         filename=record["filename"], ref=record["ref"], size=record["size"]
     )
@@ -625,8 +632,9 @@ async def attach_data(
     file: Annotated[UploadFile, File(description="CSV, XLSX or XLS file")],
     session_id: Annotated[str, Form(description="Session ID to attach the data file to")],
     user: dict = Depends(get_current_user),
+    account_service: AccountService = Depends(get_account_service),
 ) -> DataAttachResponse:
-    allowed, reason = control_plane_store.check_quota(user["id"], "attachments")
+    allowed, reason = account_service.check_quota(user["id"], "attachments")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
     filename = file.filename or "data"
@@ -644,7 +652,7 @@ async def attach_data(
             detail=f"Data file exceeds {settings.data_upload_max_mb} MB limit",
         )
     record = await attachments.add_data(session_id, filename, data)
-    control_plane_store.consume_quota(user["id"], "attachments")
+    account_service.consume_quota(user["id"], "attachments")
     return DataAttachResponse(
         filename=record["filename"],
         ref=record["ref"],

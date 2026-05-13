@@ -223,6 +223,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { setLocalePreference } from '../stores/preferences.js'
 import ThemeToggle from './ThemeToggle.vue'
 
 const emit = defineEmits(['new', 'navigate'])
@@ -280,7 +281,7 @@ function closeMore() {
 
 function toggleLocale() {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
-  localStorage.setItem('locale', locale.value)
+  setLocalePreference(locale.value)
   closeMore()
 }
 

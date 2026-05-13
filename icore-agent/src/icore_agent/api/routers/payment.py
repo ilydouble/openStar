@@ -7,9 +7,8 @@ Payment & Billing API
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...config import settings
-from ...control_plane.store import ControlPlaneStore
-from ..routers.account import get_current_user
+from ...application.billing import BillingService
+from ..dependencies import get_billing_service, get_current_user
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
@@ -55,6 +54,7 @@ class OrderResponse(BaseModel):
 async def create_checkout_session(
     req: CreateCheckoutSessionRequest,
     user: dict = Depends(get_current_user),
+    service: BillingService = Depends(get_billing_service),
 ):
     """
     创建 Stripe Checkout Session（当前 Mock）
@@ -64,16 +64,11 @@ async def create_checkout_session(
     - 配置 success_url / cancel_url
     - 设置 metadata: user_id, plan, billing_period
     """
-    user_id = user["id"]
-
-    # Mock: 返回模拟的 checkout URL
-    mock_session_id = f"cs_mock_{user_id[:8]}"
-    mock_url = f"{settings.icore_base_url or 'http://localhost:8080'}/payment/mock-checkout?session={mock_session_id}"
-
-    return CheckoutSessionResponse(
-        checkout_url=mock_url,
-        session_id=mock_session_id,
-    )
+    return CheckoutSessionResponse(**service.create_checkout_session(
+        user_id=user["id"],
+        plan=req.plan,
+        billing_period=req.billing_period,
+    ))
 
 
 @router.post("/webhook/stripe")
@@ -97,36 +92,23 @@ async def stripe_webhook(
 async def upgrade_plan(
     req: UpgradePlanRequest,
     user: dict = Depends(get_current_user),
+    service: BillingService = Depends(get_billing_service),
 ):
     """
     手动升级套餐（适用于 BYOK 或线下付款场景）
 
     不经过 Stripe，直接更新用户套餐。
     """
-    user_id = user["id"]
-    store = ControlPlaneStore(settings.control_plane_store_path)
-    
-    if req.plan not in ("team", "enterprise", "byok"):
-        raise HTTPException(400, "Invalid plan")
-    
-    # 如果是 BYOK，必须提供 key
-    if req.plan == "byok" and not req.byok_api_key:
-        raise HTTPException(400, "BYOK plan requires API key")
-    
-    user = store.update_user_plan(
-        user_id=user_id,
-        new_plan=req.plan,
-        byok_enabled=(req.plan == "byok"),
-        byok_api_key=req.byok_api_key or "",
-        byok_api_base=req.byok_api_base or "",
-        byok_model=req.byok_model or "",
-    )
-    
-    return {
-        "success": True,
-        "plan": user["plan"],
-        "plan_label": user["plan_label"],
-    }
+    try:
+        return service.upgrade_plan(
+            user_id=user["id"],
+            plan=req.plan,
+            byok_api_key=req.byok_api_key,
+            byok_api_base=req.byok_api_base,
+            byok_model=req.byok_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/orders", response_model=list[OrderResponse])

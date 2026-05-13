@@ -1,11 +1,13 @@
 /** Theme: Tailwind dark mode via `class="dark"` on <html>. */
 
+import { getBrowserStorage, readStoredString, writeStoredString } from './stores/browserStorage.js'
+
 export const THEME_STORAGE_KEY = 'icore-theme'
 
 export function initTheme() {
   const root = document.documentElement
   try {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY)
+    const saved = readStoredString(getBrowserStorage(), THEME_STORAGE_KEY, '')
     if (saved === 'light') root.classList.remove('dark')
     else root.classList.add('dark')
   } catch {
@@ -19,12 +21,13 @@ export function isDark() {
 
 export function applyTheme(mode) {
   const root = document.documentElement
+  const storage = getBrowserStorage()
   if (mode === 'light') {
     root.classList.remove('dark')
-    localStorage.setItem(THEME_STORAGE_KEY, 'light')
+    writeStoredString(storage, THEME_STORAGE_KEY, 'light')
   } else {
     root.classList.add('dark')
-    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+    writeStoredString(storage, THEME_STORAGE_KEY, 'dark')
   }
   window.dispatchEvent(new CustomEvent('icore-theme-change'))
 }

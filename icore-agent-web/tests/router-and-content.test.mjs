@@ -37,3 +37,21 @@ test('landing keeps api.stellarmesh.net in footer extra services instead of a st
     assert.ok(locale.landing.footer?.extraServices?.length >= 1, 'expected at least one extra service entry')
   }
 })
+
+test('landing copy matches the updated homepage messaging from 网站修改.docx', () => {
+  assert.equal(zhCN.landing.hero.title, '告别零散工具与重复劳动 一套AI工作流标准化出海全流程')
+  assert.equal(zhCN.landing.hero.panel.focusTitle, '统一运营驾驶舱整合内容、知识与增长全链路')
+  assert.equal(zhCN.landing.solutions.title, '覆盖出海全周期 五大标准化核心工作流')
+  assert.equal(zhCN.landing.results.items[1].body, '告别外包翻译依赖，实现多语言内容批量自动化生产，同时保障品牌语气统一与内容迭代效率。')
+  assert.equal(zhCN.landing.workflow.subtitle, '从素材接入到成果交付，iCore 是企业专属的 AI 数字运营底盘，而非普通对话式 AI 工具。')
+  assert.equal(zhCN.landing.plans.title, '全梯度服务体系，从试用体验到企业级定制交付')
+  assert.equal(zhCN.landing.finalCta.title, 'iCore：专注为出海团队创造可量化业务结果')
+
+  assert.equal(enUS.landing.hero.title, 'Replace scattered tools and repeated labor with one standardized AI workflow for cross-border growth')
+  assert.equal(enUS.landing.hero.panel.focusTitle, 'One operating cockpit unifies content, knowledge, and growth execution')
+  assert.equal(enUS.landing.solutions.title, 'Five standardized core workflows across the full cross-border growth cycle')
+  assert.equal(enUS.landing.results.items[1].label, '60% lower multilingual content cost')
+  assert.equal(enUS.landing.workflow.subtitle, 'From material intake to deliverables, iCore acts as a dedicated AI operating foundation instead of a generic chat tool.')
+  assert.equal(enUS.landing.plans.title, 'A full service ladder from trial access to enterprise-grade custom delivery')
+  assert.equal(enUS.landing.finalCta.title, 'iCore: built to create measurable business results for cross-border teams')
+})

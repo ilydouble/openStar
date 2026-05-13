@@ -132,6 +132,7 @@
               class="w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950"
             >
               <span v-if="step === 1">{{ sending ? t('auth.sending') : t('auth.sendCode') }}</span>
+              <span v-else-if="isLoginMode">{{ submitting ? '登录中...' : '登录' }}</span>
               <span v-else>{{ submitting ? t('auth.loading') : t('auth.submit') }}</span>
             </button>
             <p v-if="error" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">

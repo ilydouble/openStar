@@ -3,6 +3,30 @@ import { buildAuthHeaders } from '../auth/session.js'
 const BASE = '/api/v1/agent'
 
 /**
+ * Parse an agent API error response and preserve structured backend details when available.
+ *
+ * @param {Response} resp
+ * @returns {Promise<never>}
+ */
+export async function readAgentError(resp) {
+  let detail = ''
+
+  try {
+    const contentType = resp.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const payload = await resp.json()
+      detail = String(payload?.detail || payload?.message || '').trim()
+    } else {
+      detail = String(await resp.text()).trim()
+    }
+  } catch {
+    detail = ''
+  }
+
+  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
+}
+
+/**
  * 后端或代理有时会把整段回复塞进「一条」token。若前端一次性 append，Vue
  * 会合并更新，表现成「唰一下整段出现」。将长串拆成多段 yield，让 for-await
  * 每步都能 await，从而一帧一帧刷新。
@@ -54,7 +78,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   })
 
   if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+    await readAgentError(resp)
   }
 
   const reader = resp.body.getReader()
@@ -128,7 +152,7 @@ export async function chat(message, sessionId, agentHint = '') {
       agent_hint: agentHint || '',
     }),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) await readAgentError(resp)
   return resp.json()
 }
 
@@ -141,7 +165,7 @@ export async function runSequential(task, useDocker = false) {
     headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) await readAgentError(resp)
   return resp.json()
 }
 
@@ -153,7 +177,7 @@ export async function clearSession(sessionId) {
     method: 'DELETE',
     headers: buildAuthHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) await readAgentError(resp)
   return resp.json()
 }
 
@@ -161,7 +185,7 @@ export async function getSessionState(sessionId) {
   const resp = await fetch(`${BASE}/session/${sessionId}`, {
     headers: buildAuthHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) await readAgentError(resp)
   return resp.json()
 }
 
@@ -188,8 +212,7 @@ export async function attachFile(file, sessionId) {
     body: form,
   })
   if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
-    throw new Error(detail.detail || `HTTP ${resp.status}`)
+    await readAgentError(resp)
   }
   return resp.json()
 }
@@ -210,8 +233,7 @@ export async function attachImage(file, sessionId) {
     body: form,
   })
   if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
-    throw new Error(detail.detail || `HTTP ${resp.status}`)
+    await readAgentError(resp)
   }
   return resp.json()
 }
@@ -234,8 +256,7 @@ export async function attachData(file, sessionId) {
     body: form,
   })
   if (!resp.ok) {
-    const detail = await resp.json().catch(() => ({ detail: resp.statusText }))
-    throw new Error(detail.detail || `HTTP ${resp.status}`)
+    await readAgentError(resp)
   }
   return resp.json()
 }
@@ -256,7 +277,7 @@ export async function listAttachments(sessionId) {
   const resp = await fetch(`${BASE}/attachments/${sessionId}`, {
     headers: buildAuthHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) await readAgentError(resp)
   return resp.json()
 }
 

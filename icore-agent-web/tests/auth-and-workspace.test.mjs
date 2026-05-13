@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
+import { readAgentError } from '../src/api/agent.js'
 import { routes } from '../src/router.js'
 import zhCN from '../src/locales/zh-CN.js'
 import enUS from '../src/locales/en-US.js'
@@ -39,4 +40,26 @@ test('home sidebar links only use registered workspace route names', () => {
 
   assert.ok(sidebarSource.includes(":to=\"{ name: 'workspace' }\""), 'expected workspace route link in sidebar')
   assert.ok(!sidebarSource.includes(":to=\"{ name: 'chat' }\""), 'expected sidebar to avoid removed chat route name')
+})
+
+test('agent api surfaces quota detail instead of a generic request failure', async () => {
+  const quotaResponse = new Response(JSON.stringify({ detail: 'messages quota exceeded for trial' }), {
+    status: 402,
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const genericResponse = new Response('Internal Server Error', {
+    status: 500,
+    headers: { 'Content-Type': 'text/plain' },
+  })
+
+  await assert.rejects(
+    () => readAgentError(quotaResponse),
+    /HTTP 402: messages quota exceeded for trial/,
+    'expected quota detail to be preserved in thrown error',
+  )
+  await assert.rejects(
+    () => readAgentError(genericResponse),
+    /HTTP 500: Internal Server Error/,
+    'expected generic text fallback when no structured detail is available',
+  )
 })

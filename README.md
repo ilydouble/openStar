@@ -61,10 +61,10 @@ source venv/bin/activate  # Linux/Mac
 # 安装依赖
 pip install -e ".[dev]"
 
-# 复制环境变量配置
-cp .env.example .env
+# 复制分域环境变量配置
+for file in dotenv/.env.*.example; do cp "$file" "${file%.example}"; done
 
-# 编辑 .env 文件，配置你的模型和 API Key
+# 编辑 dotenv/.env.llm 配置你的模型和 API Key
 ```
 
 ### 前端安装
@@ -78,15 +78,15 @@ npm install
 
 ## ⚙️ 配置
 
-### 后端配置 (.env)
+### 后端配置 (dotenv/.env.{domain})
 
 ```bash
-# 主力模型配置
+# dotenv/.env.llm
 MODEL_ID=zai/glm-4.7  # 或 anthropic/claude-sonnet-4-5, openai/gpt-4o 等
 
 # Z.AI / 智谱 GLM 配置（使用 zai/* 模型时需要）
 ZAI_API_KEY=your-api-key-here
-ZAI_API_BASE=https://open.bigmodel.cn/api/paas/v4
+ZAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
 
 # 其他 Provider API Key
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -96,12 +96,22 @@ ZAI_API_BASE=https://open.bigmodel.cn/api/paas/v4
 # Agent 配置
 AGENT_MAX_TOKENS=8192
 AGENT_TEMPERATURE=0.1
+TIMEOUT_INTERVAL=30
+MAX_RETRIES=3
 
-# Redis 配置
-REDIS_URL=redis://localhost:6379/0
+# dotenv/.env.memory
+REDIS_URL=redis://redis:6379/0
 MEMORY_TTL_SECONDS=86400
 
-# 工具配置
+# dotenv/.env.database
+DB_HOST=postgres
+DB_INTERNAL_PORT=5432
+DB_HOST_PORT=5432
+DB_USER=icore_agent
+DB_PASSWORD=change-me
+DB_NAME=icore_agent_db
+
+# dotenv/.env.tools
 TAVILY_API_KEY=your-tavily-api-key
 ```
 
@@ -120,7 +130,7 @@ icore-agent
 uvicorn icore_agent.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-后端将在 http://localhost:8080 启动
+后端将在 http://localhost:10001 启动
 
 ### 启动前端
 
@@ -136,14 +146,8 @@ npm run dev
 ### 使用 Docker
 
 ```bash
-# 启动 Redis
-docker-compose up -d redis
-
-# 启动后端
-docker-compose up -d agent
-
-# 启动前端
-docker-compose up -d web
+cd icore-agent
+./compose.sh up -d --build
 ```
 
 ## 📁 项目结构
@@ -161,8 +165,8 @@ iCore/
 │   │   ├── tools/              # 工具函数
 │   │   └── main.py             # 应用入口
 │   ├── tests/                  # 测试
-│   ├── pyproject.toml          # 项目配置
-│   └── .env                    # 环境变量
+│   ├── dotenv/                 # 分域环境变量模板和本地配置
+│   └── pyproject.toml          # 项目配置
 │
 └── icore-agent-web/             # 前端应用
     ├── src/
@@ -186,7 +190,7 @@ iCore/
 
 ## 🔌 API 文档
 
-启动后端服务后，访问 http://localhost:8080/docs 查看 Swagger API 文档。
+启动后端服务后，访问 http://localhost:10001/docs 查看 Swagger API 文档。
 
 ### 主要 API 端点
 

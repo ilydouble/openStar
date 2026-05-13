@@ -242,7 +242,7 @@ def create_orchestrator(
             "max_tokens": settings.agent_max_tokens,
             "temperature": settings.agent_temperature,
             "metadata": {"session_id": session_id},
-            **settings.litellm_kwargs(),
+            **settings.litellm_kwargs(model_id=selected_model),
         },
     )
 

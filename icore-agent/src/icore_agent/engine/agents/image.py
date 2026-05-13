@@ -59,7 +59,7 @@ def _create_image_agent(session_id: str = "") -> Agent:
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": 0.3,
-            **settings.litellm_kwargs(),
+            **settings.litellm_kwargs(model_id=settings.model_id),
         },
     )
     return Agent(

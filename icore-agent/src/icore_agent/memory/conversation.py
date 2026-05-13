@@ -101,7 +101,7 @@ class ConversationMemory:
                 ],
                 max_tokens=512,
                 temperature=0.1,
-                **settings.litellm_kwargs(),
+                **settings.litellm_kwargs(model_id=settings.model_id),
             )
             summary = resp.choices[0].message.content.strip()
             log.info("conversation_summary_updated", chars=len(summary))

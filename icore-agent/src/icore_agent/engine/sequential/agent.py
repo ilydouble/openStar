@@ -66,7 +66,7 @@ class SequentialAgent:
         log.info("sequential_agent_start", task=task[:120], model=self.model)
 
         for step in range(1, self.max_steps + 1):
-            model_kwargs = settings.litellm_kwargs()
+            model_kwargs = settings.litellm_kwargs(model_id=self.model)
             model_kwargs["model"] = self.model
             model_kwargs["messages"] = messages
             resp = completion(**model_kwargs)

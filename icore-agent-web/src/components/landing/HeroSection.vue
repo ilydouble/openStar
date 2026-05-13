@@ -52,6 +52,14 @@
       <div data-reveal class="reveal-on-scroll relative" style="--reveal-delay: 120ms">
         <div class="absolute -left-8 top-10 h-24 w-24 rounded-full bg-amber-200/60 blur-3xl dark:bg-amber-300/10" />
         <div class="absolute -right-2 bottom-6 h-32 w-32 rounded-full bg-teal-200/60 blur-3xl dark:bg-teal-300/10" />
+        <div class="absolute inset-0 overflow-hidden rounded-[2.25rem] border border-white/40 opacity-50">
+          <img
+            :src="heroBackdropImage"
+            alt=""
+            class="h-full w-full object-cover opacity-35 saturate-[0.92]"
+          >
+          <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.48),rgba(255,255,255,0.14))] dark:bg-[linear-gradient(180deg,rgba(9,9,11,0.18),rgba(9,9,11,0.46))]" />
+        </div>
         <div class="absolute inset-4 rounded-[2rem] border border-white/40 opacity-50" />
         <div class="grid-paper relative rounded-[2rem] border border-black/5 bg-white/92 p-4 shadow-[0_30px_90px_-30px_rgba(24,24,27,0.35)] dark:border-white/10 dark:bg-zinc-900/82 sm:p-5 lg:p-6">
           <div class="flex items-center justify-between border-b border-zinc-200/80 pb-4 dark:border-white/10">
@@ -124,6 +132,7 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import heroBackdropImage from '../../assets/landing/hero-ops-cockpit.jpg'
 
 const { t, tm } = useI18n()
 

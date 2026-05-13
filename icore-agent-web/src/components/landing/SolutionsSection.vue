@@ -13,6 +13,19 @@
         </p>
       </div>
 
+      <div
+        data-reveal
+        class="reveal-on-scroll relative mt-10 overflow-hidden rounded-[2.25rem] border border-black/5 bg-zinc-950 shadow-[0_30px_80px_-38px_rgba(24,24,27,0.65)] dark:border-white/10"
+        style="--reveal-delay: 80ms"
+      >
+        <img
+          :src="solutionsImage"
+          alt=""
+          class="h-[240px] w-full object-cover object-center opacity-90 sm:h-[300px]"
+        >
+        <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,9,11,0.06),rgba(9,9,11,0.4))]" />
+      </div>
+
       <div class="mt-10 grid gap-5 lg:grid-cols-6">
         <article
           v-for="(item, index) in items"
@@ -49,6 +62,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import solutionsImage from '../../assets/landing/solutions-workflows.jpg'
 
 const { t, tm } = useI18n()
 const items = computed(() => {

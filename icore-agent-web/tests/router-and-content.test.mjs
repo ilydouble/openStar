@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { routes } from '../src/router.js'
 import zhCN from '../src/locales/zh-CN.js'
 import enUS from '../src/locales/en-US.js'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 test('router exposes marketing home, app workspace, and chat compatibility redirect', () => {
   const homeRoute = routes.find((route) => route.path === '/')
@@ -54,4 +54,18 @@ test('landing copy matches the updated homepage messaging from 网站修改.docx
   assert.equal(enUS.landing.workflow.subtitle, 'From material intake to deliverables, iCore acts as a dedicated AI operating foundation instead of a generic chat tool.')
   assert.equal(enUS.landing.plans.title, 'A full service ladder from trial access to enterprise-grade custom delivery')
   assert.equal(enUS.landing.finalCta.title, 'iCore: built to create measurable business results for cross-border teams')
+})
+
+test('landing visual components reference the generated image assets', () => {
+  const heroSource = readFileSync(new URL('../src/components/landing/HeroSection.vue', import.meta.url), 'utf8')
+  const solutionsSource = readFileSync(new URL('../src/components/landing/SolutionsSection.vue', import.meta.url), 'utf8')
+  const finalCtaSource = readFileSync(new URL('../src/components/landing/FinalCtaSection.vue', import.meta.url), 'utf8')
+
+  assert.ok(heroSource.includes('hero-ops-cockpit.jpg'), 'expected hero section image asset reference')
+  assert.ok(solutionsSource.includes('solutions-workflows.jpg'), 'expected solutions section image asset reference')
+  assert.ok(finalCtaSource.includes('final-cta-platform.jpg'), 'expected final CTA image asset reference')
+
+  assert.ok(existsSync(new URL('../src/assets/landing/hero-ops-cockpit.jpg', import.meta.url)), 'expected hero image asset file')
+  assert.ok(existsSync(new URL('../src/assets/landing/solutions-workflows.jpg', import.meta.url)), 'expected solutions image asset file')
+  assert.ok(existsSync(new URL('../src/assets/landing/final-cta-platform.jpg', import.meta.url)), 'expected final CTA image asset file')
 })

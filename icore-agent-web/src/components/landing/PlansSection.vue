@@ -49,6 +49,11 @@
             </span>
           </div>
 
+          <div class="mt-4 flex items-baseline gap-1">
+            <span class="text-3xl font-bold tracking-tight">{{ tier.price }}</span>
+            <span :class="tier.featured ? 'text-sm text-zinc-300 dark:text-zinc-700' : 'text-sm text-zinc-500 dark:text-zinc-400'">{{ tier.period }}</span>
+          </div>
+
           <p :class="tier.featured ? 'mt-6 text-sm leading-6 text-zinc-200 dark:text-zinc-700' : 'mt-6 text-sm leading-6 text-zinc-600 dark:text-zinc-400'">
             {{ tier.description }}
           </p>

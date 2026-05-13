@@ -15,7 +15,7 @@
             </p>
             <div class="mt-8 flex flex-col gap-3 sm:flex-row">
               <RouterLink
-                to="/enterprise?intent=demo"
+                to="/auth"
                 class="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-zinc-950 transition hover:scale-[1.02]"
               >
                 {{ t('landing.finalCta.primary') }}

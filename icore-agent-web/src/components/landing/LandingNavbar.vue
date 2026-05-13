@@ -31,7 +31,7 @@
           {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
         </button>
         <RouterLink
-          to="/enterprise?intent=demo"
+          to="/#plans"
           class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
         >
           {{ t('landing.nav.signIn') }}
@@ -112,7 +112,7 @@
         </button>
           <div class="grid grid-cols-2 gap-2">
             <RouterLink
-              to="/enterprise?intent=demo"
+              to="/#plans"
               class="rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-center text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
               @click="menuOpen = false"
             >

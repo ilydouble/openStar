@@ -9,7 +9,7 @@ export default {
   landing: {
     nav: {
       tagline: '出海增长一体化AI工作台',
-      signIn: '登录',
+      signIn: '选择方案',
       startFree: '免费试用',
       mobileCta: '试用',
       language: '语言',
@@ -204,8 +204,8 @@ export default {
           description: '将高频出海工作流标准化沉淀至团队协作体系，大幅提升知识复用率与项目交付效率。',
           badge: '推荐',
           featured: true,
-          link: '/enterprise?plan=team&intent=upgrade-team',
-          cta: '进入团队工作台',
+          link: '/auth?plan=team',
+          cta: '开始团队试用',
           features: ['团队级标准化工作流', '企业级知识与内容统一管理', '支持团队长期稳定运营'],
         },
         {
@@ -224,7 +224,7 @@ export default {
       eyebrow: '一站式出海数字运营AI平台，现已全面开放',
       title: 'iCore：专注为出海团队创造可量化业务结果',
       subtitle: '率先整合市场研究、内容生产、知识沉淀与增长复盘全链路能力于一体化工作台，持续迭代完善用户管理、配额计费、运营分析与后台管理体系。',
-      primary: '预约方案咨询',
+      primary: '免费试用',
       secondary: '查看套餐服务',
     },
     footer: {

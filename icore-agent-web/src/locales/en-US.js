@@ -9,7 +9,7 @@ export default {
   landing: {
     nav: {
       tagline: 'Integrated AI workspace for cross-border growth',
-      signIn: 'Sign in',
+      signIn: 'Plans',
       startFree: 'Start free',
       mobileCta: 'Try',
       language: 'Language',
@@ -204,8 +204,8 @@ export default {
           description: 'Standardize high-frequency cross-border workflows into a shared collaboration system and improve reuse across knowledge and delivery.',
           badge: 'Recommended',
           featured: true,
-          link: '/enterprise?plan=team&intent=upgrade-team',
-          cta: 'Open team workspace',
+          link: '/auth?plan=team',
+          cta: 'Start team trial',
           features: ['Team-level standardized workflows', 'Unified enterprise knowledge and content management', 'Built for stable long-term operations'],
         },
         {
@@ -224,7 +224,7 @@ export default {
       eyebrow: 'One integrated AI platform for cross-border digital operations, now fully open',
       title: 'iCore: built to create measurable business results for cross-border teams',
       subtitle: 'Bring market research, content production, knowledge capture, and growth reviews into one workspace, while the platform continues to evolve its user management, quota billing, operations analytics, and admin capabilities.',
-      primary: 'Book a consultation',
+      primary: 'Start free',
       secondary: 'See service tiers',
     },
     footer: {

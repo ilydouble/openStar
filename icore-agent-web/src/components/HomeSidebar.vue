@@ -47,7 +47,7 @@
         </a>
       </RouterLink>
 
-      <RouterLink :to="{ name: 'chat' }" custom v-slot="{ href, navigate, isActive }">
+      <RouterLink :to="{ name: 'workspace' }" custom v-slot="{ href, navigate, isActive }">
         <a
           :href="href"
           class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-sm font-medium transition-colors duration-200"

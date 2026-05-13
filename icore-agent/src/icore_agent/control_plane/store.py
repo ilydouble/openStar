@@ -58,7 +58,7 @@ def _send_verification_email(to_email: str, code: str) -> bool:
         })
         return True
     except Exception as exc:
-        log.error("resend_email_failed", error=str(exc), to=to_email)
+        log.error(f"resend_email_failed: {exc}, to={to_email}")
         return False
 
 _DEFAULT_USAGE = {

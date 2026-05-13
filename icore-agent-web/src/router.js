@@ -36,6 +36,15 @@ export function createAppRouter() {
   const router = createRouter({
     history: createWebHistory(),
     routes,
+    scrollBehavior(to, _from, savedPosition) {
+      if (to.hash) {
+        return { el: to.hash, behavior: 'smooth' }
+      }
+      if (savedPosition) {
+        return savedPosition
+      }
+      return { top: 0 }
+    },
   })
   router.beforeEach((to) => {
     if (to.meta?.requiresAuth && !isAuthenticated()) {

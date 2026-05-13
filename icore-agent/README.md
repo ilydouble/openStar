@@ -22,6 +22,11 @@ for file in dotenv/.env.*.example; do cp "$file" "${file%.example}"; done
 # 编辑 dotenv/.env.llm 配置你的 API Key
 
 # 启动服务
+# 方式1：本地直接运行（推荐开发时使用）
+export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+python -m uvicorn icore_agent.main:app --reload --host 0.0.0.0 --port 8080
+
+# 方式2：使用命令行工具（需要先 pip install -e .）
 icore-agent
 ```
 

@@ -16,14 +16,19 @@ from ..config import settings
 log = logging.getLogger(__name__)
 
 
+def _print_dev_verification_email(to_email: str, code: str) -> None:
+    """Print the verification code to local logs for development fallback flows."""
+    print(f"\n{'='*60}")
+    print(f"📧 [DEV] 验证码邮件 → {to_email}")
+    print(f"🔑 验证码: {code}  （10 分钟有效）")
+    print(f"{'='*60}\n")
+
+
 def _send_verification_email(to_email: str, code: str) -> bool:
-    """通过 Resend 发送验证码邮件。如果未配置 API Key，则打印到日志。"""
+    """Send a verification email through Resend, or print it locally when mail is not configured."""
     if not settings.resend_api_key:
         # 未配置时 fallback 到打印（本地开发用）
-        print(f"\n{'='*60}")
-        print(f"📧 [DEV] 验证码邮件 → {to_email}")
-        print(f"🔑 验证码: {code}  （10 分钟有效）")
-        print(f"{'='*60}\n")
+        _print_dev_verification_email(to_email, code)
         return True
 
     try:
@@ -241,6 +246,11 @@ class ControlPlaneStore:
 
             sent = _send_verification_email(email, code)
             if not sent:
+                # 本地开发环境下，邮件服务不可用时自动降级为日志验证码，避免阻塞注册流程。
+                if settings.debug:
+                    log.warning("verification_email_delivery_fallback email=%s client_ip=%s", email, client_ip)
+                    _print_dev_verification_email(email, code)
+                    return True, f"验证码已发送到 {email}，10 分钟内有效（开发模式：请查看后端日志）"
                 return False, "验证码发送失败，请稍后重试"
 
             return True, f"验证码已发送到 {email}，10 分钟内有效"

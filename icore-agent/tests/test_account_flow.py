@@ -89,6 +89,26 @@ def test_send_verification_code_endpoint(client: TestClient):
     assert resp.json()["success"] is True
 
 
+@patch("icore_agent.control_plane.store.settings.debug", True)
+@patch("icore_agent.control_plane.store._send_verification_email", return_value=False)
+def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
+    from icore_agent.control_plane import control_plane_store
+
+    with control_plane_store._lock:
+        data = control_plane_store._load()
+        data["verification_codes"] = {}
+        control_plane_store._save(data)
+
+    email = f"trial-{uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    assert "验证码已发送到" in resp.json()["message"]
+
+
 @patch("icore_agent.api.routers.agent.create_orchestrator")
 @patch("icore_agent.api.routers.agent.memory")
 def test_chat_requires_account_token(mock_memory, mock_create_orch, client: TestClient):

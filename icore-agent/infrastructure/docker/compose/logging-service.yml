@@ -1,0 +1,56 @@
+services:
+  logging-service:
+    build:
+      context: ../../../src/icore_agent/services
+      dockerfile: logging-service/Dockerfile
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        GOPROXY: ${BUILD_GOPROXY:-https://proxy.golang.org,direct}
+        GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
+        GONOPROXY: ${BUILD_GONOPROXY:-}
+        GONOSUMDB: ${BUILD_GONOSUMDB:-}
+    image: icore-logging-service:dev
+    container_name: icore-logging-service
+    restart: unless-stopped
+    environment:
+      LOGGING_SERVICE_ADDR: ${LOGGING_SERVICE_ADDR:-:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
+      LOGGING_SERVICE_DATA_DIR: /var/lib/logging-service
+      LOGGING_SERVICE_READ_HEADER_TIMEOUT: ${LOGGING_SERVICE_READ_HEADER_TIMEOUT:-5s}
+      LOGGING_SERVICE_READ_TIMEOUT: ${LOGGING_SERVICE_READ_TIMEOUT:-10s}
+      LOGGING_SERVICE_WRITE_TIMEOUT: ${LOGGING_SERVICE_WRITE_TIMEOUT:-10s}
+      LOGGING_SERVICE_IDLE_TIMEOUT: ${LOGGING_SERVICE_IDLE_TIMEOUT:-60s}
+      LOGGING_SERVICE_SHUTDOWN_TIMEOUT: ${LOGGING_SERVICE_SHUTDOWN_TIMEOUT:-10s}
+      LOGGING_CONSOLE_COLOR: ${LOGGING_CONSOLE_COLOR:-true}
+      LOGGING_BATCH_FLUSH_MS: ${LOGGING_BATCH_FLUSH_MS:-500}
+      LOGGING_QUEUE_SIZE: ${LOGGING_QUEUE_SIZE:-4096}
+      LOGGING_MAX_BATCH_SIZE: ${LOGGING_MAX_BATCH_SIZE:-512}
+      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-kafka:9092}
+      LOGGING_KAFKA_TOPIC: ${LOGGING_KAFKA_TOPIC:-logging.events.v1}
+      LOGGING_SPOOL_FILE: ${LOGGING_SPOOL_FILE:-/var/lib/logging-service/spool/events.jsonl}
+      LOGGING_ERROR_AUDIT_FILE: ${LOGGING_ERROR_AUDIT_FILE:-/var/lib/logging-service/archive/error_audit.jsonl}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},kafka,logging-service,icore-kafka,icore-logging-service
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},kafka,logging-service,icore-kafka,icore-logging-service
+    expose:
+      - '8091'
+    volumes:
+      - logging-service-data:/var/lib/logging-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - icore-net
+    healthcheck:
+      test: ['CMD', 'wget', '-Y', 'off', '-qO-', 'http://127.0.0.1:8091/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5

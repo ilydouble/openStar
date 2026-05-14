@@ -14,6 +14,7 @@ sse-starlette==2.3.6
 # ── Pydantic ──────────────────────────────────
 pydantic==2.12.5
 pydantic-settings==2.13.1
+email-validator==2.3.0
 
 # ── LLM routing ───────────────────────────────
 litellm==1.83.8

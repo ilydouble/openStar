@@ -19,6 +19,8 @@ dependencies = [
     # Pydantic
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",
+    "pydantic[email]",
+    "email-validator",
     # LLM routing (mini-SWE-agent model adapter)
     "litellm>=1.50.0",
     # HTTP client

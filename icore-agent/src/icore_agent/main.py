@@ -24,6 +24,7 @@ from .api.routers import payment as payment_router
 from .api.routers.account import get_current_user
 from .api.middleware.auth import AuthMiddleware
 from .api.dependencies import usage_service
+from .lib.http.middleware import RequestIdMiddleware
 
 log = structlog.get_logger()
 
@@ -101,6 +102,8 @@ def create_app() -> FastAPI:
     # ── Auth middleware (optional, delegates to ft-base) ──
     if settings.auth_enabled:
         app.add_middleware(AuthMiddleware)
+
+    app.add_middleware(RequestIdMiddleware)
 
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])

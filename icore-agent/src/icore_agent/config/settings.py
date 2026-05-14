@@ -5,6 +5,7 @@ from .auth import AuthSettings
 from .base import _DOMAINS
 from .database import DatabaseSettings
 from .llm import LLMSettings
+from .logging import LoggingSettings
 from .media import MediaSettings
 from .memory import MemorySettings
 from .rag import RagSettings
@@ -14,6 +15,7 @@ from .tools import ToolsSettings
 
 class Settings(
     AppSettings,
+    LoggingSettings,
     LLMSettings,
     SequentialSettings,
     MemorySettings,

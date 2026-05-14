@@ -186,6 +186,23 @@ def test_dockerfile_keeps_dependency_layer_before_source_copy():
     assert "--no-deps dist/*.whl" in dockerfile
 
 
+def test_copied_logging_client_does_not_reference_old_project_packages():
+    logger = (AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging" / "logger.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from lib.logging" not in logger
+    assert "app.core.system.request_context" not in logger
+    assert "medical_backend" not in logger
+
+
+def test_fastapi_app_installs_request_id_middleware():
+    main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(encoding="utf-8")
+
+    assert "from .lib.http.middleware import RequestIdMiddleware" in main
+    assert "app.add_middleware(RequestIdMiddleware)" in main
+
+
 def test_email_validator_dependency_is_declared_for_emailstr_models():
     pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     requirements = (AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")

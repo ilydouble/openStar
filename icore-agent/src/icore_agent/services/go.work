@@ -1,6 +1,7 @@
 go 1.22
 
 use (
+	./gateway
 	./lib-go
 	./logging-service
 	./storage-service

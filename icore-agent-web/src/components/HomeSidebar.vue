@@ -1,8 +1,8 @@
 <template>
   <aside
-    class="flex h-full min-h-0 w-[4.5rem] shrink-0 flex-col border-r border-zinc-200/80 bg-white/90 backdrop-blur-xl transition-colors duration-300 ease-out dark:border-white/[0.08] dark:bg-zinc-950 sm:w-[13.5rem]"
+    class="flex h-full min-h-0 w-[min(19rem,calc(100vw-2.5rem))] shrink-0 flex-col border-r border-zinc-200/80 bg-white/90 backdrop-blur-xl transition-colors duration-300 ease-out dark:border-white/[0.08] dark:bg-zinc-950 lg:w-[13.5rem]"
   >
-    <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-4 sm:px-3">
+    <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 pb-2 pt-4 lg:px-3">
       <button
         type="button"
         @click="onNew"
@@ -15,7 +15,7 @@
             <path stroke-linecap="round" d="M12 5v14M5 12h14" />
           </svg>
         </span>
-        <span class="hidden truncate sm:inline">{{ t('home.sidebar.new') }}</span>
+        <span class="min-w-0 truncate">{{ t('home.sidebar.new') }}</span>
       </button>
 
       <RouterLink
@@ -43,7 +43,7 @@
               />
             </svg>
           </span>
-          <span class="hidden truncate sm:inline">{{ t('home.sidebar.home') }}</span>
+          <span class="min-w-0 truncate">{{ t('home.sidebar.home') }}</span>
         </a>
       </RouterLink>
 
@@ -68,7 +68,7 @@
               />
             </svg>
           </span>
-          <span class="hidden truncate sm:inline">{{ t('home.sidebar.chat') }}</span>
+          <span class="min-w-0 truncate">{{ t('home.sidebar.chat') }}</span>
         </a>
       </RouterLink>
 
@@ -93,11 +93,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 19.5a7.5 7.5 0 0115 0" />
             </svg>
           </span>
-          <span class="hidden truncate sm:inline">{{ t('home.signIn') }}</span>
+          <span class="min-w-0 truncate">{{ t('home.signIn') }}</span>
         </a>
       </RouterLink>
 
-      <div class="mt-3 hidden sm:block">
+      <div class="mt-3">
         <p class="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
           {{ t('home.recent.title') }}
         </p>
@@ -121,7 +121,7 @@
         </p>
       </div>
 
-      <div class="mt-4 hidden sm:block">
+      <div class="mt-4">
         <p class="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
           {{ t('home.projects.title') }}
         </p>
@@ -154,7 +154,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </span>
-        <span class="hidden truncate sm:inline">{{ t('home.sidebar.flow') }}</span>
+        <span class="min-w-0 truncate">{{ t('home.sidebar.flow') }}</span>
       </div>
 
       <div ref="moreRootRef" class="relative mt-auto shrink-0 pt-1">
@@ -174,7 +174,7 @@
               <circle cx="19" cy="12" r="1.5" fill="currentColor" />
             </svg>
           </span>
-          <span class="hidden truncate sm:inline">{{ t('home.sidebar.more') }}</span>
+          <span class="min-w-0 truncate">{{ t('home.sidebar.more') }}</span>
         </button>
 
         <Transition
@@ -200,7 +200,9 @@
               <span
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-zinc-200/90 bg-zinc-50 text-[10px] font-semibold text-zinc-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-zinc-200"
               >
-                {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
+                {{
+                  currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese')
+                }}
               </span>
               <span class="min-w-0 flex-1 truncate">{{ t('home.sidebar.language') }}</span>
             </button>

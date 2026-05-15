@@ -1,9 +1,28 @@
 /**
- * Resolve localStorage safely so modules remain importable in tests and SSR-like contexts.
+ * Resolve the same persisted Storage instance for reads and writes.
+ * Prefer window/localStorage explicitly so we never mix environments (e.g. wrong global binding).
  * @returns {Storage | null}
  */
 export function getBrowserStorage() {
-  return typeof localStorage === 'undefined' ? null : localStorage
+  try {
+    if (typeof globalThis === 'undefined') return null
+    const scoped =
+      typeof globalThis.window !== 'undefined' &&
+      globalThis.window !== null &&
+      globalThis.window.localStorage
+        ? globalThis.window.localStorage
+        : typeof globalThis.localStorage !== 'undefined'
+          ? globalThis.localStorage
+          : typeof localStorage !== 'undefined'
+            ? localStorage
+            : null
+    if (!scoped || typeof scoped.getItem !== 'function') return null
+    // Probe: restricted contexts throw on access rather than exposing null.
+    void scoped.length
+    return scoped
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -28,7 +47,11 @@ export function readStoredString(storage, key, fallback = '') {
  */
 export function writeStoredString(storage, key, value) {
   if (!storage) return
-  storage.setItem(key, value)
+  try {
+    storage.setItem(key, value)
+  } catch {
+    // Quota, private mode, or security restrictions — caller may use RAM fallback for this tab.
+  }
 }
 
 /**

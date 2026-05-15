@@ -2,12 +2,14 @@
 
 POST /api/v1/agent/chat         — single-turn or multi-turn (streaming SSE)
 POST /api/v1/agent/sequential   — run a mini-SWE-agent sequential task
+POST /api/v1/agent/transcribe  — Speech-to-text via OpenAI Whisper (multipart audio)
 DELETE /api/v1/agent/session/{id} — clear conversation memory
 """
 
 from __future__ import annotations
 
 import asyncio
+import httpx
 import json
 import re
 import threading
@@ -166,6 +168,73 @@ class SequentialResponse(BaseModel):
     status: str
     output: str
     steps: int
+
+
+class TranscribeResponse(BaseModel):
+    text: str = Field(..., description="Plain text from Whisper")
+
+
+_WHISPER_MAX_BYTES = 25 * 1024 * 1024
+_OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
+
+
+async def _whisper_transcribe(
+    *,
+    audio: bytes,
+    filename: str,
+    mime: str | None,
+    language: str | None,
+) -> str:
+    """Send audio bytes to OpenAI Whisper and return transcript text."""
+    api_key = (settings.openai_api_key or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI API key is not configured (OPENAI_API_KEY / openai_api_key).",
+        )
+    if len(audio) > _WHISPER_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio exceeds {_WHISPER_MAX_BYTES // (1024 * 1024)} MB Whisper limit",
+        )
+    safe_name = (filename or "audio").replace("\r", "").replace("\n", "").strip() or "audio.webm"
+    content_type = (mime or "application/octet-stream").split(";")[0].strip()
+    files = {"file": (safe_name, audio, content_type)}
+    data: dict[str, str] = {"model": "whisper-1"}
+    if language:
+        data["language"] = language
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
+            resp = await client.post(_OPENAI_TRANSCRIBE_URL, headers=headers, files=files, data=data)
+    except httpx.RequestError as exc:
+        log.warning("whisper_request_error", error=str(exc))
+        raise HTTPException(status_code=502, detail=f"Whisper request failed: {exc}") from exc
+
+    if resp.status_code >= 400:
+        detail = resp.text
+        try:
+            payload = resp.json()
+            err = payload.get("error") if isinstance(payload, dict) else None
+            if isinstance(err, dict) and err.get("message"):
+                detail = str(err["message"])
+            elif isinstance(err, str):
+                detail = err
+        except Exception:
+            pass
+        log.warning(
+            "whisper_api_error",
+            status=resp.status_code,
+            detail_preview=detail[:200],
+        )
+        raise HTTPException(status_code=502, detail=detail or f"Whisper HTTP {resp.status_code}")
+
+    try:
+        payload = resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Invalid JSON from Whisper") from exc
+    text = (payload.get("text") or "").strip() if isinstance(payload, dict) else ""
+    return text
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────
@@ -680,6 +749,37 @@ async def attach_data(
         preview_md=record.get("preview_md") or "",
         preview_error=record.get("preview_error") or "",
     )
+
+
+# ── Speech-to-text (Whisper) ──────────────────────────────────────────────
+
+
+@router.post(
+    "/transcribe",
+    response_model=TranscribeResponse,
+    summary="Transcribe audio with OpenAI Whisper",
+)
+async def transcribe_audio(
+    file: Annotated[UploadFile, File(description="Audio file (webm, mp3, wav, m4a, …)")],
+    language: str = Form(""),
+    user: dict = Depends(get_current_user),
+) -> TranscribeResponse:
+    """Accept multipart audio from the browser, forward to Whisper, return text."""
+    _ = user
+    lang_norm = language.strip().lower()[:16]
+    base = lang_norm.split("-")[0] if lang_norm else ""
+    whisper_lang = base if base in {"zh", "en"} else ""
+    audio = await file.read()
+    if not audio:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    text = await _whisper_transcribe(
+        audio=audio,
+        filename=file.filename or "speech.webm",
+        mime=file.content_type,
+        language=whisper_lang or None,
+    )
+    log.info("whisper_transcribed", chars=len(text), whisper_lang=whisper_lang or "auto")
+    return TranscribeResponse(text=text)
 
 
 # ── Session management ────────────────────────────────────────────────────

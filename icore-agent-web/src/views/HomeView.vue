@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex h-screen min-h-0 bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
+    class="flex h-dvh min-h-0 overflow-x-hidden bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
     <OnboardingModal :show="showOnboarding" @select-scenario="handleOnboardingScenario" @close="showOnboarding = false" />
 
@@ -33,51 +33,77 @@
       </div>
 
       <header
-        class="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-8"
+        class="relative z-10 flex w-full min-w-0 shrink-0 items-center gap-x-2 gap-y-2 px-3 py-3 sm:px-8 sm:py-4"
       >
-        <div class="hidden items-center gap-2 md:flex">
-          <div
-            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+        <div class="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+          <button
+            type="button"
+            class="-ml-0.5 flex min-h-[2.75rem] min-w-[2.75rem] shrink-0 items-center justify-center rounded-xl text-zinc-600 transition-colors hover:bg-zinc-200/80 hover:text-zinc-950 lg:hidden dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+            :aria-label="t('home.sidebar.openMenu')"
+            @click="sidebarMobileOpen = true"
           >
-            <span class="font-semibold text-zinc-900 dark:text-white">
-              {{ t('home.quota.planPrefix') }}
-            </span>
-            {{ planSummary?.label || '...' }}
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          <div class="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
+            <div
+              class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">
+                {{ t('home.quota.planPrefix') }}
+              </span>
+              {{ planSummary?.label || '...' }}
+            </div>
+            <div
+              v-for="item in quotaItems"
+              :key="item.label"
+              class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
+              {{ item.value }}
+            </div>
           </div>
+
           <div
-            v-for="item in quotaItems"
-            :key="item.label"
-            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden"
           >
-            <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
-            {{ item.value }}
+            <div
+              class="shrink-0 rounded-full border border-zinc-200/80 bg-white/85 px-2.5 py-1 text-[11px] text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">
+                {{ t('home.quota.planPrefix') }}
+              </span>
+              {{ planSummary?.label || '…' }}
+            </div>
+            <div
+              v-for="item in quotaItems"
+              :key="'m-' + item.label"
+              class="shrink-0 whitespace-nowrap rounded-full border border-zinc-200/80 bg-white/85 px-2.5 py-1 text-[11px] text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
+              {{ item.value }}
+            </div>
           </div>
         </div>
-        <!-- 移动端汉堡菜单按钮（桌面端隐藏） -->
-        <button
-          type="button"
-          class="-ml-1 mr-auto flex rounded-xl p-2 text-zinc-600 transition-colors hover:bg-zinc-200/80 hover:text-zinc-950 lg:hidden dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
-          :aria-label="t('home.sidebar.openMenu')"
-          @click="sidebarMobileOpen = true"
-        >
-          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          @click="goAccount"
-          class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
-        >
-          {{ t('home.accountCenter') }}
-        </button>
-        <button
-          type="button"
-          @click="handleSignOut"
-          class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:shadow-black/30"
-        >
-          {{ t('home.signOut') }}
-        </button>
+
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            @click="goAccount"
+            class="inline-flex min-h-[2.75rem] max-w-[10.5rem] min-w-0 items-center justify-center truncate rounded-full px-3 py-2 text-xs font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 sm:max-w-none sm:px-4 sm:text-sm dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          >
+            {{ t('home.accountCenter') }}
+          </button>
+          <button
+            type="button"
+            @click="handleSignOut"
+            class="inline-flex min-h-[2.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-zinc-950 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-zinc-900/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] sm:px-4 sm:text-sm dark:bg-white dark:text-zinc-950 dark:shadow-black/30"
+          >
+            {{ t('home.signOut') }}
+          </button>
+        </div>
       </header>
 
       <main class="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -105,7 +131,7 @@
                     'dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
                     userBubbleUsesAttachLayout(msg)
                       ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5'
-                      : 'max-w-[70%] px-4 py-3',
+                      : 'max-w-[min(88%,calc(100vw-2.5rem))] px-3 py-3 min-[390px]:px-4 sm:max-w-[70%]',
                   ]"
                 >
                   <template v-if="msg.type === 'image'">
@@ -212,7 +238,7 @@
                     {{ msg.content }}
                   </template>
                 </div>
-                <div v-else class="flex max-w-[80%] gap-3">
+                <div v-else class="flex max-w-[min(92%,calc(100vw-2.5rem))] gap-2 min-[390px]:max-w-[80%] sm:gap-3">
                   <div
                     class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
                   >
@@ -495,7 +521,7 @@
 
           <div
             v-if="isChatRoute"
-            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
+            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
           >
             <!-- 附件列表（对话模式）：文档/RAG 等；图片与数据文件仅在气泡内展示 -->
             <div v-if="composerAttachments.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">

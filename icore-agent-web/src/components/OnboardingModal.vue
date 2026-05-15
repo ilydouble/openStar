@@ -7,7 +7,7 @@
         @click.self="handleSkip"
       >
         <div
-          class="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900"
+          class="relative flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-2xl dark:border-white/10 dark:bg-zinc-900"
           @click.stop
         >
           <button
@@ -20,7 +20,7 @@
             </svg>
           </button>
 
-          <div class="p-8 sm:p-12">
+          <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-6 sm:p-12">
             <div class="text-center">
               <p class="inline-flex rounded-full border border-violet-200 bg-violet-50/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 shadow-sm dark:border-violet-300/20 dark:bg-violet-300/10 dark:text-violet-200">
                 {{ t('onboarding.eyebrow') }}

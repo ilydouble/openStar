@@ -1,6 +1,20 @@
 <template>
   <div class="relative z-0 mx-auto w-full max-w-3xl">
     <div
+      v-if="voiceError"
+      role="alert"
+      class="mb-2 flex items-start gap-2 rounded-xl border border-red-200/90 bg-red-50 px-3 py-2 text-xs leading-snug text-red-700 shadow-sm dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200"
+    >
+      <span class="min-w-0 flex-1">{{ voiceError }}</span>
+      <button
+        type="button"
+        class="shrink-0 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-700 underline-offset-2 hover:underline dark:text-red-300"
+        @click="voiceError = ''"
+      >
+        {{ t('home.voice.dismissError') }}
+      </button>
+    </div>
+    <div
       :class="[
         'relative z-0 rounded-2xl border p-3 shadow-sm backdrop-blur-md transition-all duration-200',
         'hover:shadow-md focus-within:border-zinc-300/90 focus-within:shadow-md',
@@ -209,7 +223,26 @@
           </div>
         </div>
 
-        <div class="flex min-w-0 flex-1 items-center px-3">
+        <div class="flex min-w-0 flex-1 flex-col px-3">
+          <div
+            v-if="isRecordingMic"
+            class="mb-2 flex flex-col gap-1"
+            :aria-label="t('home.voice.recordingVisualizerLabel')"
+            role="status"
+          >
+            <div class="flex h-8 items-end justify-center gap-[3px] rounded-lg bg-red-500/10 px-2 py-1 dark:bg-red-500/15">
+              <div
+                v-for="(height, index) in meterBars"
+                :key="index"
+                class="w-[3px] min-h-[4px] max-h-7 shrink-0 rounded-full bg-red-500/90 transition-[height] duration-75 ease-out will-change-[height] dark:bg-red-400"
+                :style="{ height: `${height}px` }"
+              />
+            </div>
+            <p class="text-center text-[10px] font-medium uppercase tracking-wider text-red-600/90 dark:text-red-400">
+              {{ t('home.voice.recordingActive') }}
+            </p>
+          </div>
+
           <textarea
             ref="area"
             v-model="input"
@@ -230,14 +263,22 @@
         <div class="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full
-                   text-zinc-500 transition-all duration-200
-                   hover:bg-zinc-100/90 hover:text-zinc-900
-                   active:scale-90
-                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30
-                   dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+            class="relative flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-zinc-500 transition-colors duration-200 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+            :class="[
+              isRecordingMic
+                ? 'mic-live border-2 border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-950/35 dark:text-red-300'
+                : '',
+              micDisabled ? 'pointer-events-none opacity-35' : '',
+            ]"
+            :disabled="micDisabled"
+            :aria-busy="isTranscribingVoice"
+            :aria-pressed="isRecordingMic"
+            :aria-label="isTranscribingVoice ? t('home.voice.transcribingHint') : t('home.voice.micLabel')"
+            :title="t('home.voice.hintToggle')"
+            @click.stop="onMicToggle"
           >
-            <Mic class="h-[1.125rem] w-[1.125rem]" stroke-width="2" />
+            <Loader2 v-if="isTranscribingVoice" class="h-[1.125rem] w-[1.125rem] animate-spin" stroke-width="2" />
+            <Mic v-else class="h-[1.125rem] w-[1.125rem]" stroke-width="2" />
           </button>
 
           <button
@@ -283,14 +324,17 @@ import {
   Brain,
   Search,
   Mic,
+  Loader2,
   SendHorizontal,
   LayoutGrid,
   ChevronLeft,
 } from 'lucide-vue-next'
 
+import { transcribeSpeech } from '../api/agent.js'
+
 const TEXTAREA_MAX_HEIGHT = 200
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps({
   placeholder: { type: String, default: '' },
@@ -309,6 +353,309 @@ const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
 )
 
+/** Voice input: idle | recording | transcribing */
+const voiceStage = ref('idle')
+const voiceError = ref('')
+/** @type {import('vue').Ref<AbortController | null>} */
+const transcribeAbort = ref(null)
+/** @type {import('vue').Ref<MediaStream | null>} */
+const micStream = ref(null)
+/** @type {import('vue').Ref<MediaRecorder | null>} */
+const mediaRecorder = ref(null)
+/** @type {import('vue').Ref<Blob[]>} */
+const micChunks = ref([])
+/** After stop: optionally submit composer once transcription finishes */
+const voiceSubmitAfterTranscribe = ref(false)
+
+/** Level meter (px height per bar), driven by AnalyserNode during recording */
+const NUM_METER_BARS = 14
+const meterBars = ref(Array.from({ length: NUM_METER_BARS }, () => 4))
+
+let audioContext = /** @type {AudioContext | null} */ (null)
+let mediaStreamSource = /** @type {MediaStreamAudioSourceNode | null} */ (null)
+let analyserNode = /** @type {AnalyserNode | null} */ (null)
+let meterRaf = 0
+
+const isRecordingMic = computed(() => voiceStage.value === 'recording')
+const isTranscribingVoice = computed(() => voiceStage.value === 'transcribing')
+
+const micDisabled = computed(
+  () => props.streaming || props.sendBlocked || isTranscribingVoice.value,
+)
+
+function stopMeterLoop() {
+  if (meterRaf) cancelAnimationFrame(meterRaf)
+  meterRaf = 0
+  meterBars.value = Array.from({ length: NUM_METER_BARS }, () => 4)
+}
+
+function startMeterLoop() {
+  stopMeterLoop()
+  const tick = () => {
+    if (!analyserNode || voiceStage.value !== 'recording') return
+    const n = analyserNode.frequencyBinCount
+    const data = new Uint8Array(n)
+    analyserNode.getByteFrequencyData(data)
+    const binSize = Math.max(1, Math.floor(n / NUM_METER_BARS))
+    const next = []
+    for (let i = 0; i < NUM_METER_BARS; i++) {
+      let sum = 0
+      const start = i * binSize
+      const end = Math.min(n, start + binSize)
+      for (let j = start; j < end; j++) sum += data[j]
+      const avg = sum / (end - start) / 255
+      const h = Math.round(4 + avg * 26)
+      next.push(Math.min(28, Math.max(4, h)))
+    }
+    meterBars.value = next
+    meterRaf = requestAnimationFrame(tick)
+  }
+  meterRaf = requestAnimationFrame(tick)
+}
+
+function teardownAudioGraph() {
+  stopMeterLoop()
+  try {
+    mediaStreamSource?.disconnect()
+  } catch {
+    /* ignore */
+  }
+  mediaStreamSource = null
+  try {
+    analyserNode?.disconnect()
+  } catch {
+    /* ignore */
+  }
+  analyserNode = null
+  try {
+    if (audioContext && audioContext.state !== 'closed')
+      void audioContext.close()
+  } catch {
+    /* ignore */
+  }
+  audioContext = null
+}
+
+function stopMicTracks() {
+  micStream.value?.getTracks().forEach((t) => {
+    try {
+      t.stop()
+    } catch {
+      /* ignore */
+    }
+  })
+  micStream.value = null
+}
+
+function pickRecorderMime() {
+  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+  for (const c of cands) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c
+  }
+  return ''
+}
+
+function insertTranscript(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return
+  const el = area.value
+  const spacer = input.value && !input.value.endsWith(' ') ? ' ' : ''
+  const chunk = spacer + raw
+  if (!el) {
+    input.value += chunk
+    nextTick(autoGrow)
+    return
+  }
+  const start = typeof el.selectionStart === 'number' ? el.selectionStart : input.value.length
+  const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : input.value.length
+  const v = input.value
+  input.value = v.slice(0, start) + chunk + v.slice(end)
+  nextTick(() => {
+    autoGrow()
+    const pos = start + chunk.length
+    try {
+      el.selectionStart = el.selectionEnd = pos
+      el.focus()
+    } catch {
+      /* ignore */
+    }
+  })
+}
+
+async function runTranscription(blob, filename, submitAfter = false) {
+  transcribeAbort.value?.abort()
+  const ac = new AbortController()
+  transcribeAbort.value = ac
+  voiceStage.value = 'transcribing'
+  try {
+    const text = await transcribeSpeech(blob, {
+      language: locale.value,
+      signal: ac.signal,
+      filename,
+    })
+    if (text) insertTranscript(text)
+    if (submitAfter && !props.streaming && !props.sendBlocked) {
+      await nextTick()
+      handleSubmit()
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return
+    const msg = err && typeof err.message === 'string' ? err.message.trim() : ''
+    voiceError.value = msg || t('home.voice.transcribeFailed')
+  } finally {
+    if (transcribeAbort.value === ac) transcribeAbort.value = null
+    voiceStage.value = 'idle'
+  }
+}
+
+function discardActiveRecorderWithoutTranscript() {
+  teardownAudioGraph()
+  voiceSubmitAfterTranscribe.value = false
+  const rec = mediaRecorder.value
+  if (rec) {
+    rec.onstop = null
+    if (rec.state !== 'inactive') {
+      try {
+        rec.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  mediaRecorder.value = null
+  micChunks.value = []
+  stopMicTracks()
+  if (voiceStage.value !== 'transcribing') voiceStage.value = 'idle'
+}
+
+function attachRecorderStopForTranscribe(rec) {
+  rec.onstop = () => {
+    const submitAfter = voiceSubmitAfterTranscribe.value
+    voiceSubmitAfterTranscribe.value = false
+    teardownAudioGraph()
+
+    const mt = rec.mimeType || 'audio/webm'
+    const parts = micChunks.value
+    micChunks.value = []
+    mediaRecorder.value = null
+    stopMicTracks()
+
+    const blob = new Blob(parts, { type: mt })
+    if (!blob.size) {
+      voiceError.value = t('home.voice.emptyRecording')
+      voiceStage.value = 'idle'
+      if (submitAfter && !props.streaming && !props.sendBlocked) {
+        void nextTick(() => handleSubmit())
+      }
+      return
+    }
+    const ext = mt.includes('mp4') ? 'm4a' : 'webm'
+    void runTranscription(blob, `speech.${ext}`, submitAfter)
+  }
+}
+
+async function startVoiceCapture() {
+  if (props.streaming || props.sendBlocked || voiceStage.value === 'transcribing') return
+  discardActiveRecorderWithoutTranscript()
+  voiceError.value = ''
+  transcribeAbort.value?.abort()
+  transcribeAbort.value = null
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    voiceError.value = t('home.voice.micUnavailable')
+    return
+  }
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    })
+  } catch (err) {
+    voiceError.value =
+      err && err.name === 'NotAllowedError'
+        ? t('home.voice.permissionDenied')
+        : t('home.voice.micUnavailable')
+    return
+  }
+  micStream.value = stream
+
+  teardownAudioGraph()
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (AC) {
+      audioContext = new AC()
+      if (audioContext.state === 'suspended')
+        await audioContext.resume()
+      mediaStreamSource = audioContext.createMediaStreamSource(stream)
+      analyserNode = audioContext.createAnalyser()
+      analyserNode.fftSize = 256
+      analyserNode.smoothingTimeConstant = 0.62
+      mediaStreamSource.connect(analyserNode)
+      startMeterLoop()
+    }
+  } catch {
+    /* metering is optional */
+  }
+
+  micChunks.value = []
+  const mime = pickRecorderMime()
+  let rec
+  try {
+    rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
+  } catch {
+    rec = new MediaRecorder(stream)
+  }
+  mediaRecorder.value = rec
+  rec.ondataavailable = (e) => {
+    if (e.data && e.data.size) micChunks.value.push(e.data)
+  }
+  attachRecorderStopForTranscribe(rec)
+  try {
+    rec.start(250)
+    voiceStage.value = 'recording'
+  } catch {
+    discardActiveRecorderWithoutTranscript()
+    voiceError.value = t('home.voice.micUnavailable')
+  }
+}
+
+/** @param {{ submitAfter?: boolean }} [opts] */
+function stopVoiceCaptureAndTranscribe(opts = {}) {
+  const { submitAfter = false } = opts
+  voiceSubmitAfterTranscribe.value = submitAfter
+  const rec = mediaRecorder.value
+  if (!rec || rec.state === 'inactive') {
+    const wantsSubmit = submitAfter
+    discardActiveRecorderWithoutTranscript()
+    if (wantsSubmit && !props.streaming && !props.sendBlocked) void nextTick(() => handleSubmit())
+    return
+  }
+  try {
+    rec.stop()
+  } catch {
+    voiceSubmitAfterTranscribe.value = false
+    discardActiveRecorderWithoutTranscript()
+  }
+}
+
+function onMicToggle() {
+  if (micDisabled.value && voiceStage.value === 'idle') return
+  if (isTranscribingVoice.value) return
+  if (isRecordingMic.value) {
+    stopVoiceCaptureAndTranscribe({ submitAfter: false })
+    return
+  }
+  void startVoiceCapture()
+}
+
+function disposeVoiceUi() {
+  transcribeAbort.value?.abort()
+  transcribeAbort.value = null
+  discardActiveRecorderWithoutTranscript()
+}
 const input = ref('')
 const area = ref(null)
 const fileInputEl = ref(null)
@@ -329,17 +676,27 @@ const pendingTrimmedCount = ref(0)
 const pendingDataFiles = ref([])
 const pendingDataTrimmedCount = ref(0)
 
-/** 流式输出时可点停止；否则无内容、无图且无数据文件时禁用发送 */
-const mainActionDisabled = computed(
+const hasComposerPayload = computed(
   () =>
-    !props.streaming
-    && (props.sendBlocked
-      || (!input.value.trim() && !pendingImages.value.length && !pendingDataFiles.value.length)),
+    !!input.value.trim() || pendingImages.value.length > 0 || pendingDataFiles.value.length > 0,
 )
+
+/** 流式输出时可点停止；录音中可点发送以结束录音并转写后发送；转写中禁用 */
+const mainActionDisabled = computed(() => {
+  if (props.streaming) return false
+  if (props.sendBlocked) return true
+  if (isTranscribingVoice.value) return true
+  if (isRecordingMic.value) return false
+  return !hasComposerPayload.value
+})
 
 function onMainAction() {
   if (props.streaming) {
     emit('stop')
+    return
+  }
+  if (isRecordingMic.value) {
+    stopVoiceCaptureAndTranscribe({ submitAfter: true })
     return
   }
   handleSubmit()
@@ -347,6 +704,10 @@ function onMainAction() {
 
 function onEnterInTextarea() {
   if (props.streaming) return
+  if (isRecordingMic.value) {
+    stopVoiceCaptureAndTranscribe({ submitAfter: true })
+    return
+  }
   handleSubmit()
 }
 
@@ -582,6 +943,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
+  disposeVoiceUi()
   clearPendingImage()
   clearPendingDataFiles()
 })
@@ -613,3 +975,25 @@ defineExpose({
   clearPendingDataFiles,
 })
 </script>
+
+<style scoped>
+@keyframes mic-live-ring {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 2px rgb(239 68 68 / 0.55),
+      0 0 12px rgb(239 68 68 / 0.28);
+  }
+  50% {
+    opacity: 0.86;
+    box-shadow:
+      0 0 0 7px rgb(239 68 68 / 0.22),
+      0 0 18px rgb(239 68 68 / 0.42);
+  }
+}
+
+.mic-live {
+  animation: mic-live-ring 1.1s ease-in-out infinite;
+}
+</style>

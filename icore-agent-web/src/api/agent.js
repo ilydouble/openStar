@@ -1,7 +1,20 @@
-import { buildAuthHeaders } from '../auth/session.js'
+import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
+import { authTrace } from '../auth/trace.js'
 import { readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
+
+/** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
+function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
+  const token = getAccessToken()
+  const sessionTokenLen = typeof token === 'string' ? token.length : -1
+  const headers = buildAuthHeaders(extra)
+  authTrace(label, {
+    hasBearer: Boolean(headers.Authorization),
+    sessionTokenLength: sessionTokenLen,
+  })
+  return headers
+}
 
 /**
  * Parse an agent API error response and preserve structured backend details when available.
@@ -53,7 +66,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   const signal = options && options.signal
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -132,7 +145,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
 export async function chat(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -150,7 +163,7 @@ export async function chat(message, sessionId, agentHint = '') {
 export async function runSequential(task, useDocker = false) {
   const resp = await fetch(`${BASE}/sequential`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
   })
   if (!resp.ok) await readAgentError(resp)
@@ -163,7 +176,7 @@ export async function runSequential(task, useDocker = false) {
 export async function clearSession(sessionId) {
   const resp = await fetch(`${BASE}/session/${sessionId}`, {
     method: 'DELETE',
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
   return resp.json()
@@ -171,7 +184,7 @@ export async function clearSession(sessionId) {
 
 export async function getSessionState(sessionId) {
   const resp = await fetch(`${BASE}/session/${sessionId}`, {
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
   return resp.json()
@@ -196,7 +209,7 @@ export async function attachFile(file, sessionId) {
   form.append('session_id', sessionId)
   const resp = await fetch(`${BASE}/attach`, {
     method: 'POST',
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
     body: form,
   })
   if (!resp.ok) {
@@ -217,7 +230,7 @@ export async function attachImage(file, sessionId) {
   form.append('session_id', sessionId)
   const resp = await fetch(`${BASE}/attach/image`, {
     method: 'POST',
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
     body: form,
   })
   if (!resp.ok) {
@@ -240,7 +253,7 @@ export async function attachData(file, sessionId) {
   form.append('session_id', sessionId)
   const resp = await fetch(`${BASE}/attach/data`, {
     method: 'POST',
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
     body: form,
   })
   if (!resp.ok) {
@@ -263,7 +276,7 @@ export function imageUrl(ref) {
  */
 export async function listAttachments(sessionId) {
   const resp = await fetch(`${BASE}/attachments/${sessionId}`, {
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
   return resp.json()
@@ -277,8 +290,32 @@ export async function listAttachments(sessionId) {
 export async function removeAttachment(sessionId, filename) {
   const resp = await fetch(
     `${BASE}/attachments/${sessionId}/${encodeURIComponent(filename)}`,
-    { method: 'DELETE', headers: buildAuthHeaders() },
+    { method: 'DELETE', headers: mergeAgentAuthHeaders() },
   )
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
+}
+
+/**
+ * Transcribe microphone audio via backend Whisper proxy.
+ * @param {Blob} audioBlob
+ * @param {{ language?: string, signal?: AbortSignal, filename?: string }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function transcribeSpeech(audioBlob, opts = {}) {
+  const { language = '', signal, filename = 'recording.webm' } = opts
+  const form = new FormData()
+  form.append('file', audioBlob, filename)
+  if (language) form.append('language', language)
+
+  const resp = await fetch(`${BASE}/transcribe`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({}, 'agent-transcribe'),
+    body: form,
+    cache: 'no-store',
+    signal,
+  })
+  const payload = await readJsonResponse(resp)
+  const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
+  return text
 }

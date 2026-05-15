@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -22,7 +23,6 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
     email = email or f"trial-{uuid4().hex[:8]}@example.com"
     code = "123456"
     # 注入验证码并清除 127.0.0.1 的 IP 注册记录，使每次测试都能通过
-    import time
     with control_plane_store._lock:
         data = control_plane_store._load()
         data.setdefault("verification_codes", {})[email.lower()] = {
@@ -57,6 +57,39 @@ def test_register_trial_and_fetch_account_profile(client: TestClient):
 
     me = client.get("/api/v1/account/me", headers={"Authorization": f"Bearer {payload['access_token']}"})
     assert me.status_code == 200
+    assert me.json()["email"] == email
+
+
+def test_email_login_persists_token_for_protected_routes(client: TestClient):
+    """Login must save the token to the control-plane store (same as register-trial)."""
+    email = f"login-{uuid4().hex[:8]}@example.com"
+    _register_trial_direct(client, email=email)
+
+    code = "888888"
+
+    from icore_agent.control_plane import control_plane_store
+
+    with control_plane_store._lock:
+        data = control_plane_store._load()
+        data.setdefault("verification_codes", {})[email.lower()] = {
+            "code": code,
+            "expires_at": int(time.time()) + 600,
+            "ip": "127.0.0.1",
+            "timestamp": int(time.time()),
+        }
+        control_plane_store._save(data)
+
+    login = client.post(
+        "/api/v1/account/login",
+        json={"email": email, "verification_code": code},
+    )
+    assert login.status_code == 200, login.text
+    body = login.json()
+    token = body["access_token"]
+    assert token
+
+    me = client.get("/api/v1/account/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200, me.text
     assert me.json()["email"] == email
 
 

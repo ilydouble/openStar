@@ -39,8 +39,8 @@ services:
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
-    ports:
-      - '${BACKEND_PORT_BIND:-10001:8080}'
+    expose:
+      - '8080'
     volumes:
       - ../../../src:/app/src:ro
       - seq-workspace:/tmp/icore-seq-workspace

@@ -13,6 +13,7 @@ COMPOSE_FILES=(
   "infrastructure/docker/compose/storage-service.yml"
   "infrastructure/docker/compose/logging-service.yml"
   "infrastructure/docker/compose/backend.yml"
+  "infrastructure/docker/compose/gateway.yml"
 )
 
 ENV_FILES=(
@@ -24,6 +25,7 @@ ENV_FILES=(
   "dotenv/.env.kafka"
   "dotenv/.env.storage"
   "dotenv/.env.logging"
+  "dotenv/.env.gateway"
   "dotenv/.env.llm"
   "dotenv/.env.sequential"
   "dotenv/.env.auth"
@@ -38,10 +40,10 @@ for env_file in "${ENV_FILES[@]}"; do
   full_path="$PROJECT_DIR/$env_file"
   example_path="$full_path.example"
 
-  if [[ -f "$full_path" ]]; then
-    cmd+=(--env-file "$full_path")
-  elif [[ "$USE_EXAMPLES" == "1" && -f "$example_path" ]]; then
+  if [[ "$USE_EXAMPLES" == "1" && -f "$example_path" ]]; then
     cmd+=(--env-file "$example_path")
+  elif [[ -f "$full_path" ]]; then
+    cmd+=(--env-file "$full_path")
   else
     echo "Missing dotenv file: $env_file" >&2
     echo "Create it from $env_file.example or set ICORE_COMPOSE_USE_EXAMPLES=1 for config validation." >&2

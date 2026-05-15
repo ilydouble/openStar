@@ -12,7 +12,7 @@ from typing import Any, cast
 import httpx
 
 from icore_agent.config import settings
-from icore_agent.lib.http.request_context import get_request_id
+from icore_agent.lib.http.request.request_context import get_request_id
 from icore_agent.lib.logging.contracts.v1 import (
     LogEvent,
     LogEventIngestRequest,

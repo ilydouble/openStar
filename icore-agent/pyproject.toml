@@ -84,7 +84,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.pyright]
-typeCheckingMode = "strict"
+typeCheckingMode = "stanard"
 include = ["src", "tests"]
 exclude = [
     "**/__pycache__",

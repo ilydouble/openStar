@@ -5,8 +5,8 @@ from __future__ import annotations
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from ..request_context import clear_request_id, set_request_id
-from .request_id_management import REQUEST_ID_HEADER, resolve_request_id
+from ..request.request_context import clear_request_id, set_request_id
+from ..request.request_id_management import REQUEST_ID_HEADER, resolve_request_id
 
 
 class RequestIdMiddleware:

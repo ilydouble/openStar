@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from icore_agent.lib.http.request_context import clear_request_id, set_request_id
+from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
 from icore_agent.lib.logging.logger import Logger
 

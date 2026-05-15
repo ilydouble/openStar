@@ -1,7 +1,7 @@
 """HTTP middleware utilities."""
 
 from .auth_middleware import AuthMiddleware
-from .request_id_management import (
+from ..request.request_id_management import (
     CORRELATION_ID_HEADER,
     REQUEST_ID_HEADER,
     TRACEPARENT_HEADER,

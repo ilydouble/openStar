@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...config import settings
+from ...lib.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
 from .contracts import (
     BillingSummaryRepository,
     IdentityRepository,
@@ -42,11 +44,21 @@ class AccountService:
         self._usage_repository = usage_repository
 
     def get_current_user(self, authorization: str) -> dict[str, Any]:
-        """Resolve the bearer token into the current user payload."""
+        """Resolve the bearer JWT into the current user payload."""
         if not authorization.startswith("Bearer "):
             raise ValueError("Missing Bearer token")
         token = authorization[7:].strip()
-        user = self._identity_repository.get_user_by_token(token)
+        try:
+            claims = verify_access_token(
+                token,
+                secret=settings.jwt_secret,
+                issuer=settings.jwt_issuer,
+                audience=settings.jwt_audience,
+            )
+        except JWTValidationError as exc:
+            raise LookupError("Invalid or expired token") from exc
+
+        user = self._identity_repository.get_user_by_id(claims["sub"])
         if user is None:
             raise LookupError("Invalid or expired token")
         return user
@@ -62,8 +74,7 @@ class AccountService:
         user = self._identity_repository.get_user_by_email(email)
         if not user:
             raise LookupError("该邮箱尚未注册，请先注册试用账号")
-        token = self._identity_repository.issue_token_for_user(user["id"])
-        return user, token
+        return user, self._issue_access_token(user)
 
     def register_trial(
         self,
@@ -81,7 +92,19 @@ class AccountService:
             raise ValueError("该邮箱已注册，请使用「邮箱登录」功能")
         if not self._registration_repository.check_ip_registration_limit(client_ip):
             raise PermissionError("同一 IP 24 小时内只能注册 1 次账号")
-        return self._registration_repository.register_trial(name, email, client_ip)
+        user, _legacy_token = self._registration_repository.register_trial(
+            name, email, client_ip)
+        return user, self._issue_access_token(user)
+
+    def _issue_access_token(self, user: dict[str, Any]) -> str:
+        """Create the JWT access token consumed by the Go gateway and backend."""
+        return sign_access_token(
+            user=user,
+            secret=settings.jwt_secret,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        )
 
     def capture_lead(self, **payload: Any) -> dict[str, Any]:
         """Create a lead capture record for the marketing funnel."""

@@ -20,6 +20,7 @@ from starlette.responses import JSONResponse, Response
 from ....config import settings
 from ....control_plane import control_plane_store
 from ....infrastructure.control_plane import ControlPlaneIdentityRepository
+from ...auth.jwt import JWTValidationError, verify_access_token
 
 log = structlog.get_logger()
 account_repository = ControlPlaneIdentityRepository(control_plane_store)
@@ -49,7 +50,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not token:
             return JSONResponse({"code": 401, "message": "Missing Bearer token"}, status_code=401)
 
-        local_user = account_repository.get_user_by_token(token)
+        local_user = self._validate_local_jwt(token)
         if local_user is not None:
             request.state.user = local_user
             return await call_next(request)
@@ -92,3 +93,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             log.error("auth_validation_error", error=str(exc))
         return None
+
+    @staticmethod
+    def _validate_local_jwt(token: str) -> dict[str, Any] | None:
+        """Validate the local JWT and load the matching control-plane user."""
+        try:
+            claims = verify_access_token(
+                token,
+                secret=settings.jwt_secret,
+                issuer=settings.jwt_issuer,
+                audience=settings.jwt_audience,
+            )
+        except JWTValidationError:
+            return None
+        return account_repository.get_user_by_id(claims["sub"])

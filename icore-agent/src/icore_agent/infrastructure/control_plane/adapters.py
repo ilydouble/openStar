@@ -16,6 +16,10 @@ class ControlPlaneIdentityRepository:
         """Load a user by bearer token."""
         return self._store.get_user_by_token(token)
 
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        """Load a user by stable user id."""
+        return self._store.get_user_by_id(user_id)
+
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         """Load a user by email address."""
         return self._store.get_user_by_email(email)

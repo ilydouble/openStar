@@ -9,6 +9,10 @@ class AuthSettings(DomainSettings):
     icore_base_url: str = ""
     icore_secret: str = ""
     auth_enabled: bool = False
+    jwt_secret: str = "dev-icore-jwt-secret"
+    jwt_issuer: str = "icore-agent"
+    jwt_audience: str = "icore-gateway"
+    jwt_ttl_seconds: int = 86400
 
     # Control Plane 数据存储路径（用户、额度、组织、线索等）
     # 警告：默认 /tmp 路径在系统重启后会清空，生产环境务必改为持久化路径

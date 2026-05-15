@@ -23,6 +23,10 @@ class FakeControlPlaneStore:
         self.calls.append(("get_user_by_token", (token,), {}))
         return {"id": "u1"} if token == "tok" else None
 
+    def get_user_by_id(self, user_id: str):
+        self.calls.append(("get_user_by_id", (user_id,), {}))
+        return {"id": user_id}
+
     def send_verification_code(self, email: str, client_ip: str):
         self.calls.append(("send_verification_code", (email, client_ip), {}))
         return True, "sent"
@@ -56,7 +60,8 @@ class FakeControlPlaneStore:
         return {"organization": {"id": "org-1"}}
 
     def rename_organization(self, user_id: str, organization_name: str):
-        self.calls.append(("rename_organization", (user_id, organization_name), {}))
+        self.calls.append(
+            ("rename_organization", (user_id, organization_name), {}))
         return {"organization": {"name": organization_name}}
 
     def add_team_member(self, user_id: str, **payload):
@@ -80,7 +85,8 @@ class FakeControlPlaneStore:
         return {"plan": "free"}
 
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str):
-        self.calls.append(("update_byok", (user_id, api_key, api_base, model), {}))
+        self.calls.append(
+            ("update_byok", (user_id, api_key, api_base, model), {}))
         return {"enabled": True}
 
     def update_user_plan(self, **payload):
@@ -117,6 +123,7 @@ def test_split_account_adapters_delegate_to_the_expected_store_methods():
     billing_summary_repo = ControlPlaneBillingSummaryRepository(store)
 
     assert identity_repo.get_user_by_token("tok") == {"id": "u1"}
+    assert identity_repo.get_user_by_id("u1") == {"id": "u1"}
     verification_repo.send_verification_code("a@example.com", "127.0.0.1")
     registration_repo.register_trial("Trial", "a@example.com", "127.0.0.1")
     lead_repo.create_lead(email="lead@example.com")
@@ -126,6 +133,7 @@ def test_split_account_adapters_delegate_to_the_expected_store_methods():
 
     assert [name for name, *_ in store.calls] == [
         "get_user_by_token",
+        "get_user_by_id",
         "send_verification_code",
         "register_trial",
         "create_lead",
@@ -140,7 +148,8 @@ def test_usage_and_billing_adapters_delegate_to_control_plane_store():
     usage_repo = ControlPlaneUsageRepository(store)
     billing_repo = ControlPlaneBillingRepository(store)
 
-    usage_repo.record_usage_event(user_id="u1", session_id="s1", total_tokens=42)
+    usage_repo.record_usage_event(
+        user_id="u1", session_id="s1", total_tokens=42)
     result = billing_repo.update_user_plan(
         user_id="u1",
         new_plan="team",
@@ -151,4 +160,5 @@ def test_usage_and_billing_adapters_delegate_to_control_plane_store():
     )
 
     assert result["plan"] == "team"
-    assert [name for name, *_ in store.calls] == ["record_usage_event", "update_user_plan"]
+    assert [name for name, *
+            _ in store.calls] == ["record_usage_event", "update_user_plan"]

@@ -377,6 +377,16 @@ class ControlPlaneStore:
                 self._save(data)
             return user
 
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        """Load a user by stable id and ensure organization metadata exists."""
+        with self._lock:
+            data = self._load()
+            user = data["users"].get(user_id)
+            if user:
+                self._ensure_org_for_user(data, user)
+                self._save(data)
+            return user
+
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         """根据邮箱查找用户（不存在返回 None）"""
         with self._lock:

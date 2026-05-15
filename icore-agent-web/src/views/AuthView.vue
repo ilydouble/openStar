@@ -1,18 +1,18 @@
 <template>
-  <div class="min-h-screen bg-[radial-gradient(circle_at_top,#fff7ed,transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-8 text-zinc-950 dark:bg-[radial-gradient(circle_at_top,#312e81,transparent_28%),linear-gradient(180deg,#09090b_0%,#18181b_100%)] dark:text-white">
-    <div class="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center">
-      <div class="grid w-full gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-        <section class="rounded-[2rem] border border-white/70 bg-white/80 p-8 shadow-[0_32px_80px_-32px_rgba(15,23,42,0.3)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06] dark:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.55)]">
+  <div class="min-h-dvh overflow-x-hidden bg-[radial-gradient(circle_at_top,#fff7ed,transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-3 py-6 text-zinc-950 sm:px-4 sm:py-8 dark:bg-[radial-gradient(circle_at_top,#312e81,transparent_28%),linear-gradient(180deg,#09090b_0%,#18181b_100%)] dark:text-white">
+    <div class="mx-auto flex min-h-[calc(100dvh-3rem)] max-w-6xl items-center sm:min-h-[calc(100dvh-4rem)]">
+      <div class="grid w-full min-w-0 gap-6 sm:gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <section class="rounded-[2rem] border border-white/70 bg-white/80 p-5 shadow-[0_32px_80px_-32px_rgba(15,23,42,0.3)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06] dark:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.55)] sm:p-8">
           <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-600 dark:text-amber-300">
             {{ t('auth.eyebrow') }}
           </p>
-          <h1 class="mt-4 max-w-xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+          <h1 class="mt-4 max-w-xl text-[1.75rem] font-semibold leading-[1.12] tracking-[-0.04em] min-[375px]:text-4xl sm:text-5xl">
             {{ t('auth.title') }}
           </h1>
           <p class="mt-4 max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-300">
             {{ t('auth.subtitle') }}
           </p>
-          <div class="mt-8 grid gap-4 sm:grid-cols-3">
+          <div class="mt-6 grid grid-cols-1 gap-4 min-[480px]:grid-cols-3 sm:mt-8">
             <article
               v-for="item in featureCards"
               :key="item.title"
@@ -24,17 +24,17 @@
           </div>
         </section>
 
-        <section class="rounded-[2rem] border border-zinc-200/80 bg-white/92 p-8 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-zinc-950/72">
-          <div class="flex items-center justify-between gap-4">
-            <div>
+        <section class="rounded-[2rem] border border-zinc-200/80 bg-white/92 p-5 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-zinc-950/72 sm:p-8">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div class="min-w-0">
               <p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                {{ isLoginMode ? '邮箱登录' : t('auth.formTitle') }}
+                {{ isLoginMode ? t('auth.formTitleLogin') : t('auth.formTitle') }}
               </p>
               <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                {{ isLoginMode ? '已注册用户请输入邮箱获取验证码' : t('auth.formHint') }}
+                {{ isLoginMode ? t('auth.formHintLogin') : t('auth.formHint') }}
               </p>
             </div>
-            <RouterLink to="/" class="text-sm font-medium text-zinc-500 transition hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white">
+            <RouterLink to="/" class="shrink-0 self-start text-sm font-medium text-zinc-500 transition hover:text-zinc-950 sm:self-auto dark:text-zinc-400 dark:hover:text-white">
               {{ t('auth.backHome') }}
             </RouterLink>
           </div>
@@ -50,7 +50,7 @@
                   : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-150 dark:bg-white/5 dark:text-zinc-400'
               ]"
             >
-              免费试用
+              {{ t('auth.tabTrial') }}
             </button>
             <button
               type="button"
@@ -62,7 +62,7 @@
                   : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-150 dark:bg-white/5 dark:text-zinc-400'
               ]"
             >
-              已有账号登录
+              {{ t('auth.tabLogin') }}
             </button>
           </div>
 
@@ -79,19 +79,19 @@
             </label>
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.email') }}</span>
-              <div class="flex gap-2">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                 <input
                   v-model="form.email"
                   type="email"
                   required
                   :disabled="step === 2"
-                  class="flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                  class="min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
                 />
                 <button
                   v-if="step === 2"
                   type="button"
                   @click="resetStep"
-                  class="shrink-0 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                  class="shrink-0 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 sm:w-auto dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
                 >
                   {{ t('auth.changeEmail') }}
                 </button>
@@ -100,7 +100,7 @@
 
             <label v-if="step === 2" class="block">
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.verificationCode') }}</span>
-              <div class="flex gap-2">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                 <input
                   v-model="form.verification_code"
                   type="text"
@@ -108,7 +108,7 @@
                   maxlength="6"
                   required
                   :placeholder="t('auth.codePlaceholder')"
-                  class="flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm tracking-widest outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                  class="min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm tracking-widest outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
                 />
                 <button
                   type="button"
@@ -132,7 +132,7 @@
               class="w-full rounded-2xl bg-zinc-950 px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950"
             >
               <span v-if="step === 1">{{ sending ? t('auth.sending') : t('auth.sendCode') }}</span>
-              <span v-else-if="isLoginMode">{{ submitting ? '登录中...' : '登录' }}</span>
+              <span v-else-if="isLoginMode">{{ submitting ? t('auth.loggingIn') : t('auth.login') }}</span>
               <span v-else>{{ submitting ? t('auth.loading') : t('auth.submit') }}</span>
             </button>
             <p v-if="error" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">

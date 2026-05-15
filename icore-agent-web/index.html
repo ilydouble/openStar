@@ -4,6 +4,22 @@
     <script>
       (function () {
         try {
+          var loc = localStorage.getItem('locale') || 'zh-CN'
+          var r = document.documentElement
+          r.lang = loc === 'en-US' ? 'en-US' : 'zh-CN'
+          document.title =
+            loc === 'en-US'
+              ? 'StellarMesh iCore — AI Workspace'
+              : '星纬智能iCore · AI 工作台'
+        } catch (e) {
+          document.documentElement.lang = 'zh-CN'
+          document.title = '星纬智能iCore · AI 工作台'
+        }
+      })()
+    </script>
+    <script>
+      (function () {
+        try {
           var k = 'icore-theme'
           var s = localStorage.getItem(k)
           var r = document.documentElement
@@ -16,7 +32,6 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>iCore AI 工作台</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />

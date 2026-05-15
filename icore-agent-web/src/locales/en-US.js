@@ -1,6 +1,16 @@
 export default {
+  app: {
+    documentTitle: 'StellarMesh iCore — AI Workspace',
+  },
   common: {
     platform: 'Platform',
+    localeShortEnglish: 'EN',
+    localeShortChinese: '中',
+    localeNameEnglish: 'English',
+    localeNameChinese: '简体中文',
+  },
+  agents: {
+    openLink: 'Open',
   },
   navbar: {
     title: 'StellarMesh iCore',
@@ -273,6 +283,18 @@ export default {
       selectMode: 'Select mode',
       modePickerBack: 'Back',
     },
+    voice: {
+      micLabel: 'Voice input',
+      hintToggle: 'Click to record, click again to stop and transcribe.',
+      recordingVisualizerLabel: 'Input level',
+      recordingActive: 'Recording…',
+      transcribingHint: 'Transcribing…',
+      permissionDenied: 'Microphone access was denied. Allow the mic in browser settings.',
+      micUnavailable: 'Microphone could not be opened.',
+      transcribeFailed: 'Could not transcribe audio.',
+      emptyRecording: 'No audio was captured.',
+      dismissError: 'Dismiss',
+    },
     accountCenter: 'Account',
     signIn: 'Sign In',
     signOut: 'Sign out',
@@ -428,6 +450,12 @@ export default {
     subtitle: 'Validate value on a trial plan first, then upgrade to Team, Enterprise, or connect your own model key.',
     formTitle: 'Create your trial account',
     formHint: 'It takes about a minute and unlocks the protected workspace.',
+    formTitleLogin: 'Email sign-in',
+    formHintLogin: 'If you already have an account, use your email to receive a verification code.',
+    tabTrial: 'Start free trial',
+    tabLogin: 'Sign in with email',
+    login: 'Sign in',
+    loggingIn: 'Signing in…',
     backHome: 'Back to home',
     name: 'Name',
     email: 'Email',
@@ -579,6 +607,11 @@ export default {
       images: 'Images',
       attachments: 'Attachments',
     },
+    usage: {
+      callsWithCount: '{n} calls',
+      tokensWithCount: '{n} tokens',
+      heavyUserLine: '{tokens} tokens · {messages} messages',
+    },
     cards: {
       totalTokens: 'Total tokens',
       totalCost: 'Total cost',
@@ -606,6 +639,10 @@ export default {
     stopHint: 'Stop the current response',
     thinking: 'Thinking...',
     attachFile: 'Attach file (PDF / DOCX / TXT / MD)',
+    dropUploadRelease: 'Release mouse to upload (PDF / DOCX / TXT / MD)',
+    uploadUnsupportedTypes:
+      'Unsupported file type ({ext}). Please upload PDF / DOCX / TXT / MD.',
+    dismissUploadError: 'Dismiss',
     stepsLive: 'Running ({n} step(s))',
     stepsCollapsed: 'Thinking process ({n} step(s))',
     imageMessageLabel: 'Image',

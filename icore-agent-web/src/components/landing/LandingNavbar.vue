@@ -28,8 +28,9 @@
           class="rounded-full border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
           @click="toggleLocale"
         >
-          {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
+          {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
         </button>
+        <ThemeToggle variant="navbar" />
         <RouterLink
           to="/#plans"
           class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
@@ -51,8 +52,9 @@
           @click="toggleLocale"
           :aria-label="t('landing.nav.language')"
         >
-          {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
+          {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
         </button>
+        <ThemeToggle variant="navbar" />
         <RouterLink
           to="/auth"
           class="inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-3.5 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 dark:bg-white dark:text-zinc-950"
@@ -103,13 +105,19 @@
         </a>
         </nav>
         <div class="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          class="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
-          @click="toggleLocale"
-        >
-          {{ t('landing.nav.language') }}: {{ currentLocale === 'zh-CN' ? 'English' : '中文' }}
-        </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
+              @click="toggleLocale"
+            >
+              {{ t('landing.nav.language') }}:
+              {{
+                currentLocale === 'zh-CN' ? t('common.localeNameEnglish') : t('common.localeNameChinese')
+              }}
+            </button>
+            <ThemeToggle variant="navbar" />
+          </div>
           <div class="grid grid-cols-2 gap-2">
             <RouterLink
               to="/#plans"
@@ -137,6 +145,7 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
+import ThemeToggle from '../ThemeToggle.vue'
 
 const { t, tm, locale } = useI18n()
 

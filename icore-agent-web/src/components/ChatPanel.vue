@@ -101,7 +101,7 @@
       <!-- 拖拽提示 -->
       <div v-if="isDraggingFile" class="mx-auto mb-2 max-w-3xl flex items-center justify-center gap-2 rounded-xl border border-dashed border-violet-400 py-2 text-sm font-medium text-violet-600 dark:border-violet-400/60 dark:text-violet-300">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-        松开鼠标上传文件（PDF / DOCX / TXT / MD）
+        {{ t('chat.dropUploadRelease') }}
       </div>
       <!-- 附件列表 -->
       <div v-if="attachmentList.length" class="mx-auto mb-2 max-w-3xl flex flex-wrap gap-2">
@@ -119,7 +119,9 @@
             :class="att.mode === 'rag'
               ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
               : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'"
-          >{{ att.mode === 'rag' ? 'RAG' : '内联' }}</span>
+          >{{
+              att.mode === 'rag' ? t('chat.attachmentRag') : t('chat.attachmentInline')
+            }}</span>
           <button
             @click="deleteAttachment(att.filename)"
             class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400"
@@ -135,7 +137,14 @@
       <div v-if="uploadError" class="mx-auto mb-2 max-w-3xl rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
         <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
         {{ uploadError }}
-        <button @click="uploadError = ''" class="ml-auto text-red-400 hover:text-red-600">✕</button>
+        <button
+          type="button"
+          @click="uploadError = ''"
+          class="ml-auto text-red-400 hover:text-red-600"
+          :aria-label="t('chat.dismissUploadError')"
+        >
+          ✕
+        </button>
       </div>
 
       <div
@@ -198,7 +207,7 @@ import { marked } from 'marked'
 import { chatStream, newSessionId, attachFile, listAttachments, removeAttachment } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -233,7 +242,7 @@ function handleDrop(e) {
   if (!file) return
   const ext = '.' + file.name.split('.').pop().toLowerCase()
   if (!ACCEPTED_EXTS.has(ext)) {
-    uploadError.value = `不支持的文件类型：${ext}，请上传 PDF / DOCX / TXT / MD`
+    uploadError.value = t('chat.uploadUnsupportedTypes', { ext })
     return
   }
   doUpload(file)
@@ -246,7 +255,7 @@ async function doUpload(file) {
     await attachFile(file, sessionId.value)
     await refreshAttachments()
   } catch (err) {
-    uploadError.value = err.message || '上传失败'
+    uploadError.value = err.message || t('chat.uploadFailed')
   } finally {
     uploading.value = false
   }
@@ -272,7 +281,7 @@ async function deleteAttachment(filename) {
     await removeAttachment(sessionId.value, filename)
     await refreshAttachments()
   } catch (err) {
-    uploadError.value = err.message || '删除失败'
+    uploadError.value = err.message || t('chat.deleteFailed')
   }
 }
 
@@ -353,8 +362,7 @@ async function sendMessage(msg) {
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e)
     commitAssistant({
-      content:
-        locale.value === 'zh-CN' ? `请求失败：${err}` : `Request failed: ${err}`,
+      content: t('chat.requestFailed', { msg: err }),
     })
   } finally {
     commitAssistant({

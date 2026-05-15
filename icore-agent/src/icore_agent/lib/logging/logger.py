@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -57,7 +57,7 @@ class Logger:
         timestamp: datetime | None = None,
     ) -> bool:
         """Build and enqueue a LogEvent without waiting for the HTTP delivery worker."""
-        if not isinstance(level, LogLevel):
+        if not isinstance(cast(object, level), LogLevel):
             raise TypeError("level must be a LogLevel")
 
         resolved_trace_id = trace_id if trace_id is not None else get_request_id() or ""
@@ -78,7 +78,8 @@ class Logger:
             self._queue.put_nowait(event)
             return True
         except queue.Full:
-            self._fallback_warning("logging-service queue is full; dropping log event")
+            self._fallback_warning(
+                "logging-service queue is full; dropping log event")
             return False
 
     def _send_event_sync(self, event: LogEvent) -> bool:
@@ -101,7 +102,8 @@ class Logger:
             return False
 
         if isinstance(payload, dict) and payload.get("code", 200) >= 400:
-            self._fallback_warning(f"logging-service rejected event: {payload}")
+            self._fallback_warning(
+                f"logging-service rejected event: {payload}")
             return False
         return True
 
@@ -114,7 +116,8 @@ class Logger:
     def _get_client(self) -> httpx.Client:
         """Return the reusable sync HTTP client for the logging worker."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.Client(timeout=self.timeout, transport=self.sync_transport)
+            self._client = httpx.Client(
+                timeout=self.timeout, transport=self.sync_transport)
         return self._client
 
     def _ensure_worker(self) -> None:

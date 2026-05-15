@@ -12,26 +12,23 @@ import json
 import re
 import threading
 import uuid
+from collections.abc import AsyncGenerator
 from pathlib import Path
-import structlog
-from typing import AsyncGenerator
+from typing import Annotated, Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+import structlog
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-
-from typing import Annotated
-
-from fastapi import File, Form, UploadFile
 
 from ...application.account import AccountService
 from ...application.knowledge import SUPPORTED_EXTENSIONS, parse_file
 from ...config import settings
 from ...control_plane import clear_runtime_user, set_runtime_user
-from ...engine.callback_ctx import set_parent_callback, reset_parent_callback
+from ...engine.callback_ctx import reset_parent_callback, set_parent_callback
 from ...engine.sequential import SequentialAgent
-from ...memory.conversation import memory
 from ...memory.attachment_store import attachments
+from ...memory.conversation import memory
 from ..dependencies import get_account_service, get_current_user
 
 log = structlog.get_logger()
@@ -40,14 +37,26 @@ VALID_AGENT_HINTS = {"research", "code", "knowledge", "image", "data", "chat"}
 _SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
 
-def create_orchestrator(*args, **kwargs):
+class AgentRunner(Protocol):
+    """Minimal orchestrator surface used by the chat endpoint."""
+
+    messages: list[dict[str, Any]]
+
+    def __call__(self, message: str) -> Any:
+        """Run one user message through the orchestrator."""
+        ...
+
+
+def create_orchestrator(*args: Any, **kwargs: Any) -> AgentRunner:
+    """Build an orchestrator and expose the runtime methods this module needs."""
     from ...engine.orchestrator import create_orchestrator as _create_orchestrator
 
-    return _create_orchestrator(*args, **kwargs)
+    return cast(AgentRunner, _create_orchestrator(*args, **kwargs))
 
 # ── Intent classifier ─────────────────────────────────────────────────────
 # Purely rule-based: zero latency, zero cost.
 # Returns True when the message is conversational-only (no tools needed).
+
 
 _CHAT_PATTERNS = re.compile(
     r"^("
@@ -168,7 +177,8 @@ def _to_strands_messages(history: list[dict]) -> list[dict]:
     Strands format:{"role": "user",      "content": [{"type": "text", "text": "..."}]}
     """
     return [
-        {"role": m["role"], "content": [{"type": "text", "text": m["content"]}]}
+        {"role": m["role"], "content": [
+            {"type": "text", "text": m["content"]}]}
         for m in history
         if m.get("role") in ("user", "assistant") and m.get("content")
     ]
@@ -191,7 +201,8 @@ async def _load_context(
             attachments.get_data_refs(session_id),
         )
     except Exception as exc:
-        log.warning("load_context_fallback", session_id=session_id, error=str(exc))
+        log.warning("load_context_fallback",
+                    session_id=session_id, error=str(exc))
         return (None, [], None, False, [], [])
     return (
         summary or None,
@@ -248,7 +259,8 @@ async def _stream_agent(
     q: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
 
     # ── 0. 路由决策（agent_hint 优先于规则分类器）─────────────────────────
-    intent, enable_tools, effective_hint = _resolve_routing(message, agent_hint)
+    intent, enable_tools, effective_hint = _resolve_routing(
+        message, agent_hint)
     log.info("intent_classified", intent=intent, enable_tools=enable_tools,
              agent_hint=effective_hint, session_id=session_id,
              msg_preview=message[:60])
@@ -343,7 +355,7 @@ async def _stream_agent(
             kind, payload = await asyncio.wait_for(
                 q.get(), timeout=_SSE_HEARTBEAT_SEC
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # 静默期间推心跳注释帧（不消耗业务事件，仅用于保活）
             yield ": keep-alive\n\n"
             continue
@@ -384,7 +396,6 @@ async def _stream_agent(
     await memory.append_message(session_id, "assistant", reply_text)
 
 
-
 @router.post("/chat", summary="Chat with the agent (SSE streaming)")
 async def chat(
     req: ChatRequest,
@@ -394,7 +405,8 @@ async def chat(
     allowed, reason = account_service.check_quota(user["id"], "messages")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
-    intent, enable_tools, effective_hint = _resolve_routing(req.message, req.agent_hint)
+    intent, enable_tools, effective_hint = _resolve_routing(
+        req.message, req.agent_hint)
     log.info(
         "chat_request",
         session_id=req.session_id,
@@ -407,7 +419,8 @@ async def chat(
     if req.stream:
         account_service.consume_quota(user["id"], "messages")
         return StreamingResponse(
-            _stream_agent(req.message, req.session_id, req.agent_hint, runtime_user=user),
+            _stream_agent(req.message, req.session_id,
+                          req.agent_hint, runtime_user=user),
             media_type="text/event-stream",
             headers={
                 "X-Session-Id": req.session_id,
@@ -540,7 +553,8 @@ async def attach_document(
     allowed, reason = account_service.check_quota(user["id"], "attachments")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
-    ext = "." + file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
+    ext = "." + file.filename.rsplit(".", 1)[-1].lower(
+    ) if file.filename and "." in file.filename else ""
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(status_code=415,
                             detail=f"Unsupported file type '{ext}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}")
@@ -551,9 +565,11 @@ async def attach_document(
     try:
         text = parse_file(file.filename or "upload", data)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Failed to parse file: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Failed to parse file: {exc}") from exc
     if not text.strip():
-        raise HTTPException(status_code=422, detail="File appears to be empty or unreadable")
+        raise HTTPException(
+            status_code=422, detail="File appears to be empty or unreadable")
 
     att = await attachments.add(session_id, file.filename or "upload", text)
     account_service.consume_quota(user["id"], "attachments")
@@ -574,7 +590,8 @@ async def list_attachments(session_id: str, user: dict = Depends(get_current_use
 async def remove_attachment(session_id: str, filename: str, user: dict = Depends(get_current_user)) -> dict:
     removed = await attachments.remove(session_id, filename)
     if not removed:
-        raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Attachment '{filename}' not found")
     return {"removed": True, "filename": filename, "session_id": session_id}
 
 

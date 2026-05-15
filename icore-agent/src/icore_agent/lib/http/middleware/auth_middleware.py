@@ -9,15 +9,17 @@ When AUTH_ENABLED=false (default for dev), all requests pass through.
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ...config import settings
-from ...control_plane import control_plane_store
-from ...infrastructure.control_plane import ControlPlaneIdentityRepository
+from ....config import settings
+from ....control_plane import control_plane_store
+from ....infrastructure.control_plane import ControlPlaneIdentityRepository
 
 log = structlog.get_logger()
 account_repository = ControlPlaneIdentityRepository(control_plane_store)
@@ -33,7 +35,10 @@ _PUBLIC_PREFIXES = (
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    """Validate bearer tokens before protected request handlers run."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Skip public paths and attach validated user info to request state."""
         # Skip public paths
         if request.url.path in _PUBLIC_PATHS or any(
             request.url.path.startswith(prefix) for prefix in _PUBLIC_PREFIXES
@@ -59,13 +64,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _extract_token(request: Request) -> str | None:
+        """Extract a bearer token from the Authorization header."""
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             return auth[7:].strip()
         return None
 
     @staticmethod
-    async def _validate_token(token: str) -> dict | None:
+    async def _validate_token(token: str) -> dict[str, Any] | None:
         """Call ft-base token validation endpoint."""
         if not settings.icore_base_url:
             log.warning("auth_no_base_url_configured")

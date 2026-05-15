@@ -21,6 +21,7 @@ def _build_app(*, fail: bool = False) -> FastAPI:
             "state_request_id": request.state.request_id,
         }
 
+    _ = inspect
     return app
 
 
@@ -81,7 +82,8 @@ async def test_request_id_middleware_generates_request_id_when_headers_are_absen
 
 @pytest.mark.asyncio
 async def test_request_id_middleware_resets_context_when_endpoint_raises():
-    transport = httpx.ASGITransport(app=_build_app(fail=True), raise_app_exceptions=False)
+    transport = httpx.ASGITransport(app=_build_app(
+        fail=True), raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get("/inspect", headers={"X-Request-ID": "req-error"})
 

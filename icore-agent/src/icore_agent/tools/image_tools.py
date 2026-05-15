@@ -12,6 +12,7 @@ import base64
 import mimetypes
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import structlog
@@ -63,7 +64,8 @@ def understand_image(image_source: str, question: str = "") -> str:
         Text describing / answering the question about the image.
     """
     prompt = question.strip() or "请详细描述这张图片的内容，包括主要元素、场景、文字和任何值得关注的细节。"
-    log.info("understand_image", source=image_source[:120], q_preview=prompt[:80])
+    log.info("understand_image",
+             source=image_source[:120], q_preview=prompt[:80])
 
     try:
         image_ref = _resolve_image_source(image_source)
@@ -86,13 +88,14 @@ def understand_image(image_source: str, question: str = "") -> str:
         "max_tokens": 2048,
         "temperature": 0.3,
     }
-    litellm_params.update(settings.litellm_kwargs(model_id=settings.vision_model_id))
+    litellm_params.update(settings.litellm_kwargs(
+        model_id=settings.vision_model_id))
     # Route to the Z.AI / Zhipu endpoint via LiteLLM's OpenAI-compatible layer.
     if settings.zai_api_key and "api_key" not in litellm_params:
         litellm_params["api_key"] = settings.zai_api_key
 
     try:
-        resp = litellm_completion(**litellm_params)
+        resp = cast(Any, litellm_completion(**litellm_params))
         content = resp["choices"][0]["message"]["content"]
         return content or "(vision model returned empty response)"
     except Exception as exc:

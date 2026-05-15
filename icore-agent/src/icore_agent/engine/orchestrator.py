@@ -13,61 +13,80 @@ It only decides which sub-agent to delegate to, then synthesises
 the sub-agent's reply into a final user-facing response.
 """
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 import structlog
 
-try:
-    from strands import Agent, tool
-    from strands.models.litellm import LiteLLMModel
-    from strands.agent.conversation_manager.sliding_window_conversation_manager import (
-        SlidingWindowConversationManager,
-    )
-    from strands.tools.executors import SequentialToolExecutor
-    _STRANDS_IMPORT_ERROR: ModuleNotFoundError | None = None
-except ModuleNotFoundError as exc:
-    _STRANDS_IMPORT_ERROR = exc
+from ..config import settings
 
-    class Agent:  # type: ignore[no-redef]
+Agent: Any
+LiteLLMModel: Any
+SequentialToolExecutor: Any
+SlidingWindowConversationManager: Any
+tool: Any
+
+try:
+    from strands import Agent as _StrandsAgent
+    from strands import tool as _strands_tool
+    from strands.agent.conversation_manager.sliding_window_conversation_manager import (
+        SlidingWindowConversationManager as _StrandsSlidingWindowConversationManager,
+    )
+    from strands.models.litellm import LiteLLMModel as _StrandsLiteLLMModel
+    from strands.tools.executors import SequentialToolExecutor as _StrandsSequentialToolExecutor
+
+    Agent = _StrandsAgent
+    LiteLLMModel = _StrandsLiteLLMModel
+    SlidingWindowConversationManager = _StrandsSlidingWindowConversationManager
+    SequentialToolExecutor = _StrandsSequentialToolExecutor
+    tool = _strands_tool
+except ModuleNotFoundError as exc:
+    strands_import_error = exc
+
+    class _FallbackAgent:
         """Fallback placeholder that keeps imports patchable in tests."""
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.args = args
             self.kwargs = kwargs
 
-    class LiteLLMModel:  # type: ignore[no-redef]
+    class _FallbackLiteLLMModel:
         """Fallback placeholder mirroring the real model constructor."""
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.args = args
             self.kwargs = kwargs
 
-    class SlidingWindowConversationManager:  # type: ignore[no-redef]
+    class _FallbackSlidingWindowConversationManager:
         """Fallback placeholder for conversation manager construction."""
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.args = args
             self.kwargs = kwargs
 
-    class SequentialToolExecutor:  # type: ignore[no-redef]
+    class _FallbackSequentialToolExecutor:
         """Fallback placeholder for the tool executor dependency."""
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.args = args
             self.kwargs = kwargs
 
-    def tool(func):  # type: ignore[no-redef]
+    def _fallback_tool(func: Any) -> Any:
         """Return the function unchanged when Strands is unavailable in tests."""
         return func
 
-from ..config import settings
-if TYPE_CHECKING:
-    pass
+    Agent = _FallbackAgent
+    LiteLLMModel = _FallbackLiteLLMModel
+    SlidingWindowConversationManager = _FallbackSlidingWindowConversationManager
+    SequentialToolExecutor = _FallbackSequentialToolExecutor
+    tool = _fallback_tool
+else:
+    strands_import_error = None
+
 
 log = structlog.get_logger()
 
 # Type alias for clarity
-Orchestrator = Agent
+Orchestrator = Any
 
 # Valid agent hints coming from UI shortcut buttons.
 VALID_AGENT_HINTS = {"research", "code", "knowledge", "image", "data", "chat"}
@@ -119,7 +138,7 @@ Your role is to understand the user's intent and delegate to the right specialis
 _HINT_DIRECTIVE = {
     "research": "The user clicked the Research shortcut — prefer research_agent_tool for this turn unless the request is clearly unrelated.",
     "code":     "The user clicked the Code shortcut — prefer code_agent_tool for this turn unless the request is clearly unrelated.",
-    "knowledge":"The user clicked the Knowledge shortcut — prefer knowledge_agent_tool for this turn, scoped to their uploaded documents.",
+    "knowledge": "The user clicked the Knowledge shortcut — prefer knowledge_agent_tool for this turn, scoped to their uploaded documents.",
     "image":    "The user clicked the Image shortcut — prefer image_agent_tool; if an image is attached, analyze it; otherwise generate one.",
     "data":     "The user clicked the Data shortcut — prefer data_agent_tool for tabular analysis, SQL drafting or pandas work.",
     "chat":     "The user clicked the Chat shortcut — answer directly as a conversational assistant; do not call any sub-agent.",
@@ -247,7 +266,8 @@ def _missing_tool(name: str):
     """Create a placeholder tool when optional agent dependencies are unavailable."""
 
     def _tool(*args, **kwargs) -> str:
-        raise RuntimeError(f"{name} is unavailable because optional agent dependencies are missing")
+        raise RuntimeError(
+            f"{name} is unavailable because optional agent dependencies are missing")
 
     _tool.__name__ = name
     return _tool

@@ -17,8 +17,6 @@ from pathlib import Path
 
 import structlog
 
-from ...config import settings
-
 log = structlog.get_logger()
 
 # Truncate very long outputs to keep token costs sane
@@ -87,7 +85,8 @@ class DockerEnvironment(BaseEnvironment):
             f"docker exec --workdir {self.working_dir} "
             f"{self.container_name} bash -c {repr(cmd)}"
         )
-        log.debug("docker_env_execute", cmd=cmd[:200], container=self.container_name)
+        log.debug("docker_env_execute",
+                  cmd=cmd[:200], container=self.container_name)
         try:
             result = subprocess.run(
                 docker_cmd,

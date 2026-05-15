@@ -12,10 +12,10 @@ Architecture:
 from __future__ import annotations
 
 import hashlib
-import structlog
-from typing import Any
+from typing import Any, cast
 
 import chromadb
+import structlog
 from chromadb import EmbeddingFunction, Embeddings
 from openai import OpenAI
 
@@ -41,19 +41,20 @@ class ZhipuEmbeddingFunction(EmbeddingFunction):
         results: list[list[float]] = []
         batch_size = 16
         for i in range(0, len(input), batch_size):
-            batch = input[i : i + batch_size]
-            resp = self._client.embeddings.create(model=self._model, input=batch)
+            batch = input[i: i + batch_size]
+            resp = self._client.embeddings.create(
+                model=self._model, input=batch)
             results.extend([item.embedding for item in resp.data])
-        return results
+        return cast(Embeddings, results)
 
 
 # ── Singleton client + embedding fn ─────────────────────────────────────────
 
-_chroma_client: chromadb.PersistentClient | None = None
+_chroma_client: Any | None = None
 _embed_fn: ZhipuEmbeddingFunction | None = None
 
 
-def _get_client() -> chromadb.PersistentClient:
+def _get_client() -> Any:
     global _chroma_client
     if _chroma_client is None:
         _chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
@@ -77,7 +78,7 @@ def _collection_name(tenant_code: str) -> str:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def get_collection(tenant_code: str = "") -> chromadb.Collection:
+def get_collection(tenant_code: str = "") -> Any:
     """Return (or create) the ChromaDB collection for a tenant."""
     client = _get_client()
     name = _collection_name(tenant_code)
@@ -100,11 +101,13 @@ def add_documents(
     col = get_collection(tenant_code)
     # Stable deterministic IDs so re-uploading the same file is idempotent
     ids = [
-        hashlib.md5(f"{meta.get('source','')}_{meta.get('chunk_index',i)}".encode()).hexdigest()
+        hashlib.md5(
+            f"{meta.get('source','')}_{meta.get('chunk_index',i)}".encode()).hexdigest()
         for i, meta in enumerate(metadatas)
     ]
     col.upsert(documents=chunks, metadatas=metadatas, ids=ids)
-    log.info("chroma_documents_added", tenant=tenant_code or "shared", n=len(chunks))
+    log.info("chroma_documents_added",
+             tenant=tenant_code or "shared", n=len(chunks))
     return len(chunks)
 
 
@@ -143,7 +146,7 @@ def search(
     metas = results.get("metadatas", [[]])[0]
     distances = results.get("distances", [[]])[0]
     output = []
-    for doc, meta, dist in zip(docs, metas, distances):
+    for doc, meta, dist in zip(docs, metas, distances, strict=False):
         output.append({
             "text": doc,
             "source": meta.get("filename", "unknown"),

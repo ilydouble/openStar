@@ -132,7 +132,7 @@ class AccountService:
         """Update whether knowledge sharing is private or organization-wide."""
         return self._team_repository.update_knowledge_scope(user_id, scope)
 
-    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str]:
+    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str | None]:
         """Read a quota decision without consuming the quota yet."""
         return self._usage_repository.check_quota(user_id, resource)
 

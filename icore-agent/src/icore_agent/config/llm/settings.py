@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 from pydantic import Field
 
@@ -9,6 +11,8 @@ log = structlog.get_logger()
 
 
 class LLMSettings(DomainSettings):
+    """LLM provider and model settings loaded from the llm dotenv domain."""
+
     env_domains = ("llm",)
 
     model_id: str = "zai/glm-4.7"
@@ -25,8 +29,13 @@ class LLMSettings(DomainSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    def __init__(self, **values: Any) -> None:
+        """Initialize LLM settings from explicit values and domain env files."""
+        super().__init__(**values)
+
     @staticmethod
     def _is_zai_model(model_id: str) -> bool:
+        """Return whether the model id should use the Z.AI-compatible base URL."""
         model = model_id.strip().lower()
         return model.startswith("zai/") or model.startswith("glm-")
 

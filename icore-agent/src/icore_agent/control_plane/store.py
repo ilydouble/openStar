@@ -8,6 +8,7 @@ import secrets
 import threading
 import time
 import uuid
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,7 @@ def _send_verification_email(to_email: str, code: str) -> bool:
         return True
 
     try:
-        import resend
+        import resend  # type: ignore[import-not-found]
         resend.api_key = settings.resend_api_key
 
         html_body = f"""
@@ -60,6 +61,7 @@ def _send_verification_email(to_email: str, code: str) -> bool:
     except Exception as exc:
         log.error(f"resend_email_failed: {exc}, to={to_email}")
         return False
+
 
 _DEFAULT_USAGE = {
     "message_count": 0,
@@ -149,7 +151,8 @@ class ControlPlaneStore:
             }
 
     def _save(self, data: dict[str, Any]) -> None:
-        self._path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._path.write_text(json.dumps(
+            data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _should_reset_quota(self, quota_period_start: int) -> bool:
         """检查是否需要重置配额周期（每月 1 号 00:00 重置）。
@@ -163,26 +166,25 @@ class ControlPlaneStore:
         if quota_period_start == 0:
             return True  # 首次使用，需要初始化
 
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        period_start = datetime.fromtimestamp(quota_period_start, tz=timezone.utc)
-        now = datetime.now(timezone.utc)
+        period_start = datetime.fromtimestamp(
+            quota_period_start, tz=UTC)
+        now = datetime.now(UTC)
 
         # 如果当前月份大于周期开始月份，或者年份不同，需要重置
         if now.year > period_start.year:
             return True
-        if now.year == period_start.year and now.month > period_start.month:
-            return True
-
-        return False
+        return now.year == period_start.year and now.month > period_start.month
 
     def _get_quota_period_start(self) -> int:
         """获取当前配额周期的开始时间戳（当月 1 号 00:00 UTC）。"""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # 本月 1 号 00:00:00 UTC
-        period_start = datetime(now.year, now.month, 1, 0, 0, 0, tzinfo=timezone.utc)
+        period_start = datetime(now.year, now.month, 1,
+                                0, 0, 0, tzinfo=UTC)
         return int(period_start.timestamp())
 
     def _ensure_org_for_user(self, data: dict[str, Any], user: dict[str, Any]) -> None:
@@ -191,7 +193,8 @@ class ControlPlaneStore:
             return
         now = int(time.time())
         org_id = org_id or f"org_{uuid.uuid4().hex[:12]}"
-        org_name = user.get("organization_name") or f"{user.get('name') or 'Team'} Team"
+        org_name = user.get(
+            "organization_name") or f"{user.get('name') or 'Team'} Team"
         user["organization_id"] = org_id
         user["organization_name"] = org_name
         data.setdefault("organizations", {})[org_id] = {
@@ -221,7 +224,8 @@ class ControlPlaneStore:
             codes = data.setdefault("verification_codes", {})
 
             # 清理过期的验证码
-            expired_emails = [e for e, info in codes.items() if info.get("expires_at", 0) < now]
+            expired_emails = [e for e, info in codes.items(
+            ) if info.get("expires_at", 0) < now]
             for e in expired_emails:
                 del codes[e]
 
@@ -248,7 +252,8 @@ class ControlPlaneStore:
             if not sent:
                 # 本地开发环境下，邮件服务不可用时自动降级为日志验证码，避免阻塞注册流程。
                 if settings.debug:
-                    log.warning("verification_email_delivery_fallback email=%s client_ip=%s", email, client_ip)
+                    log.warning(
+                        "verification_email_delivery_fallback email=%s client_ip=%s", email, client_ip)
                     _print_dev_verification_email(email, code)
                     return True, f"验证码已发送到 {email}，10 分钟内有效（开发模式：请查看后端日志）"
                 return False, "验证码发送失败，请稍后重试"
@@ -344,7 +349,8 @@ class ControlPlaneStore:
                 "updated_at": now,
             }
             token = self._issue_token(data, user_id)
-            data["events"].append({"type": "trial_registered", "user_id": user_id, "timestamp": now})
+            data["events"].append(
+                {"type": "trial_registered", "user_id": user_id, "timestamp": now})
 
             # 记录 IP 注册
             ip_regs = data.setdefault("ip_registrations", {})
@@ -355,7 +361,8 @@ class ControlPlaneStore:
 
     def _issue_token(self, data: dict[str, Any], user_id: str) -> str:
         token = f"icore_{secrets.token_urlsafe(24)}"
-        data["tokens"][token] = {"user_id": user_id, "issued_at": int(time.time())}
+        data["tokens"][token] = {
+            "user_id": user_id, "issued_at": int(time.time())}
         return token
 
     def get_user_by_token(self, token: str) -> dict[str, Any] | None:
@@ -401,7 +408,8 @@ class ControlPlaneStore:
                 "model": model.strip(),
             }
             user["updated_at"] = now
-            data["events"].append({"type": "byok_updated", "user_id": user_id, "timestamp": now})
+            data["events"].append(
+                {"type": "byok_updated", "user_id": user_id, "timestamp": now})
             self._save(data)
             return user["byok"]
 
@@ -454,12 +462,14 @@ class ControlPlaneStore:
             usage = user.get("usage") or dict(_DEFAULT_USAGE)
 
             # 计算下次重置时间（下月 1 号 00:00 UTC）
-            from datetime import datetime, timedelta, timezone
-            now = datetime.now(timezone.utc)
+            from datetime import datetime
+            now = datetime.now(UTC)
             if now.month == 12:
-                next_reset = datetime(now.year + 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                next_reset = datetime(now.year + 1, 1, 1,
+                                      0, 0, 0, tzinfo=UTC)
             else:
-                next_reset = datetime(now.year, now.month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                next_reset = datetime(
+                    now.year, now.month + 1, 1, 0, 0, 0, tzinfo=UTC)
 
             return {
                 "plan": user["plan"],
@@ -674,12 +684,14 @@ class ControlPlaneStore:
     def usage_summary(self, user_id: str) -> dict[str, Any]:
         with self._lock:
             data = self._load()
-            events = [evt for evt in data["usage_events"] if evt["user_id"] == user_id]
+            events = [evt for evt in data["usage_events"]
+                      if evt["user_id"] == user_id]
             total_cost = round(sum(evt["estimated_cost"] for evt in events), 6)
             total_tokens = sum(evt["total_tokens"] for evt in events)
             by_model: dict[str, dict[str, Any]] = {}
             for evt in events:
-                entry = by_model.setdefault(evt["model"], {"tokens": 0, "cost": 0.0, "calls": 0})
+                entry = by_model.setdefault(
+                    evt["model"], {"tokens": 0, "cost": 0.0, "calls": 0})
                 entry["tokens"] += evt["total_tokens"]
                 entry["cost"] += evt["estimated_cost"]
                 entry["calls"] += 1
@@ -695,14 +707,16 @@ class ControlPlaneStore:
             leads = data.get("leads", [])
             now = int(time.time())
             active_window = now - 7 * 24 * 3600
-            recent_trials = sum(1 for evt in data["events"] if evt.get("type") == "trial_registered" and evt.get("timestamp", 0) >= active_window)
+            recent_trials = sum(1 for evt in data["events"] if evt.get(
+                "type") == "trial_registered" and evt.get("timestamp", 0) >= active_window)
             by_model: dict[str, dict[str, Any]] = {}
             total_cost = 0.0
             total_tokens = 0
             for evt in usage_events:
                 total_cost += float(evt.get("estimated_cost", 0.0) or 0.0)
                 total_tokens += int(evt.get("total_tokens", 0) or 0)
-                entry = by_model.setdefault(evt["model"], {"calls": 0, "tokens": 0, "cost": 0.0})
+                entry = by_model.setdefault(
+                    evt["model"], {"calls": 0, "tokens": 0, "cost": 0.0})
                 entry["calls"] += 1
                 entry["tokens"] += int(evt.get("total_tokens", 0) or 0)
                 entry["cost"] += float(evt.get("estimated_cost", 0.0) or 0.0)
@@ -774,7 +788,8 @@ class ControlPlaneStore:
                 "created_at": now,
             }
             data.setdefault("leads", []).append(lead)
-            data["events"].append({"type": "lead_created", "email": lead["email"], "intent": lead["intent"], "timestamp": now})
+            data["events"].append(
+                {"type": "lead_created", "email": lead["email"], "intent": lead["intent"], "timestamp": now})
             self._save(data)
             return lead
 
@@ -794,7 +809,8 @@ class ControlPlaneStore:
         with self._lock:
             data = self._load()
             self._ensure_org_for_user(data, data["users"][user_id])
-            projects_by_user = data.setdefault("projects", {}).setdefault(user_id, {})
+            projects_by_user = data.setdefault(
+                "projects", {}).setdefault(user_id, {})
             project = projects_by_user.setdefault(
                 project_id,
                 {
@@ -807,8 +823,10 @@ class ControlPlaneStore:
                 },
             )
             project["title"] = project_title or project["title"]
-            project["scenario_id"] = scenario_id or project.get("scenario_id", "")
-            project["organization_id"] = data["users"][user_id].get("organization_id", "")
+            project["scenario_id"] = scenario_id or project.get(
+                "scenario_id", "")
+            project["organization_id"] = data["users"][user_id].get(
+                "organization_id", "")
             project["updated_at"] = now
             project["sessions"][session_id] = {
                 "session_id": session_id,
@@ -845,7 +863,8 @@ class ControlPlaneStore:
                             "scenario_id": project.get("scenario_id", ""),
                         }
                     )
-            recent_sessions.sort(key=lambda item: item["updated_at"], reverse=True)
+            recent_sessions.sort(
+                key=lambda item: item["updated_at"], reverse=True)
             return {
                 "projects": projects[:10],
                 "recent_sessions": recent_sessions[:12],

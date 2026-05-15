@@ -1,5 +1,6 @@
 """HTTP middleware utilities."""
 
+from .auth_middleware import AuthMiddleware
 from .request_id_management import (
     CORRELATION_ID_HEADER,
     REQUEST_ID_HEADER,
@@ -13,6 +14,7 @@ from .request_id_management import (
 from .request_id_middleware import RequestIdMiddleware
 
 __all__ = [
+    "AuthMiddleware",
     "CORRELATION_ID_HEADER",
     "REQUEST_ID_HEADER",
     "TRACEPARENT_HEADER",

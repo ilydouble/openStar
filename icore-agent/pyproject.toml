@@ -54,6 +54,8 @@ dev = [
     "httpx>=0.27.0",       # TestClient
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "pyright[nodejs]>=1.1.409",
+    "autopep8", # Formatter
 ]
 
 [project.scripts]
@@ -74,9 +76,32 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = ["B008", "E501"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+
+[tool.pyright]
+typeCheckingMode = "strict"
+include = ["src", "tests"]
+exclude = [
+    "**/__pycache__",
+    "**/.venv",
+    "**/venv",
+    "**/build",
+    "**/dist", "**/node_modules", "**/.*"
+]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+reportMissingParameterType = "none"
+reportMissingTypeArgument = "none"
+reportMissingTypeStubs = "none"
+reportPrivateUsage = "none"
+reportUnknownArgumentType = "none"
+reportUnknownLambdaType = "none"
+reportUnknownMemberType = "none"
+reportUnknownParameterType = "none"
+reportUnknownVariableType = "none"

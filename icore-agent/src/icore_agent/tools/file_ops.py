@@ -5,9 +5,9 @@ All paths are sandboxed to settings.sequential_workspace.
 
 from __future__ import annotations
 
-import os
-import structlog
 from pathlib import Path
+
+import structlog
 from strands import tool
 
 from ..config import settings
@@ -105,7 +105,8 @@ def list_files(directory: str = ".", max_depth: int = 2) -> str:
             if depth > max_depth:
                 return
             try:
-                entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+                entries = sorted(
+                    path.iterdir(), key=lambda p: (p.is_file(), p.name))
             except PermissionError:
                 lines.append(f"{prefix}[permission denied]")
                 return
@@ -120,7 +121,8 @@ def list_files(directory: str = ".", max_depth: int = 2) -> str:
                     size_str = (
                         f"{size / 1024:.1f} KB" if size >= 1024 else f"{size} B"
                     )
-                    lines.append(f"{prefix}{connector}{entry.name}  ({size_str})")
+                    lines.append(
+                        f"{prefix}{connector}{entry.name}  ({size_str})")
 
         _walk(root, 1, "")
         return "\n".join(lines)

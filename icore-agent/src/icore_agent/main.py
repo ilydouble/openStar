@@ -14,17 +14,17 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings
-from .control_plane import current_runtime_user
-from .api.routers import agent as agent_router
+from .api.dependencies import usage_service
 from .api.routers import account as account_router
+from .api.routers import agent as agent_router
 from .api.routers import health as health_router
 from .api.routers import knowledge as knowledge_router
 from .api.routers import payment as payment_router
 from .api.routers.account import get_current_user
-from .api.middleware.auth import AuthMiddleware
-from .api.dependencies import usage_service
-from .lib.http.middleware import RequestIdMiddleware
+from .config import settings
+from .control_plane import current_runtime_user
+from .lib.http.middleware import AuthMiddleware, RequestIdMiddleware
+
 
 log = structlog.get_logger()
 
@@ -107,8 +107,10 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])
-    app.include_router(account_router.router, prefix="/api/v1/account", tags=["account"])
-    app.include_router(agent_router.router, prefix="/api/v1/agent", tags=["agent"])
+    app.include_router(account_router.router,
+                       prefix="/api/v1/account", tags=["account"])
+    app.include_router(agent_router.router,
+                       prefix="/api/v1/agent", tags=["agent"])
     app.include_router(
         knowledge_router.router,
         prefix="/api/v1/knowledge",

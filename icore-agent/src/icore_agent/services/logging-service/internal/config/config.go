@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"xiehe-services-lib-go/envconfig"
-	"xiehe-services-lib-go/httpserver"
+	httpserver "xiehe-services-lib-go/http/server"
 )
 
 // Config is the environment-derived runtime configuration for logging-service.

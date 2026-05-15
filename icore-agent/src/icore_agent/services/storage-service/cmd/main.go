@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"xiehe-services-lib-go/httpserver"
+	httpserver "xiehe-services-lib-go/http/server"
 	appstorage "xiehe-storage-service/internal/application/storage"
 	"xiehe-storage-service/internal/config"
 	"xiehe-storage-service/internal/infrastructure/s3storage"

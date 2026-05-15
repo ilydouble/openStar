@@ -1,6 +1,6 @@
 package httpapi
 
-import sharedhttp "xiehe-services-lib-go/httpapi"
+import sharedhttp "xiehe-services-lib-go/http/api"
 
 func NewRouter(handler *Handler) *sharedhttp.Router {
 	router := sharedhttp.NewRouter()

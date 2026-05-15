@@ -15,7 +15,7 @@ import (
 	kafkapub "xiehe-logging-service/internal/infrastructure/kafka"
 	"xiehe-logging-service/internal/interfaces/console"
 	httpapi "xiehe-logging-service/internal/interfaces/http"
-	"xiehe-services-lib-go/httpserver"
+	httpserver "xiehe-services-lib-go/http/server"
 )
 
 const kafkaStartupCheckTimeout = 10 * time.Second

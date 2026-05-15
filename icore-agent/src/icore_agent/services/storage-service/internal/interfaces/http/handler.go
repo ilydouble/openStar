@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	sharedhttp "xiehe-services-lib-go/httpapi"
+	sharedhttp "xiehe-services-lib-go/http/api"
 	appstorage "xiehe-storage-service/internal/application/storage"
 	domain "xiehe-storage-service/internal/domain/storage"
 )

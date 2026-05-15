@@ -25,6 +25,7 @@ httpx==0.28.1
 # ── Env & logging ─────────────────────────────
 python-dotenv==1.0.1
 structlog==25.5.0
+PyJWT==2.12.1
 
 # ── Redis (conversation memory) ───────────────
 redis==5.0.1

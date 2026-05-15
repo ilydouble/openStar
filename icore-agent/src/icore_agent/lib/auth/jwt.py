@@ -1,14 +1,13 @@
-"""Small HS256 JWT helper used by iCore backend and gateway authentication."""
+"""HS256 JWT helper used by iCore backend and gateway authentication."""
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import jwt as pyjwt
+from jwt import InvalidSignatureError, InvalidTokenError
 
 
 class JWTValidationError(ValueError):
@@ -43,12 +42,12 @@ def sign_access_token(
         "iat": issued_at,
         "exp": expires_at,
     }
-    header = {"alg": "HS256", "typ": "JWT"}
-    signing_input = ".".join(
-        [_json_b64url(header), _json_b64url(claims)]
+    return pyjwt.encode(
+        claims,
+        secret,
+        algorithm="HS256",
+        headers={"typ": "JWT"},
     )
-    signature = _sign(signing_input, secret)
-    return f"{signing_input}.{signature}"
 
 
 def verify_access_token(
@@ -63,21 +62,22 @@ def verify_access_token(
     if not secret:
         raise JWTValidationError("jwt secret is required")
 
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise JWTValidationError("token must have three JWT segments")
-
-    header_segment, payload_segment, signature = parts
-    signing_input = f"{header_segment}.{payload_segment}"
-    expected = _sign(signing_input, secret)
-    if not hmac.compare_digest(signature, expected):
-        raise JWTValidationError("invalid token signature")
-
-    header = _decode_json_segment(header_segment)
-    if header.get("alg") != "HS256":
-        raise JWTValidationError("unsupported token algorithm")
-
-    claims = _decode_json_segment(payload_segment)
+    try:
+        claims = pyjwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            options={
+                "require": ["sub", "roles", "iss", "aud", "iat", "exp"],
+                "verify_exp": False,
+                "verify_iss": False,
+                "verify_aud": False,
+            },
+        )
+    except InvalidSignatureError as exc:
+        raise JWTValidationError("invalid token signature") from exc
+    except InvalidTokenError as exc:
+        raise JWTValidationError(str(exc) or "invalid token") from exc
     _validate_claims(claims, issuer=issuer, audience=audience, now=now)
     return claims
 
@@ -120,39 +120,3 @@ def _timestamp(value: datetime) -> int:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return int(value.timestamp())
-
-
-def _json_b64url(payload: Mapping[str, Any]) -> str:
-    """Serialize a JSON object into an unpadded base64url segment."""
-    raw = json.dumps(payload, separators=(",", ":"),
-                     sort_keys=True).encode("utf-8")
-    return _b64url_encode(raw)
-
-
-def _decode_json_segment(segment: str) -> dict[str, Any]:
-    """Decode one base64url JWT segment into a JSON object."""
-    try:
-        payload = json.loads(_b64url_decode(segment))
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise JWTValidationError("token payload is not valid JSON") from exc
-    if not isinstance(payload, dict):
-        raise JWTValidationError("token payload must be a JSON object")
-    return payload
-
-
-def _sign(signing_input: str, secret: str) -> str:
-    """Return the unpadded base64url HMAC-SHA256 signature."""
-    digest = hmac.new(secret.encode("utf-8"),
-                      signing_input.encode("ascii"), hashlib.sha256)
-    return _b64url_encode(digest.digest())
-
-
-def _b64url_encode(raw: bytes) -> str:
-    """Encode bytes as unpadded base64url text."""
-    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
-
-
-def _b64url_decode(segment: str) -> str:
-    """Decode unpadded base64url text into UTF-8 text."""
-    padding = "=" * (-len(segment) % 4)
-    return base64.urlsafe_b64decode(f"{segment}{padding}").decode("utf-8")

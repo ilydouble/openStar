@@ -9,7 +9,7 @@ class AuthSettings(DomainSettings):
     icore_base_url: str = ""
     icore_secret: str = ""
     auth_enabled: bool = False
-    jwt_secret: str = "dev-icore-jwt-secret"
+    jwt_secret: str = "dev-icore-jwt-secret-change-me-32-bytes"
     jwt_issuer: str = "icore-agent"
     jwt_audience: str = "icore-gateway"
     jwt_ttl_seconds: int = 86400

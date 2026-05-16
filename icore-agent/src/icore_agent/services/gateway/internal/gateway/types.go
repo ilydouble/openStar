@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	sharedlogging "icore-services-lib-go/logging"
 )
 
 const (
@@ -15,13 +17,6 @@ const (
 	AuthResultMissingToken = "missing_token"
 	// AuthResultInvalidToken marks protected requests with an invalid bearer token.
 	AuthResultInvalidToken = "invalid_token"
-
-	// LogLevelInfo is the normal gateway access log level.
-	LogLevelInfo = "INFO"
-	// LogLevelWarning is used for gateway-side rejections.
-	LogLevelWarning = "WARNING"
-	// LogLevelError is used for upstream or gateway failures.
-	LogLevelError = "ERROR"
 )
 
 // Config contains the runtime behavior for the gateway HTTP router.
@@ -37,15 +32,10 @@ type Config struct {
 
 // Dependencies provides side-effecting gateway collaborators for tests and main.
 type Dependencies struct {
-	Logger    Logger
+	Logger    sharedlogging.Emitter
 	Limiter   RateLimiter
 	Transport http.RoundTripper
 	Now       func() time.Time
-}
-
-// Logger emits one gateway log event after each request lifecycle.
-type Logger interface {
-	Emit(context.Context, LogEvent) error
 }
 
 // RateLimiter decides whether a request may enter an upstream service.
@@ -58,16 +48,6 @@ type RateLimitDecision struct {
 	Allowed      bool
 	Result       string
 	RejectReason string
-}
-
-// LogEvent mirrors the logging-service event contract used by the gateway.
-type LogEvent struct {
-	Timestamp time.Time       `json:"timestamp"`
-	Level     string          `json:"level"`
-	Service   string          `json:"service"`
-	Message   string          `json:"message"`
-	TraceID   string          `json:"trace_id"`
-	Metadata  GatewayMetadata `json:"metadata"`
 }
 
 // GatewayMetadata is the metadata object stored under logging-service metadata.

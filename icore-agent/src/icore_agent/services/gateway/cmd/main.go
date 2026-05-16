@@ -12,7 +12,9 @@ import (
 
 	"icore-gateway/internal/config"
 	"icore-gateway/internal/gateway"
+	gatewayrouter "icore-gateway/internal/gateway/router"
 	httpserver "icore-services-lib-go/http/server"
+	sharedlogging "icore-services-lib-go/logging"
 )
 
 // main wires configuration, Redis rate limiting, logging, and the HTTP server lifecycle.
@@ -32,7 +34,7 @@ func main() {
 	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()
 
-	router := gateway.NewRouter(
+	router := gatewayrouter.NewRouter(
 		gateway.Config{
 			BackendURL:           cfg.BackendURL,
 			JWTSecret:            cfg.JWTSecret,
@@ -43,11 +45,11 @@ func main() {
 			TimeLocation:         timeLocation,
 		},
 		gateway.Dependencies{
-			Logger: gateway.NewHTTPLogger(
-				cfg.LoggingServiceURL,
-				cfg.LoggingServiceToken,
-				cfg.LoggingServiceTimeout,
-			),
+			Logger: sharedlogging.NewLoggingServiceClient(sharedlogging.LoggingServiceClientConfig{
+				BaseURL: cfg.LoggingServiceURL,
+				Token:   cfg.LoggingServiceToken,
+				Timeout: cfg.LoggingServiceTimeout,
+			}),
 			Limiter: gateway.NewRedisLimiter(
 				redisClient,
 				cfg.RateLimitWindowLimit,

@@ -1,12 +1,16 @@
-package gateway
+package handler
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+)
 
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
 }
 
+// newStatusRecorder wraps a response writer so handlers can inspect final status.
 func newStatusRecorder(w http.ResponseWriter) *statusRecorder {
 	return &statusRecorder{ResponseWriter: w}
 }
@@ -43,4 +47,11 @@ func (recorder *statusRecorder) Status() int {
 		return http.StatusOK
 	}
 	return recorder.status
+}
+
+// writeJSON writes a small JSON response for gateway-owned responses.
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }

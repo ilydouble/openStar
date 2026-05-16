@@ -205,6 +205,25 @@ def test_go_modules_use_icore_names():
     assert stale_paths == []
 
 
+def test_gateway_router_handlers_and_logging_client_are_split_by_layer():
+    """Verify gateway HTTP layers stay separated from shared logging delivery."""
+    services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
+    gateway_dir = services_dir / "gateway" / "internal" / "gateway"
+    lib_logging_dir = services_dir / "lib-go" / "logging"
+
+    assert (gateway_dir / "router" / "router.go").is_file()
+    assert (gateway_dir / "router" / "router_test.go").is_file()
+    assert (gateway_dir / "handler" / "health.go").is_file()
+    assert (gateway_dir / "handler" / "proxy.go").is_file()
+    assert (gateway_dir / "handler" / "request_log.go").is_file()
+    assert not (gateway_dir / "router.go").exists()
+    assert not (gateway_dir / "router_test.go").exists()
+    assert not (gateway_dir / "http_logger.go").exists()
+
+    assert (lib_logging_dir / "logging_service_client.go").is_file()
+    assert (lib_logging_dir / "app_logger.go").is_file()
+
+
 def test_dockerfile_keeps_dependency_layer_before_source_copy():
     dockerfile = (AGENT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 

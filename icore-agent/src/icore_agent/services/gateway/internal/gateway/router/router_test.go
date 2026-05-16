@@ -1,4 +1,4 @@
-package gateway
+package router
 
 import (
 	"context"
@@ -12,22 +12,25 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"icore-gateway/internal/gateway"
+	sharedlogging "icore-services-lib-go/logging"
 )
 
 type captureLogger struct {
-	events []LogEvent
+	events []sharedlogging.LogEvent
 }
 
-func (logger *captureLogger) Emit(_ context.Context, event LogEvent) error {
+func (logger *captureLogger) Emit(_ context.Context, event sharedlogging.LogEvent) error {
 	logger.events = append(logger.events, event)
 	return nil
 }
 
 type staticLimiter struct {
-	decision RateLimitDecision
+	decision gateway.RateLimitDecision
 }
 
-func (limiter staticLimiter) Allow(_ context.Context, _ string) (RateLimitDecision, error) {
+func (limiter staticLimiter) Allow(_ context.Context, _ string) (gateway.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -45,17 +48,17 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	})
 
 	logger := &captureLogger{}
-	router := NewRouter(Config{
+	router := NewRouter(gateway.Config{
 		BackendURL:           "http://backend.local",
 		JWTSecret:            "test-secret-with-at-least-32-bytes",
 		JWTIssuer:            "icore-agent",
 		JWTAudience:          "icore-gateway",
 		LoggingServiceName:   "icore-gateway",
 		RateLimitWindowLimit: 10,
-	}, Dependencies{
+	}, gateway.Dependencies{
 		Logger:    logger,
 		Transport: transport,
-		Limiter: staticLimiter{decision: RateLimitDecision{
+		Limiter: staticLimiter{decision: gateway.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
@@ -81,7 +84,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 		t.Fatalf("expected one gateway log event, got %d", len(logger.events))
 	}
 
-	metadata := logger.events[0].Metadata
+	metadata := eventMetadata(t, logger.events[0])
 	if logger.events[0].Service != "icore-gateway" {
 		t.Fatalf("unexpected service %q", logger.events[0].Service)
 	}
@@ -97,7 +100,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	if metadata.Path != "/api/v1/account/login" || metadata.Query != "source=web" {
 		t.Fatalf("metadata did not capture path/query: %#v", metadata)
 	}
-	if metadata.AuthResult != AuthResultPublic {
+	if metadata.AuthResult != gateway.AuthResultPublic {
 		t.Fatalf("expected public auth result, got %q", metadata.AuthResult)
 	}
 	if metadata.UpstreamService == nil || *metadata.UpstreamService != "icore-agent" {
@@ -121,14 +124,14 @@ func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
 		t.Fatalf("load test location: %v", err)
 	}
 	logger := &captureLogger{}
-	router := NewRouter(Config{
+	router := NewRouter(gateway.Config{
 		BackendURL:         "http://backend.local",
 		JWTSecret:          "test-secret-with-at-least-32-bytes",
 		JWTIssuer:          "icore-agent",
 		JWTAudience:        "icore-gateway",
 		LoggingServiceName: "icore-gateway",
 		TimeLocation:       location,
-	}, Dependencies{
+	}, gateway.Dependencies{
 		Logger: logger,
 		Now: func() time.Time {
 			return time.Date(2026, 5, 16, 7, 22, 52, 742470455, time.UTC)
@@ -141,8 +144,9 @@ func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
 	if len(logger.events) != 1 {
 		t.Fatalf("expected one gateway log event, got %d", len(logger.events))
 	}
+	metadata := eventMetadata(t, logger.events[0])
 	want := "2026-05-16T15:22:52.742470455+08:00"
-	if got := logger.events[0].Metadata.RequestTimestamp; got != want {
+	if got := metadata.RequestTimestamp; got != want {
 		t.Fatalf("metadata timestamp = %q, want %q", got, want)
 	}
 	if got := logger.events[0].Timestamp.Format(time.RFC3339Nano); got != want {
@@ -158,13 +162,13 @@ func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 	})
 
 	logger := &captureLogger{}
-	router := NewRouter(Config{
+	router := NewRouter(gateway.Config{
 		BackendURL:         "http://backend.local",
 		JWTSecret:          "test-secret-with-at-least-32-bytes",
 		JWTIssuer:          "icore-agent",
 		JWTAudience:        "icore-gateway",
 		LoggingServiceName: "icore-gateway",
-	}, Dependencies{Logger: logger, Transport: transport, Now: time.Now})
+	}, gateway.Dependencies{Logger: logger, Transport: transport, Now: time.Now})
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil))
@@ -178,14 +182,15 @@ func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 	if len(logger.events) != 1 {
 		t.Fatalf("expected one log event, got %d", len(logger.events))
 	}
-	if logger.events[0].Level != LogLevelWarning {
+	if logger.events[0].Level != sharedlogging.LogLevelWarning {
 		t.Fatalf("expected warning log, got %q", logger.events[0].Level)
 	}
-	if logger.events[0].Metadata.AuthResult != AuthResultMissingToken {
-		t.Fatalf("unexpected auth result %q", logger.events[0].Metadata.AuthResult)
+	metadata := eventMetadata(t, logger.events[0])
+	if metadata.AuthResult != gateway.AuthResultMissingToken {
+		t.Fatalf("unexpected auth result %q", metadata.AuthResult)
 	}
-	if logger.events[0].Metadata.RejectReason == nil || *logger.events[0].Metadata.RejectReason != "missing bearer token" {
-		t.Fatalf("unexpected reject reason %#v", logger.events[0].Metadata.RejectReason)
+	if metadata.RejectReason == nil || *metadata.RejectReason != "missing bearer token" {
+		t.Fatalf("unexpected reject reason %#v", metadata.RejectReason)
 	}
 }
 
@@ -200,13 +205,13 @@ func TestGatewayForwardsValidJWTIdentityHeaders(t *testing.T) {
 
 	secret := "test-secret-with-at-least-32-bytes"
 	token := signTestJWT(t, secret, "user-1", []string{"owner", "admin"}, time.Now().Add(time.Hour))
-	router := NewRouter(Config{
+	router := NewRouter(gateway.Config{
 		BackendURL:         "http://backend.local",
 		JWTSecret:          secret,
 		JWTIssuer:          "icore-agent",
 		JWTAudience:        "icore-gateway",
 		LoggingServiceName: "icore-gateway",
-	}, Dependencies{Logger: &captureLogger{}, Transport: transport, Now: time.Now})
+	}, gateway.Dependencies{Logger: &captureLogger{}, Transport: transport, Now: time.Now})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
@@ -232,16 +237,16 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 	})
 
 	logger := &captureLogger{}
-	router := NewRouter(Config{
+	router := NewRouter(gateway.Config{
 		BackendURL:         "http://backend.local",
 		JWTSecret:          "test-secret-with-at-least-32-bytes",
 		JWTIssuer:          "icore-agent",
 		JWTAudience:        "icore-gateway",
 		LoggingServiceName: "icore-gateway",
-	}, Dependencies{
+	}, gateway.Dependencies{
 		Logger:    logger,
 		Transport: transport,
-		Limiter: staticLimiter{decision: RateLimitDecision{
+		Limiter: staticLimiter{decision: gateway.RateLimitDecision{
 			Allowed:      false,
 			Result:       "rejected",
 			RejectReason: "service rate limit exceeded",
@@ -258,9 +263,19 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 	if upstreamHit {
 		t.Fatal("rate limited request should not reach upstream")
 	}
-	if logger.events[0].Metadata.RateLimitResult != "rejected" {
-		t.Fatalf("unexpected rate limit result %q", logger.events[0].Metadata.RateLimitResult)
+	metadata := eventMetadata(t, logger.events[0])
+	if metadata.RateLimitResult != "rejected" {
+		t.Fatalf("unexpected rate limit result %q", metadata.RateLimitResult)
 	}
+}
+
+func eventMetadata(t *testing.T, event sharedlogging.LogEvent) gateway.GatewayMetadata {
+	t.Helper()
+	metadata, ok := event.Metadata.(gateway.GatewayMetadata)
+	if !ok {
+		t.Fatalf("metadata has type %T, want gateway.GatewayMetadata", event.Metadata)
+	}
+	return metadata
 }
 
 func testResponse(status int, body string) *http.Response {

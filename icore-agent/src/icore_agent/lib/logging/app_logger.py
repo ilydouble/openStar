@@ -1,4 +1,4 @@
-"""Small backend logger facade that sends events directly to logging-service."""
+"""Application-facing logger facade for backend module code."""
 
 from __future__ import annotations
 
@@ -8,34 +8,34 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .contracts.v1 import LogLevel
-from .logger import Logger, logger as default_logger
+from .logging_service_client import LoggingServiceClient, default_logging_client
 from .sanitizer import sanitize_for_logging_service
 
 _BACKEND_SERVICE = "icore-backend"
 
 
-class ServiceLogger:
-    """ServiceLogger exposes module logging methods backed by logging-service."""
+class AppLogger:
+    """Application-facing logger facade for module code."""
 
     def __init__(
         self,
         name: str,
         *,
-        logger: Logger | None = None,
+        client: LoggingServiceClient | None = None,
         now: Callable[[], datetime] | None = None,
         bound_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Create a backend logger for one module or component."""
         self.name = name
-        self._logger = logger or default_logger
+        self._client = client or default_logging_client
         self._now = now or (lambda: datetime.now(UTC))
         self._bound_metadata = bound_metadata or {}
 
-    def bind(self, **metadata: Any) -> "ServiceLogger":
+    def bind(self, **metadata: Any) -> "AppLogger":
         """Return a logger with additional metadata included in every event."""
-        return ServiceLogger(
+        return AppLogger(
             self.name,
-            logger=self._logger,
+            client=self._client,
             now=self._now,
             bound_metadata={**self._bound_metadata, **metadata},
         )
@@ -78,7 +78,7 @@ class ServiceLogger:
         if not isinstance(sanitized, dict):
             sanitized = {"logger": self.name, "value": sanitized}
         try:
-            return self._logger.emit_event(
+            return self._client.emit_event(
                 level,
                 message=message,
                 service=_BACKEND_SERVICE,
@@ -103,11 +103,11 @@ class ServiceLogger:
             return False
 
 
-def get_service_logger(
+def get_logger(
     name: str,
     *,
-    logger: Logger | None = None,
+    client: LoggingServiceClient | None = None,
     now: Callable[[], datetime] | None = None,
-) -> ServiceLogger:
+) -> AppLogger:
     """Return a module-scoped backend logger that writes to logging-service."""
-    return ServiceLogger(name, logger=logger, now=now)
+    return AppLogger(name, client=client, now=now)

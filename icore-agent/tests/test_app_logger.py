@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
+from icore_agent.lib.logging.app_logger import get_logger
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logger import Logger
-from icore_agent.lib.logging.service_logger import get_service_logger
+from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
 
 
-class CapturingLogger(Logger):
-    """Logger double that records direct logging-service events in memory."""
+class CapturingLoggingClient(LoggingServiceClient):
+    """Logging-service client double that records events in memory."""
 
     def __init__(self) -> None:
         """Create a logging-service client double without network delivery."""
@@ -26,12 +26,12 @@ class CapturingLogger(Logger):
         return True
 
 
-def test_service_logger_emits_icore_backend_event_with_request_context():
+def test_app_logger_emits_icore_backend_event_with_request_context():
     """Verify backend module logs go directly to logging-service."""
-    capture = CapturingLogger()
-    log = get_service_logger(
+    client = CapturingLoggingClient()
+    log = get_logger(
         "icore_agent.tests",
-        logger=capture,
+        client=client,
         now=lambda: datetime(2026, 5, 16, 7, 30, tzinfo=UTC),
     )
     token = set_request_id("req-service-log")
@@ -44,8 +44,8 @@ def test_service_logger_emits_icore_backend_event_with_request_context():
     finally:
         clear_request_id(token)
 
-    assert len(capture.events) == 1
-    event = capture.events[0]
+    assert len(client.events) == 1
+    event = client.events[0]
     assert event.level == LogLevel.INFO
     assert event.service == "icore-backend"
     assert event.message == "tool_call"
@@ -56,18 +56,18 @@ def test_service_logger_emits_icore_backend_event_with_request_context():
     assert event.metadata["nested"]["safe"] == "value"
 
 
-def test_service_logger_preserves_warning_level():
+def test_app_logger_preserves_warning_level():
     """Verify warning call sites keep their logging-service severity."""
-    capture = CapturingLogger()
-    log = get_service_logger(
+    client = CapturingLoggingClient()
+    log = get_logger(
         "icore_agent.tests",
-        logger=capture,
+        client=client,
         now=lambda: datetime(2026, 5, 16, 7, 30, tzinfo=UTC),
     )
 
     log.warning("auth_validation_error", error="bad token")
 
-    assert len(capture.events) == 1
-    assert capture.events[0].level == LogLevel.WARNING
-    assert capture.events[0].message == "auth_validation_error"
-    assert capture.events[0].metadata["error"] == "bad token"
+    assert len(client.events) == 1
+    assert client.events[0].level == LogLevel.WARNING
+    assert client.events[0].message == "auth_validation_error"
+    assert client.events[0].metadata["error"] == "bad token"

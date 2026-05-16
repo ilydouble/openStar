@@ -6,11 +6,11 @@ Strands @tool wrapper around httpx.
 from __future__ import annotations
 
 import json
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _TIMEOUT = 30  # seconds
 _MAX_BODY_CHARS = 6_000

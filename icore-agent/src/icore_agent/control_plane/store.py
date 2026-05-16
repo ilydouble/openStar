@@ -8,15 +8,15 @@ import secrets
 import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 from ..config import settings
-from ..lib.logging import LogLevel, get_service_logger, logger as backend_logger
+from ..lib.logging.app_logger import get_logger
 
 fallback_log = logging.getLogger(__name__)
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 
 def _print_dev_verification_email(to_email: str, code: str) -> None:
@@ -85,13 +85,7 @@ def _emit_verification_code_event(
         metadata["verification_code"] = code
 
     try:
-        backend_logger.emit_event(
-            LogLevel.INFO,
-            message="verification_code_issued",
-            service="icore-backend",
-            metadata=metadata,
-            timestamp=datetime.now(UTC),
-        )
+        log.info("verification_code_issued", **metadata)
     except Exception as exc:  # noqa: BLE001 - logging must not block account flows.
         fallback_log.warning("verification_code_log_emit_failed: %s", exc)
 

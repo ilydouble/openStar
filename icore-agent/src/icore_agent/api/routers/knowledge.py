@@ -7,7 +7,7 @@ DELETE /api/v1/knowledge/documents/{filename} — remove a document
 
 from __future__ import annotations
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -17,7 +17,7 @@ from ...application.knowledge import SUPPORTED_EXTENSIONS
 from ...application.knowledge.service import KnowledgeService
 from ..dependencies import get_current_user, get_knowledge_service
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 router = APIRouter()
 
 

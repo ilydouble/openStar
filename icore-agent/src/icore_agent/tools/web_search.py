@@ -10,13 +10,13 @@ Exposed as a Strands @tool for use by the orchestrator and sub-agents.
 
 from __future__ import annotations
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
 
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _TAVILY_URL = "https://api.tavily.com/search"
 _DDG_URL = "https://api.duckduckgo.com/"

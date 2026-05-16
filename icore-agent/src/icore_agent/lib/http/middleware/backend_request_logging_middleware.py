@@ -11,7 +11,8 @@ from typing import Any
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from ...logging import LogLevel, logger as backend_logger
+from ...logging import LogLevel
+from ...logging.logging_service_client import default_logging_client
 from ..request.request_context import get_request_id
 from ..request.request_id_management import REQUEST_ID_HEADER, request_id_from_headers
 
@@ -25,12 +26,12 @@ class BackendRequestLoggingMiddleware:
         self,
         app: ASGIApp,
         *,
-        logger: Any | None = None,
+        client: Any | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         """Wrap an ASGI app with non-blocking logging-service access logs."""
         self.app = app
-        self.logger = logger or backend_logger
+        self.client = client or default_logging_client
         self.now = now or (lambda: datetime.now(UTC))
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -100,7 +101,7 @@ class BackendRequestLoggingMiddleware:
         }
 
         try:
-            self.logger.emit_event(
+            self.client.emit_event(
                 self._level(final_status_code),
                 message="backend request",
                 service="icore-backend",

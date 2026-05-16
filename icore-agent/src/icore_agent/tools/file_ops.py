@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from strands import tool
 
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _MAX_READ_BYTES = settings.file_ops_max_size_mb * 1024 * 1024
 

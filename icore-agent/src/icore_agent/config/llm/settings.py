@@ -51,9 +51,9 @@ class LLMSettings(DomainSettings):
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         if self.model_id_fast and self.model_id_fast != self.model_id:
             kwargs["fallbacks"] = [self.model_id_fast]
-        from icore_agent.lib.logging import get_service_logger
+        from icore_agent.lib.logging.app_logger import get_logger
 
-        log = get_service_logger(__name__)
+        log = get_logger(__name__)
         log.info("litellm_kwargs_resolved", kwargs=kwargs)
         return kwargs
 

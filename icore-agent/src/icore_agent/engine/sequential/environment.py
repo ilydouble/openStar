@@ -15,9 +15,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 # Truncate very long outputs to keep token costs sane
 _MAX_OUTPUT_CHARS = 8_000

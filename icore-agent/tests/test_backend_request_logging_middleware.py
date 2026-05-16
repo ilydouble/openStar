@@ -11,11 +11,11 @@ from icore_agent.lib.http.middleware import (
     RequestIdMiddleware,
 )
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logger import Logger
+from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
 
 
-class CapturingLogger(Logger):
-    """Logger double that records backend request events in memory."""
+class CapturingLoggingClient(LoggingServiceClient):
+    """Logging-service client double that records backend request events."""
 
     def __init__(self) -> None:
         """Create a logging-service client double without network delivery."""
@@ -32,13 +32,13 @@ class CapturingLogger(Logger):
         return True
 
 
-def _build_app(logger: CapturingLogger, *, fail: bool = False) -> FastAPI:
+def _build_app(logging_client: CapturingLoggingClient, *, fail: bool = False) -> FastAPI:
     """Build a small ASGI app with backend access logging enabled."""
     app = FastAPI()
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         BackendRequestLoggingMiddleware,
-        logger=logger,
+        client=logging_client,
         now=lambda: datetime(2026, 5, 16, 7, 30, tzinfo=UTC),
     )
 
@@ -56,11 +56,11 @@ def _build_app(logger: CapturingLogger, *, fail: bool = False) -> FastAPI:
 @pytest.mark.asyncio
 async def test_backend_request_logging_middleware_emits_success_event():
     """Verify every successful backend HTTP request is sent to logging-service."""
-    logger = CapturingLogger()
-    transport = httpx.ASGITransport(app=_build_app(logger))
+    logging_client = CapturingLoggingClient()
+    transport = httpx.ASGITransport(app=_build_app(logging_client))
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http_client:
+        response = await http_client.get(
             "/inspect?source=frontend",
             headers={
                 "X-Request-ID": "req-backend-1",
@@ -70,8 +70,8 @@ async def test_backend_request_logging_middleware_emits_success_event():
         )
 
     assert response.status_code == 200
-    assert len(logger.events) == 1
-    event = logger.events[0]
+    assert len(logging_client.events) == 1
+    event = logging_client.events[0]
     assert event.level == LogLevel.INFO
     assert event.service == "icore-backend"
     assert event.message == "backend request"
@@ -92,21 +92,21 @@ async def test_backend_request_logging_middleware_emits_success_event():
 @pytest.mark.asyncio
 async def test_backend_request_logging_middleware_emits_error_event():
     """Verify unhandled backend errors are logged before FastAPI returns 500."""
-    logger = CapturingLogger()
+    logging_client = CapturingLoggingClient()
     transport = httpx.ASGITransport(
-        app=_build_app(logger, fail=True),
+        app=_build_app(logging_client, fail=True),
         raise_app_exceptions=False,
     )
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http_client:
+        response = await http_client.get(
             "/inspect",
             headers={"X-Request-ID": "req-backend-error"},
         )
 
     assert response.status_code == 500
-    assert len(logger.events) == 1
-    event = logger.events[0]
+    assert len(logging_client.events) == 1
+    event = logging_client.events[0]
     assert event.level == LogLevel.ERROR
     assert event.service == "icore-backend"
     assert event.trace_id == "req-backend-error"

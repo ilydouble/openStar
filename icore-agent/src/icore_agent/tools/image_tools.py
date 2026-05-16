@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from litellm import completion as litellm_completion
 from strands import tool
 
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 

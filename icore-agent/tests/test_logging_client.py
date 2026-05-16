@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 
 from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logger import Logger
+from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
 
 
-class CapturingLogger(Logger):
-    """Logger variant that records events without starting the HTTP worker."""
+class CapturingLoggingClient(LoggingServiceClient):
+    """Logging-service client double that records events in memory."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -23,11 +23,12 @@ class CapturingLogger(Logger):
         return True
 
 
-def test_logger_explicit_trace_id_wins_over_request_context():
-    logger = CapturingLogger()
+def test_logging_client_explicit_trace_id_wins_over_request_context():
+    """Verify an explicit trace id is not overwritten by request context."""
+    client = CapturingLoggingClient()
     token = set_request_id("context-id")
     try:
-        logger.emit_event(
+        client.emit_event(
             LogLevel.INFO,
             message="created",
             service="icore-agent",
@@ -37,14 +38,15 @@ def test_logger_explicit_trace_id_wins_over_request_context():
     finally:
         clear_request_id(token)
 
-    assert logger.events[0].trace_id == "explicit-id"
+    assert client.events[0].trace_id == "explicit-id"
 
 
-def test_logger_explicit_empty_trace_id_wins_over_request_context():
-    logger = CapturingLogger()
+def test_logging_client_explicit_empty_trace_id_wins_over_request_context():
+    """Verify callers can intentionally emit an empty trace id."""
+    client = CapturingLoggingClient()
     token = set_request_id("context-id")
     try:
-        logger.emit_event(
+        client.emit_event(
             LogLevel.INFO,
             message="created",
             service="icore-agent",
@@ -54,14 +56,15 @@ def test_logger_explicit_empty_trace_id_wins_over_request_context():
     finally:
         clear_request_id(token)
 
-    assert logger.events[0].trace_id == ""
+    assert client.events[0].trace_id == ""
 
 
-def test_logger_uses_request_context_when_trace_id_is_not_explicit():
-    logger = CapturingLogger()
+def test_logging_client_uses_request_context_when_trace_id_is_not_explicit():
+    """Verify request context fills trace id when callers omit it."""
+    client = CapturingLoggingClient()
     token = set_request_id("context-id")
     try:
-        logger.emit_event(
+        client.emit_event(
             LogLevel.INFO,
             message="created",
             service="icore-agent",
@@ -70,17 +73,18 @@ def test_logger_uses_request_context_when_trace_id_is_not_explicit():
     finally:
         clear_request_id(token)
 
-    assert logger.events[0].trace_id == "context-id"
+    assert client.events[0].trace_id == "context-id"
 
 
-def test_logger_allows_empty_trace_id_outside_http_request():
-    logger = CapturingLogger()
+def test_logging_client_allows_empty_trace_id_outside_http_request():
+    """Verify background tasks can emit events without request context."""
+    client = CapturingLoggingClient()
 
-    logger.emit_event(
+    client.emit_event(
         LogLevel.INFO,
         message="background task",
         service="icore-agent",
         timestamp=datetime(2026, 5, 14, tzinfo=UTC),
     )
 
-    assert logger.events[0].trace_id == ""
+    assert client.events[0].trace_id == ""

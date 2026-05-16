@@ -1,4 +1,4 @@
-"""Internal logging-service client and application logger facade."""
+"""Internal client that queues and delivers events to logging-service."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ from icore_agent.lib.logging.contracts.v1 import (
 )
 
 
-class Logger:
-    """Logger queues LogEvent objects and sends them to the Go logging service."""
+class LoggingServiceClient:
+    """Queue and deliver LogEvent objects to the Go logging-service."""
 
     def __init__(
         self,
@@ -149,4 +149,4 @@ class Logger:
         print(f"[logging-service-fallback] {message}", file=sys.stderr)
 
 
-logger = Logger()
+default_logging_client = LoggingServiceClient()

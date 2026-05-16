@@ -14,14 +14,14 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 import redis.asyncio as aioredis
 from typing import Any
 
 from ..application.knowledge.text import chunk_text
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 INLINE_PER_DOC = 40_000    # chars — docs larger than this go straight to RAG
 INLINE_TOTAL = 120_000   # chars — total inline budget across all session docs

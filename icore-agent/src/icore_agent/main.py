@@ -28,10 +28,10 @@ from .lib.http.middleware import (
     BackendRequestLoggingMiddleware,
     RequestIdMiddleware,
 )
-from .lib.logging import get_service_logger
+from .lib.logging.app_logger import get_logger
 
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────

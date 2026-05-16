@@ -13,13 +13,13 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from litellm import completion
 
 from ...config import settings
 from .environment import BaseEnvironment, LocalEnvironment
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _SYSTEM_PROMPT = """
 You are a sequential task executor. You solve tasks by running bash commands one at a time.

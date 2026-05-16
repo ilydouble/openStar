@@ -7,12 +7,12 @@ results itself, avoiding an extra LLM round-trip from a sub-agent.
 
 from __future__ import annotations
 
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from strands import tool
 
 from ..memory.chroma_store import search as chroma_search_raw
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 
 @tool

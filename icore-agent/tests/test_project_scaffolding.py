@@ -221,13 +221,23 @@ def test_dockerfile_keeps_dependency_layer_before_source_copy():
 
 
 def test_copied_logging_client_does_not_reference_old_project_packages():
-    logger = (AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging" / "logger.py").read_text(
+    client = (AGENT_ROOT / "src" / "icore_agent" / "lib" /
+              "logging" / "logging_service_client.py").read_text(
         encoding="utf-8"
     )
 
-    assert "from lib.logging" not in logger
-    assert "app.core.system.request_context" not in logger
-    assert "medical_backend" not in logger
+    assert "from lib.logging" not in client
+    assert "app.core.system.request_context" not in client
+    assert "medical_backend" not in client
+
+
+def test_logging_facade_uses_clear_layered_names():
+    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging"
+
+    assert (logging_dir / "logging_service_client.py").exists()
+    assert (logging_dir / "app_logger.py").exists()
+    assert not (logging_dir / "logger.py").exists()
+    assert not (logging_dir / "service_logger.py").exists()
 
 
 def test_fastapi_app_installs_request_id_middleware():

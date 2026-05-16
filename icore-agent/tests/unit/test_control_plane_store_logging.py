@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
+from icore_agent.lib.logging.app_logger import get_logger
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logger import Logger
+from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
 
 
-class CapturingLogger(Logger):
+class CapturingLoggingClient(LoggingServiceClient):
     """Logger double that records events without starting the HTTP worker."""
 
     def __init__(self) -> None:
@@ -29,7 +30,7 @@ def _build_store(tmp_path, monkeypatch, *, debug: bool):
     """Build a store instance with deterministic code generation and captured logs."""
     import icore_agent.control_plane.store as store_module
 
-    capture = CapturingLogger()
+    logging_client = CapturingLoggingClient()
     monkeypatch.setattr(
         store_module.settings,
         "control_plane_store_path",
@@ -40,14 +41,18 @@ def _build_store(tmp_path, monkeypatch, *, debug: bool):
     monkeypatch.setattr(store_module.secrets, "randbelow", lambda _: 123456)
     monkeypatch.setattr(
         store_module, "_print_dev_verification_email", lambda *_: None)
-    monkeypatch.setattr(store_module, "backend_logger", capture)
+    monkeypatch.setattr(
+        store_module,
+        "log",
+        get_logger("icore_agent.control_plane.store", client=logging_client),
+    )
 
-    return store_module.ControlPlaneStore(), capture
+    return store_module.ControlPlaneStore(), logging_client
 
 
 def test_send_verification_code_logs_debug_code_to_logging_service(tmp_path, monkeypatch):
     """Verify local development can read email codes from logging-service."""
-    store, capture = _build_store(tmp_path, monkeypatch, debug=True)
+    store, logging_client = _build_store(tmp_path, monkeypatch, debug=True)
     token = set_request_id("req-debug-code")
     try:
         success, _ = store.send_verification_code(
@@ -56,8 +61,8 @@ def test_send_verification_code_logs_debug_code_to_logging_service(tmp_path, mon
         clear_request_id(token)
 
     assert success is True
-    assert len(capture.events) == 1
-    event = capture.events[0]
+    assert len(logging_client.events) == 1
+    event = logging_client.events[0]
     assert event.level == LogLevel.INFO
     assert event.service == "icore-backend"
     assert event.message == "verification_code_issued"
@@ -69,11 +74,11 @@ def test_send_verification_code_logs_debug_code_to_logging_service(tmp_path, mon
 
 def test_send_verification_code_omits_code_outside_debug(tmp_path, monkeypatch):
     """Verify production logs do not leak one-time verification codes."""
-    store, capture = _build_store(tmp_path, monkeypatch, debug=False)
+    store, logging_client = _build_store(tmp_path, monkeypatch, debug=False)
     store.send_verification_code("trial@example.com", "127.0.0.1")
 
-    assert len(capture.events) == 1
-    event = capture.events[0]
+    assert len(logging_client.events) == 1
+    event = logging_client.events[0]
     assert event.service == "icore-backend"
     assert event.timestamp.tzinfo is not None
     assert event.timestamp <= datetime.now(UTC)

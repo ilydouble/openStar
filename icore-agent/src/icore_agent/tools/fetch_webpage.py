@@ -10,11 +10,11 @@ returns a promising URL.
 from __future__ import annotations
 
 import re
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _TIMEOUT = 20          # seconds
 _MAX_CHARS = 12_000    # ~3 k tokens — enough for dense synthesis

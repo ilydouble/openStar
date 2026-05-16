@@ -21,11 +21,11 @@ from typing import Any, cast
 
 import litellm
 import redis.asyncio as aioredis
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _Message = dict[str, Any]
 

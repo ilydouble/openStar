@@ -1,15 +1,15 @@
 """Python client facade for the internal Go logging-service."""
 
+from .app_logger import AppLogger, get_logger
 from .contracts.v1 import LogEvent, LogEventIngestRequest, LogLevel
-from .logger import Logger, logger
-from .service_logger import ServiceLogger, get_service_logger
+from .logging_service_client import LoggingServiceClient, default_logging_client
 
 __all__ = [
+    "AppLogger",
+    "LoggingServiceClient",
     "LogEvent",
     "LogEventIngestRequest",
     "LogLevel",
-    "Logger",
-    "ServiceLogger",
-    "get_service_logger",
-    "logger",
+    "default_logging_client",
+    "get_logger",
 ]

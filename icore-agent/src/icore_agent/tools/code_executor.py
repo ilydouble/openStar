@@ -9,12 +9,12 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-from icore_agent.lib.logging import get_service_logger
+from icore_agent.lib.logging.app_logger import get_logger
 from strands import tool
 
 from ..config import settings
 
-log = get_service_logger(__name__)
+log = get_logger(__name__)
 
 _TIMEOUT = 30
 _MAX_OUTPUT = 4_000

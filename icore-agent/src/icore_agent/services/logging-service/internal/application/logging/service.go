@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	domain "xiehe-logging-service/internal/domain/logging"
+	domain "icore-logging-service/internal/domain/logging"
 )
 
 // BatchSink writes a flushed batch to a local or external sink.

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	appstorage "xiehe-storage-service/internal/application/storage"
-	domain "xiehe-storage-service/internal/domain/storage"
+	appstorage "icore-storage-service/internal/application/storage"
+	domain "icore-storage-service/internal/domain/storage"
 )
 
 type fakeObjectRepository struct {

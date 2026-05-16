@@ -1,6 +1,6 @@
 package httpapi
 
-import domain "xiehe-storage-service/internal/domain/storage"
+import domain "icore-storage-service/internal/domain/storage"
 
 type ensureBucketRequest struct {
 	Bucket string `json:"bucket"`

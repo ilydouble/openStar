@@ -1,6 +1,6 @@
 package httpapi
 
-import domain "xiehe-logging-service/internal/domain/logging"
+import domain "icore-logging-service/internal/domain/logging"
 
 // logEventIngestRequest mirrors the v1 single-event JSON envelope.
 type logEventIngestRequest struct {

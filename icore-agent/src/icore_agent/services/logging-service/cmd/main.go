@@ -9,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	applogging "xiehe-logging-service/internal/application/logging"
-	"xiehe-logging-service/internal/config"
-	"xiehe-logging-service/internal/infrastructure/filesink"
-	kafkapub "xiehe-logging-service/internal/infrastructure/kafka"
-	"xiehe-logging-service/internal/interfaces/console"
-	httpapi "xiehe-logging-service/internal/interfaces/http"
-	httpserver "xiehe-services-lib-go/http/server"
+	applogging "icore-logging-service/internal/application/logging"
+	"icore-logging-service/internal/config"
+	"icore-logging-service/internal/infrastructure/filesink"
+	kafkapub "icore-logging-service/internal/infrastructure/kafka"
+	"icore-logging-service/internal/interfaces/console"
+	httpapi "icore-logging-service/internal/interfaces/http"
+	httpserver "icore-services-lib-go/http/server"
 )
 
 const kafkaStartupCheckTimeout = 10 * time.Second

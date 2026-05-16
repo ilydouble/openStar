@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	domain "xiehe-storage-service/internal/domain/storage"
+	domain "icore-storage-service/internal/domain/storage"
 )
 
 type Service struct {

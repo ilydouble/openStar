@@ -1,4 +1,4 @@
-module xiehe-storage-service
+module icore-storage-service
 
 go 1.22
 
@@ -7,10 +7,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.20
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.54.2
 	github.com/aws/smithy-go v1.20.2
-	xiehe-services-lib-go v0.0.0
+	icore-services-lib-go v0.0.0
 )
 
-replace xiehe-services-lib-go => ../lib-go
+replace icore-services-lib-go => ../lib-go
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect

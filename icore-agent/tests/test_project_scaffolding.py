@@ -180,6 +180,31 @@ def test_go_microservice_dockerfiles_use_buildkit_caches():
         assert "--mount=type=cache,target=/root/.cache/go-build" in dockerfile
 
 
+def test_go_modules_use_icore_names():
+    services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
+    stale_markers = (
+        "xiehe-services-lib-go",
+        "xiehe-gateway",
+        "xiehe-logging-service",
+        "xiehe-storage-service",
+    )
+    scanned_paths = [
+        path
+        for pattern in ("*.go", "go.mod", "go.work")
+        for path in services_dir.rglob(pattern)
+    ]
+    stale_paths = [
+        str(path.relative_to(services_dir))
+        for path in scanned_paths
+        if any(marker in path.read_text(encoding="utf-8") for marker in stale_markers)
+    ]
+
+    lib_go_mod = (services_dir / "lib-go" /
+                  "go.mod").read_text(encoding="utf-8")
+    assert "module icore-services-lib-go" in lib_go_mod
+    assert stale_paths == []
+
+
 def test_dockerfile_keeps_dependency_layer_before_source_copy():
     dockerfile = (AGENT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 

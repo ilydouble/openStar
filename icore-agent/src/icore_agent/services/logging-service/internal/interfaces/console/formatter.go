@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	domain "xiehe-logging-service/internal/domain/logging"
+	domain "icore-logging-service/internal/domain/logging"
 )
 
 // Separator is the plain-text delimiter used by logging-service console output.

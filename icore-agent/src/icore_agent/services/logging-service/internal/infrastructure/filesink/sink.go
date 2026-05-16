@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	domain "xiehe-logging-service/internal/domain/logging"
+	domain "icore-logging-service/internal/domain/logging"
 )
 
 // Filter decides whether a sink should persist a specific event.

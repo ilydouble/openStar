@@ -10,9 +10,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"xiehe-gateway/internal/config"
-	"xiehe-gateway/internal/gateway"
-	httpserver "xiehe-services-lib-go/http/server"
+	"icore-gateway/internal/config"
+	"icore-gateway/internal/gateway"
+	httpserver "icore-services-lib-go/http/server"
 )
 
 // main wires configuration, Redis rate limiting, logging, and the HTTP server lifecycle.

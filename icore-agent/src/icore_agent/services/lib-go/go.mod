@@ -1,4 +1,4 @@
-module xiehe-services-lib-go
+module icore-services-lib-go
 
 go 1.22
 

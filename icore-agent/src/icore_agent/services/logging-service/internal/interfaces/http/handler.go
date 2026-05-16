@@ -3,9 +3,9 @@ package httpapi
 import (
 	"net/http"
 
-	applogging "xiehe-logging-service/internal/application/logging"
-	domain "xiehe-logging-service/internal/domain/logging"
-	sharedhttp "xiehe-services-lib-go/http/api"
+	applogging "icore-logging-service/internal/application/logging"
+	domain "icore-logging-service/internal/domain/logging"
+	sharedhttp "icore-services-lib-go/http/api"
 )
 
 // Handler exposes the HTTP API used by backend services to emit log events.

@@ -3,8 +3,8 @@ package config
 import (
 	"time"
 
-	"xiehe-services-lib-go/envconfig"
-	httpserver "xiehe-services-lib-go/http/server"
+	"icore-services-lib-go/envconfig"
+	httpserver "icore-services-lib-go/http/server"
 )
 
 // Config is the environment-derived runtime configuration for icore-gateway.

@@ -1,10 +1,10 @@
-module xiehe-logging-service
+module icore-logging-service
 
 go 1.22
 
-require xiehe-services-lib-go v0.0.0
+require icore-services-lib-go v0.0.0
 
-replace xiehe-services-lib-go => ../lib-go
+replace icore-services-lib-go => ../lib-go
 
 require (
 	github.com/bytedance/sonic v1.11.6 // indirect

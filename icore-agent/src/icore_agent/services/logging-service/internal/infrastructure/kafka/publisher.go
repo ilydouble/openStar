@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	domain "xiehe-logging-service/internal/domain/logging"
-	sharedkafka "xiehe-services-lib-go/mq/kafka"
+	domain "icore-logging-service/internal/domain/logging"
+	sharedkafka "icore-services-lib-go/mq/kafka"
 )
 
 // Publisher adapts logging-domain events to the shared KafkaPublisher base.

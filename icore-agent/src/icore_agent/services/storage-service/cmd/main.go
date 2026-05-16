@@ -4,11 +4,11 @@ import (
 	"log"
 	"net/http"
 
-	httpserver "xiehe-services-lib-go/http/server"
-	appstorage "xiehe-storage-service/internal/application/storage"
-	"xiehe-storage-service/internal/config"
-	"xiehe-storage-service/internal/infrastructure/s3storage"
-	httpapi "xiehe-storage-service/internal/interfaces/http"
+	httpserver "icore-services-lib-go/http/server"
+	appstorage "icore-storage-service/internal/application/storage"
+	"icore-storage-service/internal/config"
+	"icore-storage-service/internal/infrastructure/s3storage"
+	httpapi "icore-storage-service/internal/interfaces/http"
 )
 
 func main() {

@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
 
-	appstorage "xiehe-storage-service/internal/application/storage"
-	domain "xiehe-storage-service/internal/domain/storage"
+	appstorage "icore-storage-service/internal/application/storage"
+	domain "icore-storage-service/internal/domain/storage"
 )
 
 type Repository struct {

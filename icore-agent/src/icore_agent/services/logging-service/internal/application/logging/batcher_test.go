@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	domain "xiehe-logging-service/internal/domain/logging"
+	domain "icore-logging-service/internal/domain/logging"
 )
 
 type recordingSink struct {

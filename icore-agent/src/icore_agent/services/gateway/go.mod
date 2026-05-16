@@ -1,11 +1,11 @@
-module xiehe-gateway
+module icore-gateway
 
 go 1.22
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/redis/go-redis/v9 v9.17.0
-	xiehe-services-lib-go v0.0.0
+	icore-services-lib-go v0.0.0
 )
 
 require (
@@ -13,4 +13,4 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 )
 
-replace xiehe-services-lib-go => ../lib-go
+replace icore-services-lib-go => ../lib-go

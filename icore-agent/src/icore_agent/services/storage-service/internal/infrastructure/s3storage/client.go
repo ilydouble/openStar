@@ -5,7 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"xiehe-storage-service/internal/config"
+	"icore-storage-service/internal/config"
 )
 
 type Clients struct {

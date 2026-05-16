@@ -205,20 +205,51 @@ def test_go_modules_use_icore_names():
     assert stale_paths == []
 
 
-def test_gateway_router_handlers_and_logging_client_are_split_by_layer():
-    """Verify gateway HTTP layers stay separated from shared logging delivery."""
+def test_gateway_ddd_layers_keep_http_policy_and_infrastructure_split():
+    """Verify gateway HTTP adapters stay thin and DDD layer boundaries remain explicit."""
     services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
-    gateway_dir = services_dir / "gateway" / "internal" / "gateway"
+    gateway_internal = services_dir / "gateway" / "internal"
+    domain_dir = gateway_internal / "domain" / "gateway"
+    application_dir = gateway_internal / "application" / "gateway"
+    interfaces_dir = gateway_internal / "interfaces" / "http"
+    infrastructure_dir = gateway_internal / "infrastructure"
     lib_logging_dir = services_dir / "lib-go" / "logging"
 
-    assert (gateway_dir / "router" / "router.go").is_file()
-    assert (gateway_dir / "router" / "router_test.go").is_file()
-    assert (gateway_dir / "handler" / "health.go").is_file()
-    assert (gateway_dir / "handler" / "proxy.go").is_file()
-    assert (gateway_dir / "handler" / "request_log.go").is_file()
-    assert not (gateway_dir / "router.go").exists()
-    assert not (gateway_dir / "router_test.go").exists()
-    assert not (gateway_dir / "http_logger.go").exists()
+    assert (domain_dir / "identity.go").is_file()
+    assert (domain_dir / "auth_decision.go").is_file()
+    assert (domain_dir / "rate_limit_decision.go").is_file()
+    assert (domain_dir / "access_log.go").is_file()
+    assert (domain_dir / "request_id.go").is_file()
+
+    assert (application_dir / "pipeline.go").is_file()
+    assert (application_dir / "route_policy.go").is_file()
+    assert (application_dir / "identity_policy.go").is_file()
+
+    assert (interfaces_dir / "router.go").is_file()
+    assert (interfaces_dir / "router_test.go").is_file()
+    assert (interfaces_dir / "handler.go").is_file()
+    assert (interfaces_dir / "response_recorder.go").is_file()
+
+    assert (infrastructure_dir / "jwt" / "authenticator.go").is_file()
+    assert (infrastructure_dir / "redisratelimit" /
+            "redis_limiter.go").is_file()
+    assert (infrastructure_dir / "logging" /
+            "async_access_logger.go").is_file()
+    assert (infrastructure_dir / "proxy" / "reverse_proxy.go").is_file()
+
+    old_gateway_dir = gateway_internal / "gateway"
+    assert not list(old_gateway_dir.rglob("*.go"))
+
+    handler_text = (interfaces_dir / "handler.go").read_text(
+        encoding="utf-8")
+    for forbidden in (
+        "Authenticate(",
+        "RateLimit",
+        "ReverseProxy",
+        "httputil",
+        "LoggingServiceClient",
+    ):
+        assert forbidden not in handler_text
 
     assert (lib_logging_dir / "logging_service_client.go").is_file()
     assert (lib_logging_dir / "app_logger.go").is_file()

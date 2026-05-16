@@ -24,6 +24,7 @@ type gateway struct {
 	limiter   RateLimiter
 	transport http.RoundTripper
 	now       func() time.Time
+	location  *time.Location
 	backend   *url.URL
 	proxy     *httputil.ReverseProxy
 }
@@ -42,6 +43,10 @@ func NewRouter(cfg Config, deps Dependencies) http.Handler {
 	if now == nil {
 		now = time.Now
 	}
+	location := cfg.TimeLocation
+	if location == nil {
+		location = time.Local
+	}
 	backend, err := url.Parse(cfg.BackendURL)
 	if err != nil {
 		panic(err)
@@ -53,6 +58,7 @@ func NewRouter(cfg Config, deps Dependencies) http.Handler {
 		limiter:   deps.Limiter,
 		transport: deps.Transport,
 		now:       now,
+		location:  location,
 		backend:   backend,
 	}
 	gw.proxy = gw.newProxy()
@@ -102,7 +108,7 @@ func (gw *gateway) handleProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (gw *gateway) beginRequest(w http.ResponseWriter, r *http.Request, upstream *string) (*GatewayMetadata, time.Time) {
-	start := gw.now()
+	start := gw.now().In(gw.location)
 	requestID := resolveRequestID(r.Header.Get(requestIDHeader))
 	r.Header.Set(requestIDHeader, requestID)
 	w.Header().Set(requestIDHeader, requestID)

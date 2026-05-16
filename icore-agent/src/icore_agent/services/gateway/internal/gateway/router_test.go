@@ -114,6 +114,42 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	}
 }
 
+// TestGatewayFormatsTimestampsInConfiguredLocation keeps access logs out of implicit UTC.
+func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("load test location: %v", err)
+	}
+	logger := &captureLogger{}
+	router := NewRouter(Config{
+		BackendURL:         "http://backend.local",
+		JWTSecret:          "test-secret-with-at-least-32-bytes",
+		JWTIssuer:          "icore-agent",
+		JWTAudience:        "icore-gateway",
+		LoggingServiceName: "icore-gateway",
+		TimeLocation:       location,
+	}, Dependencies{
+		Logger: logger,
+		Now: func() time.Time {
+			return time.Date(2026, 5, 16, 7, 22, 52, 742470455, time.UTC)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if len(logger.events) != 1 {
+		t.Fatalf("expected one gateway log event, got %d", len(logger.events))
+	}
+	want := "2026-05-16T15:22:52.742470455+08:00"
+	if got := logger.events[0].Metadata.RequestTimestamp; got != want {
+		t.Fatalf("metadata timestamp = %q, want %q", got, want)
+	}
+	if got := logger.events[0].Timestamp.Format(time.RFC3339Nano); got != want {
+		t.Fatalf("event timestamp = %q, want %q", got, want)
+	}
+}
+
 func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 	upstreamHit := false
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {

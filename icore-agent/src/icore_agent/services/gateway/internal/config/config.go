@@ -1,7 +1,9 @@
 package config
 
 import (
+	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"icore-services-lib-go/envconfig"
 	httpserver "icore-services-lib-go/http/server"
@@ -19,6 +21,7 @@ type Config struct {
 	JWTSecret             string
 	JWTIssuer             string
 	JWTAudience           string
+	TimeZone              string
 	RateLimitWindow       time.Duration
 	RateLimitWindowLimit  int
 	RateLimitKeyPrefix    string
@@ -42,6 +45,7 @@ func Load() Config {
 		JWTSecret:             envconfig.String("JWT_SECRET", "dev-icore-jwt-secret-change-me-32-bytes"),
 		JWTIssuer:             envconfig.String("JWT_ISSUER", "icore-agent"),
 		JWTAudience:           envconfig.String("JWT_AUDIENCE", "icore-gateway"),
+		TimeZone:              envconfig.String("GATEWAY_TIME_ZONE", "Asia/Shanghai"),
 		RateLimitWindow:       envconfig.Duration("GATEWAY_RATE_LIMIT_WINDOW", time.Minute),
 		RateLimitWindowLimit:  envconfig.Int("GATEWAY_RATE_LIMIT_WINDOW_LIMIT", 600),
 		RateLimitKeyPrefix:    envconfig.String("GATEWAY_RATE_LIMIT_KEY_PREFIX", "icore-gateway:rate"),
@@ -51,6 +55,18 @@ func Load() Config {
 		IdleTimeout:           envconfig.Duration("GATEWAY_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:       envconfig.Duration("GATEWAY_SHUTDOWN_TIMEOUT", 10*time.Second),
 	}
+}
+
+// TimeLocation resolves the configured IANA time zone used for gateway log timestamps.
+func (cfg Config) TimeLocation() (*time.Location, error) {
+	name := strings.TrimSpace(cfg.TimeZone)
+	if name == "" || strings.EqualFold(name, "local") {
+		return time.Local, nil
+	}
+	if strings.EqualFold(name, "utc") {
+		return time.UTC, nil
+	}
+	return time.LoadLocation(name)
 }
 
 // HTTPServerConfig returns the shared HTTP server settings for the gateway.

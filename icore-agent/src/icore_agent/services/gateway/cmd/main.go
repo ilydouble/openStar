@@ -25,6 +25,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid REDIS_URL: %v", err)
 	}
+	timeLocation, err := cfg.TimeLocation()
+	if err != nil {
+		log.Fatalf("invalid GATEWAY_TIME_ZONE %q: %v", cfg.TimeZone, err)
+	}
 	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()
 
@@ -36,6 +40,7 @@ func main() {
 			JWTAudience:          cfg.JWTAudience,
 			LoggingServiceName:   cfg.LoggingServiceName,
 			RateLimitWindowLimit: cfg.RateLimitWindowLimit,
+			TimeLocation:         timeLocation,
 		},
 		gateway.Dependencies{
 			Logger: gateway.NewHTTPLogger(

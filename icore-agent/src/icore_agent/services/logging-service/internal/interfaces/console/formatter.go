@@ -45,7 +45,7 @@ func FormatLine(event domain.LogEvent, color bool) (string, error) {
 	service := formatService(event.Service)
 
 	return strings.Join([]string{
-		event.Timestamp.UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+		event.Timestamp.Format("2006-01-02T15:04:05.000Z07:00"),
 		level,
 		service,
 		string(message),

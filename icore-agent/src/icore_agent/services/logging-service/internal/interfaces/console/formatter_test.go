@@ -56,6 +56,31 @@ func TestFormatterUsesConfiguredSeparatorAndMessageJSON(t *testing.T) {
 	}
 }
 
+// TestFormatterPreservesEventTimestampOffset ensures console output keeps producer offsets.
+func TestFormatterPreservesEventTimestampOffset(t *testing.T) {
+	event := domain.LogEvent{
+		Timestamp: time.Date(2026, 5, 16, 15, 22, 52, 742000000, time.FixedZone("CST", 8*3600)),
+		Level:     domain.LogLevelInfo,
+		Service:   "icore-gateway",
+		Message:   "gateway request",
+		TraceID:   "req-1",
+		Metadata:  map[string]any{},
+	}
+
+	line, err := FormatLine(event, false)
+	if err != nil {
+		t.Fatalf("FormatLine returned error: %v", err)
+	}
+
+	parts := strings.Split(line, Separator)
+	if parts[0] != "2026-05-16T15:22:52.742+08:00" {
+		t.Fatalf("unexpected timestamp part: %q", parts[0])
+	}
+	if !strings.Contains(parts[3], `"timestamp":"2026-05-16T15:22:52.742+08:00"`) {
+		t.Fatalf("message json did not preserve timestamp offset: %q", parts[3])
+	}
+}
+
 func TestFormatterAlignsWarningLevelAndTruncatesLongService(t *testing.T) {
 	event := domain.LogEvent{
 		Timestamp: time.Date(2026, 5, 12, 10, 20, 30, 0, time.UTC),

@@ -32,6 +32,7 @@ type Config struct {
 	JWTAudience          string
 	LoggingServiceName   string
 	RateLimitWindowLimit int
+	TimeLocation         *time.Location
 }
 
 // Dependencies provides side-effecting gateway collaborators for tests and main.

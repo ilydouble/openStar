@@ -236,6 +236,19 @@ def test_fastapi_app_installs_request_id_middleware():
 
     assert "RequestIdMiddleware" in main
     assert "app.add_middleware(RequestIdMiddleware)" in main
+    assert "BackendRequestLoggingMiddleware" in main
+    assert "app.add_middleware(BackendRequestLoggingMiddleware)" in main
+
+
+def test_backend_no_longer_depends_on_legacy_structured_logger():
+    """Verify backend logs go through the internal logging-service facade."""
+    pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    requirements = (
+        AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    legacy_package = "struct" + "log"
+
+    assert legacy_package not in pyproject
+    assert legacy_package not in requirements
 
 
 def test_email_validator_dependency_is_declared_for_emailstr_models():

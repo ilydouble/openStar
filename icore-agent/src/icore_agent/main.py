@@ -7,10 +7,10 @@ from .config.dotenv import load_domain_dotenvs
 
 load_domain_dotenvs()
 
-import litellm
-import structlog
-import uvicorn
 from contextlib import asynccontextmanager
+
+import litellm
+import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,10 +23,15 @@ from .api.routers import payment as payment_router
 from .api.routers.account import get_current_user
 from .config import settings
 from .control_plane import current_runtime_user
-from .lib.http.middleware import AuthMiddleware, RequestIdMiddleware
+from .lib.http.middleware import (
+    AuthMiddleware,
+    BackendRequestLoggingMiddleware,
+    RequestIdMiddleware,
+)
+from .lib.logging import get_service_logger
 
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────
@@ -104,6 +109,7 @@ def create_app() -> FastAPI:
         app.add_middleware(AuthMiddleware)
 
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(BackendRequestLoggingMiddleware)
 
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])

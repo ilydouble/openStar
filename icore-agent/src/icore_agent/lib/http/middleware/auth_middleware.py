@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -22,7 +22,7 @@ from ....control_plane import control_plane_store
 from ....infrastructure.control_plane import ControlPlaneIdentityRepository
 from ...auth.jwt import JWTValidationError, verify_access_token
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 account_repository = ControlPlaneIdentityRepository(control_plane_store)
 
 # Paths that skip auth entirely

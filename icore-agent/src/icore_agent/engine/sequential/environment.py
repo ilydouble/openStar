@@ -15,9 +15,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 # Truncate very long outputs to keep token costs sane
 _MAX_OUTPUT_CHARS = 8_000

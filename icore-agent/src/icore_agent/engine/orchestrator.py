@@ -15,7 +15,7 @@ the sub-agent's reply into a final user-facing response.
 
 from typing import Any
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 
 from ..config import settings
 
@@ -83,7 +83,7 @@ else:
     strands_import_error = None
 
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 # Type alias for clarity
 Orchestrator = Any

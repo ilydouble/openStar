@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
-from ..lib.logging import LogLevel, logger as backend_logger
+from ..lib.logging import LogLevel, get_service_logger, logger as backend_logger
 
-log = logging.getLogger(__name__)
+fallback_log = logging.getLogger(__name__)
+log = get_service_logger(__name__)
 
 
 def _print_dev_verification_email(to_email: str, code: str) -> None:
@@ -60,7 +61,7 @@ def _send_verification_email(to_email: str, code: str) -> bool:
         })
         return True
     except Exception as exc:
-        log.error(f"resend_email_failed: {exc}, to={to_email}")
+        log.error("resend_email_failed", error=str(exc), to=to_email)
         return False
 
 
@@ -92,7 +93,7 @@ def _emit_verification_code_event(
             timestamp=datetime.now(UTC),
         )
     except Exception as exc:  # noqa: BLE001 - logging must not block account flows.
-        log.warning("verification_code_log_emit_failed: %s", exc)
+        fallback_log.warning("verification_code_log_emit_failed: %s", exc)
 
 
 _DEFAULT_USAGE = {
@@ -292,7 +293,10 @@ class ControlPlaneStore:
                 # 本地开发环境下，邮件服务不可用时自动降级为日志验证码，避免阻塞注册流程。
                 if settings.debug:
                     log.warning(
-                        "verification_email_delivery_fallback email=%s client_ip=%s", email, client_ip)
+                        "verification_email_delivery_fallback",
+                        email=email,
+                        client_ip=client_ip,
+                    )
                     _print_dev_verification_email(email, code)
                     return True, f"验证码已发送到 {email}，10 分钟内有效（开发模式：请查看后端日志）"
                 return False, "验证码发送失败，请稍后重试"

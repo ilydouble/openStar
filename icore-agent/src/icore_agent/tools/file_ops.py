@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from strands import tool
 
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 _MAX_READ_BYTES = settings.file_ops_max_size_mb * 1024 * 1024
 

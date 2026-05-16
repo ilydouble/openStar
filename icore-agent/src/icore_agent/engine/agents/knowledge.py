@@ -19,7 +19,7 @@ import json
 import re
 from typing import Any
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
@@ -28,7 +28,7 @@ from ...config import settings
 from ...memory.chroma_store import search as _chroma_search_raw
 from ..callback_ctx import sub_agent_callback
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 _SYSTEM_PROMPT = """
 You are an internal knowledge specialist with access to the company's

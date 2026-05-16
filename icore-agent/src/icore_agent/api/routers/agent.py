@@ -16,7 +16,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Annotated, Any, Protocol, cast
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -31,7 +31,7 @@ from ...memory.attachment_store import attachments
 from ...memory.conversation import memory
 from ..dependencies import get_account_service, get_current_user
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 router = APIRouter()
 VALID_AGENT_HINTS = {"research", "code", "knowledge", "image", "data", "chat"}
 _SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}

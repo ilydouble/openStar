@@ -10,11 +10,11 @@ returns a promising URL.
 from __future__ import annotations
 
 import re
-import structlog
+from icore_agent.lib.logging import get_service_logger
 import httpx
 from strands import tool
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 _TIMEOUT = 20          # seconds
 _MAX_CHARS = 12_000    # ~3 k tokens — enough for dense synthesis
@@ -32,7 +32,7 @@ def _strip_html(html: str) -> str:
     html = re.sub(r"<[^>]+>", " ", html)
     # Decode common HTML entities
     for entity, char in [("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
-                          ("&quot;", '"'), ("&#39;", "'"), ("&nbsp;", " ")]:
+                         ("&quot;", '"'), ("&#39;", "'"), ("&nbsp;", " ")]:
         html = html.replace(entity, char)
     # Collapse whitespace
     html = re.sub(r"[ \t]+", " ", html)
@@ -67,12 +67,14 @@ def fetch_webpage(url: str) -> str:
 
         content_type = resp.headers.get("content-type", "")
         if "text/html" in content_type or "text/plain" in content_type:
-            text = _strip_html(resp.text) if "html" in content_type else resp.text
+            text = _strip_html(
+                resp.text) if "html" in content_type else resp.text
         else:
             return f"[SKIPPED] Non-text content-type: {content_type}"
 
         if len(text) > _MAX_CHARS:
-            text = text[:_MAX_CHARS] + f"\n\n... [page truncated at {_MAX_CHARS} chars]"
+            text = text[:_MAX_CHARS] + \
+                f"\n\n... [page truncated at {_MAX_CHARS} chars]"
 
         return f"URL: {url}\n\n{text}"
 

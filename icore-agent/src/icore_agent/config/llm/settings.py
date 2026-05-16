@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
 from pydantic import Field
 
 from ..base import DomainSettings
-
-log = structlog.get_logger()
 
 
 class LLMSettings(DomainSettings):
@@ -54,6 +51,9 @@ class LLMSettings(DomainSettings):
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         if self.model_id_fast and self.model_id_fast != self.model_id:
             kwargs["fallbacks"] = [self.model_id_fast]
+        from icore_agent.lib.logging import get_service_logger
+
+        log = get_service_logger(__name__)
         log.info("litellm_kwargs_resolved", kwargs=kwargs)
         return kwargs
 

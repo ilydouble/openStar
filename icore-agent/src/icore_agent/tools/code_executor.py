@@ -9,12 +9,12 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from strands import tool
 
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 _TIMEOUT = 30
 _MAX_OUTPUT = 4_000

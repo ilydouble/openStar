@@ -15,13 +15,13 @@ import hashlib
 from typing import Any, cast
 
 import chromadb
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from chromadb import EmbeddingFunction, Embeddings
 from openai import OpenAI
 
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 
 # ── Zhipu Embedding Function ─────────────────────────────────────────────────

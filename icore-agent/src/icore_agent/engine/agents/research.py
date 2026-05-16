@@ -8,7 +8,7 @@ Tools available to this agent:
 Exposed as a Strands @tool so the orchestrator can delegate to it.
 """
 
-import structlog
+from icore_agent.lib.logging import get_service_logger
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
@@ -19,7 +19,7 @@ from ...tools.fetch_webpage import fetch_webpage
 from ...tools.http_client import http_request
 from ..callback_ctx import sub_agent_callback
 
-log = structlog.get_logger()
+log = get_service_logger(__name__)
 
 # 单次研究任务内，各工具的最大调用次数。超过后 budgeted wrapper 会直接
 # 返回一个告知 LLM 预算耗尽的字符串 —— 这是比 prompt 约束更可靠的硬闸门。

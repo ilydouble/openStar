@@ -8,11 +8,12 @@ import secrets
 import threading
 import time
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ..config import settings
+from ..lib.logging import LogLevel, logger as backend_logger
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,37 @@ def _send_verification_email(to_email: str, code: str) -> bool:
     except Exception as exc:
         log.error(f"resend_email_failed: {exc}, to={to_email}")
         return False
+
+
+def _emit_verification_code_event(
+    email: str,
+    client_ip: str,
+    code: str,
+    *,
+    delivery_channel: str,
+    delivery_result: str,
+) -> None:
+    """Emit a backend verification-code event to the internal logging-service."""
+    metadata: dict[str, Any] = {
+        "email": email,
+        "client_ip": client_ip,
+        "delivery_channel": delivery_channel,
+        "delivery_result": delivery_result,
+        "debug": settings.debug,
+    }
+    if settings.debug:
+        metadata["verification_code"] = code
+
+    try:
+        backend_logger.emit_event(
+            LogLevel.INFO,
+            message="verification_code_issued",
+            service="icore-backend",
+            metadata=metadata,
+            timestamp=datetime.now(UTC),
+        )
+    except Exception as exc:  # noqa: BLE001 - logging must not block account flows.
+        log.warning("verification_code_log_emit_failed: %s", exc)
 
 
 _DEFAULT_USAGE = {
@@ -249,6 +281,13 @@ class ControlPlaneStore:
             self._save(data)
 
             sent = _send_verification_email(email, code)
+            _emit_verification_code_event(
+                email,
+                client_ip,
+                code,
+                delivery_channel="resend" if settings.resend_api_key else "dev_log",
+                delivery_result="sent" if sent else "failed",
+            )
             if not sent:
                 # 本地开发环境下，邮件服务不可用时自动降级为日志验证码，避免阻塞注册流程。
                 if settings.debug:

@@ -32,6 +32,12 @@ type AccessLogger interface {
 	Emit(domain.AccessLogEvent)
 }
 
+// ResponseRecorder is the HTTP response surface the pipeline needs to finalize logs.
+type ResponseRecorder interface {
+	http.ResponseWriter
+	Status() int
+}
+
 // PipelineConfig configures gateway request orchestration.
 type PipelineConfig struct {
 	ServiceName     string
@@ -93,9 +99,8 @@ func NewPipeline(config PipelineConfig, deps PipelineDependencies) *Pipeline {
 }
 
 // HandleHealth handles the gateway-local health endpoint.
-func (pipeline *Pipeline) HandleHealth(w http.ResponseWriter, r *http.Request) {
+func (pipeline *Pipeline) HandleHealth(recorder ResponseRecorder, r *http.Request) {
 	route := pipeline.routePolicy.Resolve(r.URL.Path)
-	recorder := newStatusRecorder(w)
 	metadata, start := pipeline.beginRequest(recorder, r, route)
 	defer pipeline.emitLog(start, metadata, recorder)
 
@@ -105,9 +110,8 @@ func (pipeline *Pipeline) HandleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleProxy handles upstream gateway requests.
-func (pipeline *Pipeline) HandleProxy(w http.ResponseWriter, r *http.Request) {
+func (pipeline *Pipeline) HandleProxy(recorder ResponseRecorder, r *http.Request) {
 	route := pipeline.routePolicy.Resolve(r.URL.Path)
-	recorder := newStatusRecorder(w)
 	metadata, start := pipeline.beginRequest(recorder, r, route)
 	defer pipeline.emitLog(start, metadata, recorder)
 
@@ -126,8 +130,8 @@ func (pipeline *Pipeline) HandleProxy(w http.ResponseWriter, r *http.Request) {
 	if pipeline.proxy != nil {
 		pipeline.proxy.ServeHTTP(recorder, r)
 	}
-	if recorder.status != 0 && route.UpstreamService != "" {
-		status := recorder.status
+	if route.UpstreamService != "" {
+		status := recorder.Status()
 		metadata.UpstreamStatusCode = &status
 	}
 }
@@ -221,7 +225,7 @@ func (pipeline *Pipeline) allowRequest(ctx context.Context, metadata *domain.Acc
 	return false
 }
 
-func (pipeline *Pipeline) emitLog(start time.Time, metadata *domain.AccessLogMetadata, recorder *statusRecorder) {
+func (pipeline *Pipeline) emitLog(start time.Time, metadata *domain.AccessLogMetadata, recorder ResponseRecorder) {
 	metadata.FinalStatusCode = recorder.Status()
 	metadata.RequestElapsedTime = pipeline.now().Sub(start).Milliseconds()
 	if metadata.FinalStatusCode >= http.StatusInternalServerError {

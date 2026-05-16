@@ -56,12 +56,28 @@ func (logger *captureAccessLogger) Emit(event domain.AccessLogEvent) {
 	logger.events = append(logger.events, event)
 }
 
+type testResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func newTestResponseRecorder() *testResponseRecorder {
+	return &testResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+}
+
+// Status returns the final recorded status, matching gateway response recorder behavior.
+func (recorder *testResponseRecorder) Status() int {
+	if recorder.Code == 0 {
+		return http.StatusOK
+	}
+	return recorder.Code
+}
+
 func TestPipelineRejectsProtectedRouteWithoutTokenBeforeProxy(t *testing.T) {
 	proxy := &fakeProxy{}
 	logger := &captureAccessLogger{}
 	pipeline := newTestPipeline(fakeAuthenticator{}, fakeLimiter{}, proxy, logger)
 
-	response := httptest.NewRecorder()
+	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
 	pipeline.HandleProxy(response, request)
 
@@ -83,7 +99,7 @@ func TestPipelineClearsSpoofedIdentityHeadersOnPublicUpstream(t *testing.T) {
 		decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"},
 	}, proxy, logger)
 
-	response := httptest.NewRecorder()
+	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/account/login", nil)
 	request.Header.Set("X-User-ID", "attacker")
 	request.Header.Set("X-User-Roles", "admin")
@@ -109,7 +125,7 @@ func TestPipelineForwardsAuthenticatedIdentity(t *testing.T) {
 		identity: domain.Identity{UserID: "user-1", Roles: []string{"owner", "admin"}},
 	}, fakeLimiter{decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"}}, proxy, &captureAccessLogger{})
 
-	response := httptest.NewRecorder()
+	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
 	request.Header.Set("Authorization", "Bearer valid-token")
 	pipeline.HandleProxy(response, request)
@@ -129,7 +145,7 @@ func TestPipelineRecordsUpstreamErrorInAccessLog(t *testing.T) {
 		decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"},
 	}, proxy, logger)
 
-	response := httptest.NewRecorder()
+	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/account/login", nil)
 	pipeline.HandleProxy(response, request)
 
@@ -147,7 +163,7 @@ func TestPipelineRejectsInvalidToken(t *testing.T) {
 	logger := &captureAccessLogger{}
 	pipeline := newTestPipeline(fakeAuthenticator{err: errors.New("bad token")}, fakeLimiter{}, proxy, logger)
 
-	response := httptest.NewRecorder()
+	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
 	request.Header.Set("Authorization", "Bearer invalid-token")
 	pipeline.HandleProxy(response, request)

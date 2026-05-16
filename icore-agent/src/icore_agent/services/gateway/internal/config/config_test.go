@@ -22,3 +22,14 @@ func TestTimeLocationResolvesGatewayTimeZone(t *testing.T) {
 		t.Fatalf("localized time = %q", got)
 	}
 }
+
+// TestLoadReadsAccessLogQueueSize verifies access log buffering is configurable.
+func TestLoadReadsAccessLogQueueSize(t *testing.T) {
+	t.Setenv("GATEWAY_ACCESS_LOG_QUEUE_SIZE", "128")
+
+	cfg := Load()
+
+	if cfg.AccessLogQueueSize != 128 {
+		t.Fatalf("AccessLogQueueSize = %d, want 128", cfg.AccessLogQueueSize)
+	}
+}

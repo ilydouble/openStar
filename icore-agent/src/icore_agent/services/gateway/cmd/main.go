@@ -10,9 +10,14 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	appgateway "icore-gateway/internal/application/gateway"
 	"icore-gateway/internal/config"
-	"icore-gateway/internal/gateway"
-	gatewayrouter "icore-gateway/internal/gateway/router"
+	domain "icore-gateway/internal/domain/gateway"
+	jwtinfra "icore-gateway/internal/infrastructure/jwt"
+	logginginfra "icore-gateway/internal/infrastructure/logging"
+	proxyinfra "icore-gateway/internal/infrastructure/proxy"
+	ratelimitinfra "icore-gateway/internal/infrastructure/redisratelimit"
+	httpapi "icore-gateway/internal/interfaces/http"
 	httpserver "icore-services-lib-go/http/server"
 	sharedlogging "icore-services-lib-go/logging"
 )
@@ -34,32 +39,40 @@ func main() {
 	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()
 
-	router := gatewayrouter.NewRouter(
-		gateway.Config{
-			BackendURL:           cfg.BackendURL,
-			JWTSecret:            cfg.JWTSecret,
-			JWTIssuer:            cfg.JWTIssuer,
-			JWTAudience:          cfg.JWTAudience,
-			LoggingServiceName:   cfg.LoggingServiceName,
-			RateLimitWindowLimit: cfg.RateLimitWindowLimit,
-			TimeLocation:         timeLocation,
-		},
-		gateway.Dependencies{
-			Logger: sharedlogging.NewLoggingServiceClient(sharedlogging.LoggingServiceClientConfig{
-				BaseURL: cfg.LoggingServiceURL,
-				Token:   cfg.LoggingServiceToken,
-				Timeout: cfg.LoggingServiceTimeout,
-			}),
-			Limiter: gateway.NewRedisLimiter(
-				redisClient,
-				cfg.RateLimitWindowLimit,
-				cfg.RateLimitWindow,
-				cfg.RateLimitKeyPrefix,
-				time.Now,
-			),
-			Now: time.Now,
-		},
-	)
+	loggingClient := sharedlogging.NewLoggingServiceClient(sharedlogging.LoggingServiceClientConfig{
+		BaseURL: cfg.LoggingServiceURL,
+		Token:   cfg.LoggingServiceToken,
+		Timeout: cfg.LoggingServiceTimeout,
+	})
+	accessLogger := logginginfra.NewAsyncAccessLogger(logginginfra.Config{
+		Emitter:   loggingClient,
+		Timeout:   cfg.LoggingServiceTimeout,
+		QueueSize: cfg.AccessLogQueueSize,
+	})
+	pipeline := appgateway.NewPipeline(appgateway.PipelineConfig{
+		ServiceName:     cfg.LoggingServiceName,
+		RoutePolicy:     appgateway.NewDefaultRoutePolicy(cfg.BackendURL),
+		RequestIDPolicy: domain.RequestIDPolicy{},
+		IdentityPolicy:  appgateway.IdentityPolicy{},
+		Location:        timeLocation,
+		Now:             time.Now,
+	}, appgateway.PipelineDependencies{
+		Authenticator: jwtinfra.NewAuthenticator(jwtinfra.Config{
+			Secret:   cfg.JWTSecret,
+			Issuer:   cfg.JWTIssuer,
+			Audience: cfg.JWTAudience,
+		}),
+		Limiter: ratelimitinfra.NewRedisLimiter(
+			redisClient,
+			cfg.RateLimitWindowLimit,
+			cfg.RateLimitWindow,
+			cfg.RateLimitKeyPrefix,
+			time.Now,
+		),
+		Proxy:        proxyinfra.NewReverseProxy(cfg.BackendURL, nil),
+		AccessLogger: accessLogger,
+	})
+	router := httpapi.NewRouter(httpapi.NewHandler(pipeline))
 	server := httpserver.New(cfg.HTTPServerConfig(), router)
 
 	go func() {
@@ -68,6 +81,9 @@ func main() {
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("gateway shutdown failed: %v", err)
+		}
+		if err := accessLogger.Close(shutdownCtx); err != nil {
+			log.Printf("gateway access log drain failed: %v", err)
 		}
 	}()
 

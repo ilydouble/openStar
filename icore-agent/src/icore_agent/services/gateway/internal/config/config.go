@@ -17,6 +17,7 @@ type Config struct {
 	LoggingServiceURL     string
 	LoggingServiceToken   string
 	LoggingServiceTimeout time.Duration
+	AccessLogQueueSize    int
 	RedisURL              string
 	JWTSecret             string
 	JWTIssuer             string
@@ -41,6 +42,7 @@ func Load() Config {
 		LoggingServiceURL:     envconfig.String("LOGGING_SERVICE_URL", "http://logging-service:8091"),
 		LoggingServiceToken:   envconfig.String("LOGGING_SERVICE_TOKEN", "dev-logging-service-token"),
 		LoggingServiceTimeout: envconfig.Duration("GATEWAY_LOGGING_SERVICE_TIMEOUT", 2*time.Second),
+		AccessLogQueueSize:    envconfig.Int("GATEWAY_ACCESS_LOG_QUEUE_SIZE", 4096),
 		RedisURL:              envconfig.String("REDIS_URL", "redis://redis:6379/0"),
 		JWTSecret:             envconfig.String("JWT_SECRET", "dev-icore-jwt-secret-change-me-32-bytes"),
 		JWTIssuer:             envconfig.String("JWT_ISSUER", "icore-agent"),

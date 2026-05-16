@@ -1,4 +1,4 @@
-package router
+package httpapi
 
 import (
 	"context"
@@ -13,24 +13,26 @@ import (
 	"testing"
 	"time"
 
-	"icore-gateway/internal/gateway"
+	appgateway "icore-gateway/internal/application/gateway"
+	domain "icore-gateway/internal/domain/gateway"
+	jwtinfra "icore-gateway/internal/infrastructure/jwt"
+	proxyinfra "icore-gateway/internal/infrastructure/proxy"
 	sharedlogging "icore-services-lib-go/logging"
 )
 
-type captureLogger struct {
-	events []sharedlogging.LogEvent
+type captureAccessLogger struct {
+	events []domain.AccessLogEvent
 }
 
-func (logger *captureLogger) Emit(_ context.Context, event sharedlogging.LogEvent) error {
+func (logger *captureAccessLogger) Emit(event domain.AccessLogEvent) {
 	logger.events = append(logger.events, event)
-	return nil
 }
 
 type staticLimiter struct {
-	decision gateway.RateLimitDecision
+	decision domain.RateLimitDecision
 }
 
-func (limiter staticLimiter) Allow(_ context.Context, _ string) (gateway.RateLimitDecision, error) {
+func (limiter staticLimiter) Allow(_ context.Context, _ string) (domain.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -40,29 +42,32 @@ func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error)
 	return fn(request)
 }
 
+type routerTestConfig struct {
+	backendURL string
+	secret     string
+	logger     *captureAccessLogger
+	limiter    appgateway.RateLimiter
+	transport  http.RoundTripper
+	now        func() time.Time
+	location   *time.Location
+}
+
 func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	upstreamRequestID := ""
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		upstreamRequestID = request.Header.Get("X-Request-ID")
+		upstreamRequestID = request.Header.Get(domain.RequestIDHeader)
 		return testResponse(http.StatusAccepted, `{"ok":true}`), nil
 	})
 
-	logger := &captureLogger{}
-	router := NewRouter(gateway.Config{
-		BackendURL:           "http://backend.local",
-		JWTSecret:            "test-secret-with-at-least-32-bytes",
-		JWTIssuer:            "icore-agent",
-		JWTAudience:          "icore-gateway",
-		LoggingServiceName:   "icore-gateway",
-		RateLimitWindowLimit: 10,
-	}, gateway.Dependencies{
-		Logger:    logger,
-		Transport: transport,
-		Limiter: staticLimiter{decision: gateway.RateLimitDecision{
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{
+		logger:    logger,
+		transport: transport,
+		limiter: staticLimiter{decision: domain.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
-		Now: func() time.Time {
+		now: func() time.Time {
 			return time.Date(2026, 5, 15, 8, 0, 0, 0, time.FixedZone("CST", 8*3600))
 		},
 	})
@@ -70,7 +75,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/account/login?source=web", nil))
 
-	requestID := response.Header().Get("X-Request-ID")
+	requestID := response.Header().Get(domain.RequestIDHeader)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected upstream status, got %d", response.Code)
 	}
@@ -84,12 +89,13 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 		t.Fatalf("expected one gateway log event, got %d", len(logger.events))
 	}
 
-	metadata := eventMetadata(t, logger.events[0])
-	if logger.events[0].Service != "icore-gateway" {
-		t.Fatalf("unexpected service %q", logger.events[0].Service)
+	event := logger.events[0]
+	metadata := event.Metadata
+	if event.Service != "icore-gateway" {
+		t.Fatalf("unexpected service %q", event.Service)
 	}
-	if logger.events[0].TraceID != requestID {
-		t.Fatalf("unexpected trace id %q", logger.events[0].TraceID)
+	if event.TraceID != requestID {
+		t.Fatalf("unexpected trace id %q", event.TraceID)
 	}
 	if metadata.RequestTimestamp != "2026-05-15T08:00:00+08:00" {
 		t.Fatalf("unexpected timestamp %q", metadata.RequestTimestamp)
@@ -100,7 +106,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	if metadata.Path != "/api/v1/account/login" || metadata.Query != "source=web" {
 		t.Fatalf("metadata did not capture path/query: %#v", metadata)
 	}
-	if metadata.AuthResult != gateway.AuthResultPublic {
+	if metadata.AuthResult != domain.AuthResultPublic {
 		t.Fatalf("expected public auth result, got %q", metadata.AuthResult)
 	}
 	if metadata.UpstreamService == nil || *metadata.UpstreamService != "icore-agent" {
@@ -123,17 +129,11 @@ func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load test location: %v", err)
 	}
-	logger := &captureLogger{}
-	router := NewRouter(gateway.Config{
-		BackendURL:         "http://backend.local",
-		JWTSecret:          "test-secret-with-at-least-32-bytes",
-		JWTIssuer:          "icore-agent",
-		JWTAudience:        "icore-gateway",
-		LoggingServiceName: "icore-gateway",
-		TimeLocation:       location,
-	}, gateway.Dependencies{
-		Logger: logger,
-		Now: func() time.Time {
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{
+		logger:   logger,
+		location: location,
+		now: func() time.Time {
 			return time.Date(2026, 5, 16, 7, 22, 52, 742470455, time.UTC)
 		},
 	})
@@ -144,7 +144,7 @@ func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
 	if len(logger.events) != 1 {
 		t.Fatalf("expected one gateway log event, got %d", len(logger.events))
 	}
-	metadata := eventMetadata(t, logger.events[0])
+	metadata := logger.events[0].Metadata
 	want := "2026-05-16T15:22:52.742470455+08:00"
 	if got := metadata.RequestTimestamp; got != want {
 		t.Fatalf("metadata timestamp = %q, want %q", got, want)
@@ -161,14 +161,8 @@ func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 		return testResponse(http.StatusOK, ""), nil
 	})
 
-	logger := &captureLogger{}
-	router := NewRouter(gateway.Config{
-		BackendURL:         "http://backend.local",
-		JWTSecret:          "test-secret-with-at-least-32-bytes",
-		JWTIssuer:          "icore-agent",
-		JWTAudience:        "icore-gateway",
-		LoggingServiceName: "icore-gateway",
-	}, gateway.Dependencies{Logger: logger, Transport: transport, Now: time.Now})
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{logger: logger, transport: transport, now: time.Now})
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil))
@@ -185,8 +179,8 @@ func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 	if logger.events[0].Level != sharedlogging.LogLevelWarning {
 		t.Fatalf("expected warning log, got %q", logger.events[0].Level)
 	}
-	metadata := eventMetadata(t, logger.events[0])
-	if metadata.AuthResult != gateway.AuthResultMissingToken {
+	metadata := logger.events[0].Metadata
+	if metadata.AuthResult != domain.AuthResultMissingToken {
 		t.Fatalf("unexpected auth result %q", metadata.AuthResult)
 	}
 	if metadata.RejectReason == nil || *metadata.RejectReason != "missing bearer token" {
@@ -205,13 +199,12 @@ func TestGatewayForwardsValidJWTIdentityHeaders(t *testing.T) {
 
 	secret := "test-secret-with-at-least-32-bytes"
 	token := signTestJWT(t, secret, "user-1", []string{"owner", "admin"}, time.Now().Add(time.Hour))
-	router := NewRouter(gateway.Config{
-		BackendURL:         "http://backend.local",
-		JWTSecret:          secret,
-		JWTIssuer:          "icore-agent",
-		JWTAudience:        "icore-gateway",
-		LoggingServiceName: "icore-gateway",
-	}, gateway.Dependencies{Logger: &captureLogger{}, Transport: transport, Now: time.Now})
+	router := newTestRouter(routerTestConfig{
+		secret:    secret,
+		logger:    &captureAccessLogger{},
+		transport: transport,
+		now:       time.Now,
+	})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
@@ -236,22 +229,16 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 		return testResponse(http.StatusOK, ""), nil
 	})
 
-	logger := &captureLogger{}
-	router := NewRouter(gateway.Config{
-		BackendURL:         "http://backend.local",
-		JWTSecret:          "test-secret-with-at-least-32-bytes",
-		JWTIssuer:          "icore-agent",
-		JWTAudience:        "icore-gateway",
-		LoggingServiceName: "icore-gateway",
-	}, gateway.Dependencies{
-		Logger:    logger,
-		Transport: transport,
-		Limiter: staticLimiter{decision: gateway.RateLimitDecision{
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{
+		logger:    logger,
+		transport: transport,
+		limiter: staticLimiter{decision: domain.RateLimitDecision{
 			Allowed:      false,
 			Result:       "rejected",
 			RejectReason: "service rate limit exceeded",
 		}},
-		Now: time.Now,
+		now: time.Now,
 	})
 
 	response := httptest.NewRecorder()
@@ -263,19 +250,52 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 	if upstreamHit {
 		t.Fatal("rate limited request should not reach upstream")
 	}
-	metadata := eventMetadata(t, logger.events[0])
+	metadata := logger.events[0].Metadata
 	if metadata.RateLimitResult != "rejected" {
 		t.Fatalf("unexpected rate limit result %q", metadata.RateLimitResult)
 	}
 }
 
-func eventMetadata(t *testing.T, event sharedlogging.LogEvent) gateway.GatewayMetadata {
-	t.Helper()
-	metadata, ok := event.Metadata.(gateway.GatewayMetadata)
-	if !ok {
-		t.Fatalf("metadata has type %T, want gateway.GatewayMetadata", event.Metadata)
+func newTestRouter(config routerTestConfig) http.Handler {
+	backendURL := config.backendURL
+	if backendURL == "" {
+		backendURL = "http://backend.local"
 	}
-	return metadata
+	secret := config.secret
+	if secret == "" {
+		secret = "test-secret-with-at-least-32-bytes"
+	}
+	logger := config.logger
+	if logger == nil {
+		logger = &captureAccessLogger{}
+	}
+	now := config.now
+	if now == nil {
+		now = time.Now
+	}
+	location := config.location
+	if location == nil {
+		location = time.Local
+	}
+
+	pipeline := appgateway.NewPipeline(appgateway.PipelineConfig{
+		ServiceName:     "icore-gateway",
+		RoutePolicy:     appgateway.NewDefaultRoutePolicy(backendURL),
+		RequestIDPolicy: domain.RequestIDPolicy{},
+		IdentityPolicy:  appgateway.IdentityPolicy{},
+		Location:        location,
+		Now:             now,
+	}, appgateway.PipelineDependencies{
+		Authenticator: jwtinfra.NewAuthenticator(jwtinfra.Config{
+			Secret:   secret,
+			Issuer:   "icore-agent",
+			Audience: "icore-gateway",
+		}),
+		Limiter:      config.limiter,
+		Proxy:        proxyinfra.NewReverseProxy(backendURL, config.transport),
+		AccessLogger: logger,
+	})
+	return NewRouter(NewHandler(pipeline))
 }
 
 func testResponse(status int, body string) *http.Response {

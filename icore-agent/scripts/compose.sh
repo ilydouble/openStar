@@ -18,7 +18,7 @@ COMPOSE_FILES=(
 
 ENV_FILES=(
   "dotenv/.env.app"
-  "dotenv/.env.ports"
+  "dotenv/.env.build"
   "dotenv/.env.database"
   "dotenv/.env.memory"
   "dotenv/.env.minio"

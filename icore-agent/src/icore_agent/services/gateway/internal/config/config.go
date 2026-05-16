@@ -32,8 +32,8 @@ type Config struct {
 // Load reads environment variables and applies local development defaults.
 func Load() Config {
 	return Config{
-		Addr:                  envconfig.String("GATEWAY_ADDR", ":8080"),
-		BackendURL:            envconfig.String("GATEWAY_BACKEND_URL", "http://icore-agent:8080"),
+		Addr:                  envconfig.String("GATEWAY_ADDR", ":11000"),
+		BackendURL:            envconfig.String("GATEWAY_BACKEND_URL", "http://icore-agent:11001"),
 		LoggingServiceName:    envconfig.String("GATEWAY_LOGGING_SERVICE_NAME", "icore-gateway"),
 		LoggingServiceURL:     envconfig.String("LOGGING_SERVICE_URL", "http://logging-service:8091"),
 		LoggingServiceToken:   envconfig.String("LOGGING_SERVICE_TOKEN", "dev-logging-service-token"),

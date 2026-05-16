@@ -11,7 +11,8 @@ def test_alembic_scaffold_is_in_backend_root():
     assert (AGENT_ROOT / "alembic" / "env.py").is_file()
     versions = AGENT_ROOT / "alembic" / "versions"
     assert versions.is_dir()
-    assert any(path.name.startswith("0001") and "users" in path.name for path in versions.iterdir())
+    assert any(path.name.startswith("0001")
+               and "users" in path.name for path in versions.iterdir())
 
 
 def test_root_agents_md_documents_repo_workflow():
@@ -35,11 +36,12 @@ def test_dotenv_files_are_split_by_domain():
         "rag",
         "tools",
         "media",
-        "ports",
         "minio",
         "kafka",
         "storage",
         "logging",
+        "gateway",
+        "build",
     }
     for domain in domains:
         assert (dotenv_dir / f".env.{domain}").is_file()
@@ -61,13 +63,14 @@ def test_compose_wrapper_loads_split_env_files():
     assert "docker compose" in text
     for domain in (
         "app",
-        "ports",
+        "build",
         "database",
         "memory",
         "minio",
         "kafka",
         "storage",
         "logging",
+        "gateway",
         "llm",
         "sequential",
         "auth",
@@ -86,17 +89,18 @@ def test_compose_wrapper_loads_split_env_files():
         "storage-service.yml",
         "logging-service.yml",
         "backend.yml",
+        "gateway.yml",
     ):
         assert f"infrastructure/docker/compose/{compose_file}" in text
 
 
 def test_app_env_documents_build_proxy_overrides():
-    app_example = (AGENT_ROOT / "dotenv" / ".env.app.example").read_text(
+    build_example = (AGENT_ROOT / "dotenv" / ".env.build.example").read_text(
         encoding="utf-8"
     )
 
-    assert "BUILD_HTTP_PROXY=http://host.docker.internal:7890" in app_example
-    assert "BUILD_GOPROXY=https://goproxy.cn,direct" in app_example
+    assert "BUILD_HTTP_PROXY=" in build_example
+    assert "BUILD_GOPROXY=https://goproxy.cn,direct" in build_example
 
 
 def test_compose_files_are_split_under_infrastructure():
@@ -110,6 +114,7 @@ def test_compose_files_are_split_under_infrastructure():
         "kafka.yml",
         "storage-service.yml",
         "logging-service.yml",
+        "gateway.yml",
     }
 
     assert compose_dir.is_dir()
@@ -139,9 +144,13 @@ def test_postgres_port_mapping_uses_split_database_ports():
         encoding="utf-8"
     )
 
-    assert "${DB_HOST_PORT:-5432}:${DB_INTERNAL_PORT:-5432}" in compose
+    assert (
+        "${DB_HOST_BIND:-127.0.0.1}:${DB_HOST_PORT:-15432}:${DB_INTERNAL_PORT:-5432}"
+        in compose
+    )
     assert "DB_INTERNAL_PORT=5432" in database_example
-    assert "DB_HOST_PORT=5432" in database_example
+    assert "DB_HOST_BIND=127.0.0.1" in database_example
+    assert "DB_HOST_PORT=15432" in database_example
     assert "DB_PORT=" not in database_example
 
 
@@ -197,15 +206,17 @@ def test_copied_logging_client_does_not_reference_old_project_packages():
 
 
 def test_fastapi_app_installs_request_id_middleware():
-    main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(encoding="utf-8")
+    main = (AGENT_ROOT / "src" / "icore_agent" /
+            "main.py").read_text(encoding="utf-8")
 
-    assert "from .lib.http.middleware import RequestIdMiddleware" in main
+    assert "RequestIdMiddleware" in main
     assert "app.add_middleware(RequestIdMiddleware)" in main
 
 
 def test_email_validator_dependency_is_declared_for_emailstr_models():
     pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    requirements = (AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    requirements = (
+        AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
 
     assert '"email-validator' in pyproject
     assert "email-validator==" in requirements

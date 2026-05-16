@@ -12,7 +12,7 @@ services:
         http_proxy: ${BUILD_HTTP_PROXY:-}
         https_proxy: ${BUILD_HTTPS_PROXY:-}
         no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
-        GOPROXY: ${BUILD_GOPROXY:-https://proxy.golang.org,direct}
+        GOPROXY: ${BUILD_GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
         GONOPROXY: ${BUILD_GONOPROXY:-}
         GONOSUMDB: ${BUILD_GONOSUMDB:-}
@@ -20,8 +20,8 @@ services:
     container_name: icore-gateway
     restart: unless-stopped
     environment:
-      GATEWAY_ADDR: ${GATEWAY_ADDR:-:8080}
-      GATEWAY_BACKEND_URL: ${GATEWAY_BACKEND_URL:-http://icore-agent:8080}
+      GATEWAY_ADDR: ${GATEWAY_ADDR:-:11000}
+      GATEWAY_BACKEND_URL: ${GATEWAY_BACKEND_URL:-http://icore-agent:11001}
       GATEWAY_LOGGING_SERVICE_NAME: ${GATEWAY_LOGGING_SERVICE_NAME:-icore-gateway}
       GATEWAY_LOGGING_SERVICE_TIMEOUT: ${GATEWAY_LOGGING_SERVICE_TIMEOUT:-2s}
       GATEWAY_RATE_LIMIT_WINDOW: ${GATEWAY_RATE_LIMIT_WINDOW:-1m}
@@ -41,7 +41,7 @@ services:
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-gateway
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-gateway
     ports:
-      - '${GATEWAY_PORT_BIND:-10001:8080}'
+      - '${GATEWAY_PORT_BIND:-11000:11000}'
     depends_on:
       redis:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
     networks:
       - icore-net
     healthcheck:
-      test: ['CMD', 'wget', '-Y', 'off', '-qO-', 'http://127.0.0.1:8080/health']
+      test: ['CMD-SHELL', 'port="$${GATEWAY_ADDR##*:}"; wget -Y off -qO- "http://127.0.0.1:$${port:-11000}/health"']
       interval: 30s
       timeout: 10s
       retries: 5

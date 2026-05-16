@@ -40,7 +40,7 @@ services:
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
     expose:
-      - '8080'
+      - '${API_PORT:-11001}'
     volumes:
       - ../../../src:/app/src:ro
       - seq-workspace:/tmp/icore-seq-workspace
@@ -56,7 +56,7 @@ services:
     networks:
       - icore-net
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8080/health']
+      test: ['CMD-SHELL', 'curl -f "http://localhost:$${API_PORT:-11001}/health"']
       interval: 30s
       timeout: 10s
       start_period: 20s

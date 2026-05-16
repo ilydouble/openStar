@@ -35,5 +35,5 @@ FROM alpine:3.20
 RUN adduser -D -H -u 10001 appuser
 USER appuser
 COPY --from=builder /out/icore-gateway /usr/local/bin/icore-gateway
-EXPOSE 8080
+EXPOSE 11000
 ENTRYPOINT ["icore-gateway"]

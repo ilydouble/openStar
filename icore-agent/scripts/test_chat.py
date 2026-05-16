@@ -7,8 +7,9 @@
 
 import httpx
 import json
+import os
 
-BASE = "http://localhost:8080"
+BASE = os.getenv("ICORE_TEST_BASE_URL", "http://localhost:11000")
 
 
 def test_health():

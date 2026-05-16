@@ -24,12 +24,15 @@ from ..infrastructure.control_plane import (
 from ..memory.chroma_store import add_documents, get_collection, list_documents
 
 identity_repository = ControlPlaneIdentityRepository(control_plane_store)
-verification_repository = ControlPlaneVerificationRepository(control_plane_store)
-registration_repository = ControlPlaneRegistrationRepository(control_plane_store)
+verification_repository = ControlPlaneVerificationRepository(
+    control_plane_store)
+registration_repository = ControlPlaneRegistrationRepository(
+    control_plane_store)
 lead_repository = ControlPlaneLeadRepository(control_plane_store)
 team_repository = ControlPlaneTeamRepository(control_plane_store)
 project_repository = ControlPlaneProjectRepository(control_plane_store)
-billing_summary_repository = ControlPlaneBillingSummaryRepository(control_plane_store)
+billing_summary_repository = ControlPlaneBillingSummaryRepository(
+    control_plane_store)
 usage_repository = ControlPlaneUsageRepository(control_plane_store)
 billing_repository = ControlPlaneBillingRepository(control_plane_store)
 
@@ -45,7 +48,7 @@ account_service = AccountService(
 )
 billing_service = BillingService(
     billing_repository,
-    settings.icore_base_url or "http://localhost:8080",
+    settings.icore_base_url or "http://localhost:11000",
 )
 usage_service = UsageService(usage_repository)
 knowledge_service = KnowledgeService(

@@ -1,4 +1,4 @@
-package gateway
+package route_policy
 
 import "testing"
 

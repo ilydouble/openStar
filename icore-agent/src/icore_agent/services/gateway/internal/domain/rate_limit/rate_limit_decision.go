@@ -1,4 +1,4 @@
-package gateway
+package rate_limit
 
 // RateLimitScope names the gateway limit dimension being checked.
 type RateLimitScope string

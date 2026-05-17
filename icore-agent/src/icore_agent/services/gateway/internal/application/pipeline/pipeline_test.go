@@ -1,30 +1,36 @@
-package gateway
+package pipeline
 
 import (
 	"context"
 	"errors"
+	"icore-gateway/internal/application/identity_policy"
+	"icore-gateway/internal/application/pipeline/deps"
+	"icore-gateway/internal/application/route_policy"
+	"icore-gateway/internal/domain/auth"
+	domain2 "icore-gateway/internal/domain/identity"
+	"icore-gateway/internal/domain/logging"
+	"icore-gateway/internal/domain/rate_limit"
+	"icore-gateway/internal/domain/request_id"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	domain "icore-gateway/internal/domain/gateway"
 )
 
 type fakeAuthenticator struct {
-	identity domain.Identity
+	identity domain2.Identity
 	err      error
 }
 
-func (auth fakeAuthenticator) Authenticate(_ string, _ time.Time) (domain.Identity, error) {
+func (auth fakeAuthenticator) Authenticate(_ string, _ time.Time) (domain2.Identity, error) {
 	return auth.identity, auth.err
 }
 
 type fakeLimiter struct {
-	decision domain.RateLimitDecision
+	decision rate_limit.RateLimitDecision
 }
 
-func (limiter fakeLimiter) GetRateLimitDecision(_ context.Context, _ domain.RateLimitTarget) (domain.RateLimitDecision, error) {
+func (limiter fakeLimiter) GetRateLimitDecision(_ context.Context, _ rate_limit.RateLimitTarget) (rate_limit.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -40,7 +46,7 @@ func (proxy *fakeProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.hit = true
 	proxy.userID = r.Header.Get("X-User-ID")
 	proxy.userRoles = r.Header.Get("X-User-Roles")
-	proxy.requestID = r.Header.Get(domain.RequestIDHeader)
+	proxy.requestID = r.Header.Get(request_id.RequestIDHeader)
 	status := proxy.status
 	if status == 0 {
 		status = http.StatusOK
@@ -49,10 +55,10 @@ func (proxy *fakeProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type captureAccessLogger struct {
-	events []domain.AccessLogEvent
+	events []logging.AccessLogEvent
 }
 
-func (logger *captureAccessLogger) Emit(event domain.AccessLogEvent) {
+func (logger *captureAccessLogger) Emit(event logging.AccessLogEvent) {
 	logger.events = append(logger.events, event)
 }
 
@@ -87,7 +93,7 @@ func TestPipelineRejectsProtectedRouteWithoutTokenBeforeProxy(t *testing.T) {
 	if proxy.hit {
 		t.Fatal("protected request without token should not hit upstream")
 	}
-	if got := logger.events[0].Metadata.AuthResult; got != domain.AuthResultMissingToken {
+	if got := logger.events[0].Metadata.AuthResult; got != auth.AuthResultMissingToken {
 		t.Fatalf("auth result = %q, want missing token", got)
 	}
 }
@@ -96,7 +102,7 @@ func TestPipelineClearsSpoofedIdentityHeadersOnPublicUpstream(t *testing.T) {
 	proxy := &fakeProxy{}
 	logger := &captureAccessLogger{}
 	pipeline := newTestPipeline(fakeAuthenticator{}, fakeLimiter{
-		decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"},
+		decision: rate_limit.RateLimitDecision{Allowed: true, Result: "allowed"},
 	}, proxy, logger)
 
 	response := newTestResponseRecorder()
@@ -114,7 +120,7 @@ func TestPipelineClearsSpoofedIdentityHeadersOnPublicUpstream(t *testing.T) {
 	if proxy.requestID == "" {
 		t.Fatal("upstream request should receive X-Request-ID")
 	}
-	if got := logger.events[0].Metadata.AuthResult; got != domain.AuthResultPublic {
+	if got := logger.events[0].Metadata.AuthResult; got != auth.AuthResultPublic {
 		t.Fatalf("auth result = %q, want public", got)
 	}
 }
@@ -122,8 +128,8 @@ func TestPipelineClearsSpoofedIdentityHeadersOnPublicUpstream(t *testing.T) {
 func TestPipelineForwardsAuthenticatedIdentity(t *testing.T) {
 	proxy := &fakeProxy{}
 	pipeline := newTestPipeline(fakeAuthenticator{
-		identity: domain.Identity{UserID: "user-1", Roles: []string{"owner", "admin"}},
-	}, fakeLimiter{decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"}}, proxy, &captureAccessLogger{})
+		identity: domain2.Identity{UserID: "user-1", Roles: []string{"owner", "admin"}},
+	}, fakeLimiter{decision: rate_limit.RateLimitDecision{Allowed: true, Result: "allowed"}}, proxy, &captureAccessLogger{})
 
 	response := newTestResponseRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
@@ -142,7 +148,7 @@ func TestPipelineRecordsUpstreamErrorInAccessLog(t *testing.T) {
 	proxy := &fakeProxy{status: http.StatusServiceUnavailable}
 	logger := &captureAccessLogger{}
 	pipeline := newTestPipeline(fakeAuthenticator{}, fakeLimiter{
-		decision: domain.RateLimitDecision{Allowed: true, Result: "allowed"},
+		decision: rate_limit.RateLimitDecision{Allowed: true, Result: "allowed"},
 	}, proxy, logger)
 
 	response := newTestResponseRecorder()
@@ -174,24 +180,24 @@ func TestPipelineRejectsInvalidToken(t *testing.T) {
 	if proxy.hit {
 		t.Fatal("invalid token should not hit upstream")
 	}
-	if got := logger.events[0].Metadata.AuthResult; got != domain.AuthResultInvalidToken {
+	if got := logger.events[0].Metadata.AuthResult; got != auth.AuthResultInvalidToken {
 		t.Fatalf("auth result = %q, want invalid token", got)
 	}
 }
 
-func newTestPipeline(auth Authenticator, limiter RateLimiter, proxy UpstreamProxy, logger AccessLogger) *Pipeline {
+func newTestPipeline(auth deps.Authenticator, limiter deps.RateLimiter, proxy deps.UpstreamProxy, logger deps.AccessLogger) *Pipeline {
 	return NewPipeline(PipelineConfig{
 		ServiceName: "icore-gateway",
-		RoutePolicy: NewDefaultRoutePolicy("http://backend.local"),
-		RequestIDPolicy: domain.RequestIDPolicy{
+		RoutePolicy: route_policy.NewDefaultRoutePolicy("http://backend.local"),
+		RequestIDPolicy: request_id.RequestIDPolicy{
 			Generate: func() string { return "generated-request-id" },
 		},
-		IdentityPolicy: IdentityPolicy{},
+		IdentityPolicy: identity_policy.IdentityPolicy{},
 		Location:       time.FixedZone("CST", 8*3600),
 		Now: func() time.Time {
 			return time.Date(2026, 5, 16, 15, 22, 0, 0, time.FixedZone("CST", 8*3600))
 		},
-	}, PipelineDependencies{
+	}, deps.PipelineDependencies{
 		Authenticator:  auth,
 		ServiceLimiter: limiter,
 		Proxy:          proxy,

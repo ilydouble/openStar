@@ -6,6 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"icore-gateway/internal/application/identity_policy"
+	appgateway "icore-gateway/internal/application/pipeline"
+	pipeline_deps "icore-gateway/internal/application/pipeline/deps"
+	"icore-gateway/internal/application/route_policy"
+	"icore-gateway/internal/domain/auth"
+	"icore-gateway/internal/domain/logging"
+	"icore-gateway/internal/domain/rate_limit"
+	domain2 "icore-gateway/internal/domain/request_id"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,26 +21,24 @@ import (
 	"testing"
 	"time"
 
-	appgateway "icore-gateway/internal/application/gateway"
-	domain "icore-gateway/internal/domain/gateway"
 	jwtinfra "icore-gateway/internal/infrastructure/jwt"
 	proxyinfra "icore-gateway/internal/infrastructure/proxy"
 	sharedlogging "icore-services-lib-go/logging"
 )
 
 type captureAccessLogger struct {
-	events []domain.AccessLogEvent
+	events []logging.AccessLogEvent
 }
 
-func (logger *captureAccessLogger) Emit(event domain.AccessLogEvent) {
+func (logger *captureAccessLogger) Emit(event logging.AccessLogEvent) {
 	logger.events = append(logger.events, event)
 }
 
 type staticLimiter struct {
-	decision domain.RateLimitDecision
+	decision rate_limit.RateLimitDecision
 }
 
-func (limiter staticLimiter) GetRateLimitDecision(_ context.Context, _ domain.RateLimitTarget) (domain.RateLimitDecision, error) {
+func (limiter staticLimiter) GetRateLimitDecision(_ context.Context, _ rate_limit.RateLimitTarget) (rate_limit.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -46,9 +52,9 @@ type routerTestConfig struct {
 	backendURL      string
 	secret          string
 	logger          *captureAccessLogger
-	clientIPLimiter appgateway.ClientIPLimiter
-	userIDLimiter   appgateway.UserIDLimiter
-	serviceLimiter  appgateway.ServiceLimiter
+	clientIPLimiter pipeline_deps.ClientIPLimiter
+	userIDLimiter   pipeline_deps.UserIDLimiter
+	serviceLimiter  pipeline_deps.ServiceLimiter
 	transport       http.RoundTripper
 	now             func() time.Time
 	location        *time.Location
@@ -57,7 +63,7 @@ type routerTestConfig struct {
 func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	upstreamRequestID := ""
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		upstreamRequestID = request.Header.Get(domain.RequestIDHeader)
+		upstreamRequestID = request.Header.Get(domain2.RequestIDHeader)
 		return testResponse(http.StatusAccepted, `{"ok":true}`), nil
 	})
 
@@ -65,11 +71,11 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	router := newTestRouter(routerTestConfig{
 		logger:    logger,
 		transport: transport,
-		clientIPLimiter: staticLimiter{decision: domain.RateLimitDecision{
+		clientIPLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
-		serviceLimiter: staticLimiter{decision: domain.RateLimitDecision{
+		serviceLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
@@ -81,7 +87,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/account/login?source=web", nil))
 
-	requestID := response.Header().Get(domain.RequestIDHeader)
+	requestID := response.Header().Get(domain2.RequestIDHeader)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected upstream status, got %d", response.Code)
 	}
@@ -112,7 +118,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	if metadata.Path != "/api/v1/account/login" || metadata.Query != "source=web" {
 		t.Fatalf("metadata did not capture path/query: %#v", metadata)
 	}
-	if metadata.AuthResult != domain.AuthResultPublic {
+	if metadata.AuthResult != auth.AuthResultPublic {
 		t.Fatalf("expected public auth result, got %q", metadata.AuthResult)
 	}
 	if metadata.UpstreamService == nil || *metadata.UpstreamService != "icore-agent" {
@@ -186,7 +192,7 @@ func TestGatewayRejectsProtectedRouteWithoutJWT(t *testing.T) {
 		t.Fatalf("expected warning log, got %q", logger.events[0].Level)
 	}
 	metadata := logger.events[0].Metadata
-	if metadata.AuthResult != domain.AuthResultMissingToken {
+	if metadata.AuthResult != auth.AuthResultMissingToken {
 		t.Fatalf("unexpected auth result %q", metadata.AuthResult)
 	}
 	if metadata.RejectReason == nil || *metadata.RejectReason != "missing bearer token" {
@@ -239,11 +245,11 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 	router := newTestRouter(routerTestConfig{
 		logger:    logger,
 		transport: transport,
-		clientIPLimiter: staticLimiter{decision: domain.RateLimitDecision{
+		clientIPLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
-		serviceLimiter: staticLimiter{decision: domain.RateLimitDecision{
+		serviceLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
 			Allowed:      false,
 			Result:       "rejected",
 			RejectReason: "service rate limit exceeded",
@@ -290,12 +296,12 @@ func newTestRouter(config routerTestConfig) http.Handler {
 
 	pipeline := appgateway.NewPipeline(appgateway.PipelineConfig{
 		ServiceName:     "icore-gateway",
-		RoutePolicy:     appgateway.NewDefaultRoutePolicy(backendURL),
-		RequestIDPolicy: domain.RequestIDPolicy{},
-		IdentityPolicy:  appgateway.IdentityPolicy{},
+		RoutePolicy:     route_policy.NewDefaultRoutePolicy(backendURL),
+		RequestIDPolicy: domain2.RequestIDPolicy{},
+		IdentityPolicy:  identity_policy.IdentityPolicy{},
 		Location:        location,
 		Now:             now,
-	}, appgateway.PipelineDependencies{
+	}, pipeline_deps.PipelineDependencies{
 		Authenticator: jwtinfra.NewAuthenticator(jwtinfra.Config{
 			Secret:   secret,
 			Issuer:   "icore-agent",

@@ -1,10 +1,9 @@
-package gateway
+package identity_policy
 
 import (
+	"icore-gateway/internal/domain/identity"
 	"net/http"
 	"testing"
-
-	domain "icore-gateway/internal/domain/gateway"
 )
 
 func TestIdentityPolicyClearsSpoofedIdentityHeadersForPublicRequests(t *testing.T) {
@@ -24,7 +23,7 @@ func TestIdentityPolicyClearsSpoofedIdentityHeadersForPublicRequests(t *testing.
 
 func TestIdentityPolicyForwardsAuthenticatedIdentity(t *testing.T) {
 	header := http.Header{}
-	identity := &domain.Identity{UserID: "user-1", Roles: []string{"owner", "admin"}}
+	identity := &identity.Identity{UserID: "user-1", Roles: []string{"owner", "admin"}}
 
 	IdentityPolicy{}.Apply(header, identity)
 

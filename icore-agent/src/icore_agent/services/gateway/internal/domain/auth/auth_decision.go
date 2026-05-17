@@ -1,4 +1,4 @@
-package gateway
+package auth
 
 const (
 	// AuthResultPublic marks routes that do not require bearer authentication.

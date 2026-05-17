@@ -1,10 +1,9 @@
-package gateway
+package identity_policy
 
 import (
+	"icore-gateway/internal/domain/identity"
 	"net/http"
 	"strings"
-
-	domain "icore-gateway/internal/domain/gateway"
 )
 
 const (
@@ -16,7 +15,7 @@ const (
 type IdentityPolicy struct{}
 
 // Apply clears spoofable identity headers and injects authenticated identity when present.
-func (policy IdentityPolicy) Apply(header http.Header, identity *domain.Identity) {
+func (policy IdentityPolicy) Apply(header http.Header, identity *identity.Identity) {
 	header.Del(userIDHeader)
 	header.Del(userRolesHeader)
 	if identity == nil {

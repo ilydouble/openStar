@@ -1,9 +1,8 @@
 package httpapi
 
 import (
+	appgateway "icore-gateway/internal/application/pipeline"
 	"net/http"
-
-	appgateway "icore-gateway/internal/application/gateway"
 )
 
 // Handler adapts incoming HTTP requests to the application gateway pipeline.

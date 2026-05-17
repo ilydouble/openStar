@@ -1,4 +1,4 @@
-package gateway
+package logging
 
 import (
 	"time"
@@ -16,6 +16,7 @@ type AccessLogMetadata struct {
 	ClientIP           string   `json:"client_ip"`
 	AuthResult         string   `json:"auth_result"`
 	UserAgent          string   `json:"user_agent"`
+	UserAgentType      string   `json:"user_agent_type"`
 	UserID             string   `json:"user_id"`
 	Roles              []string `json:"roles"`
 	UpstreamService    *string  `json:"upstream_service"`

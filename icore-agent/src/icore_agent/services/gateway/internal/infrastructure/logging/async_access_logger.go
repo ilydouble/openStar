@@ -3,11 +3,11 @@ package logging
 import (
 	"context"
 	"errors"
+	"icore-gateway/internal/domain/logging"
 	"log"
 	"sync"
 	"time"
 
-	domain "icore-gateway/internal/domain/gateway"
 	sharedlogging "icore-services-lib-go/logging"
 )
 
@@ -22,7 +22,7 @@ type Config struct {
 type AsyncAccessLogger struct {
 	emitter sharedlogging.Emitter
 	timeout time.Duration
-	queue   chan domain.AccessLogEvent
+	queue   chan logging.AccessLogEvent
 	done    chan struct{}
 
 	mu        sync.RWMutex
@@ -43,7 +43,7 @@ func NewAsyncAccessLogger(config Config) *AsyncAccessLogger {
 	logger := &AsyncAccessLogger{
 		emitter: config.Emitter,
 		timeout: timeout,
-		queue:   make(chan domain.AccessLogEvent, queueSize),
+		queue:   make(chan logging.AccessLogEvent, queueSize),
 		done:    make(chan struct{}),
 	}
 	go logger.run()
@@ -51,7 +51,7 @@ func NewAsyncAccessLogger(config Config) *AsyncAccessLogger {
 }
 
 // Emit enqueues one access log event without blocking the request path.
-func (logger *AsyncAccessLogger) Emit(event domain.AccessLogEvent) {
+func (logger *AsyncAccessLogger) Emit(event logging.AccessLogEvent) {
 	logger.mu.RLock()
 	defer logger.mu.RUnlock()
 	if logger.closed {

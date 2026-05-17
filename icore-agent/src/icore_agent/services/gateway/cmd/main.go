@@ -2,6 +2,11 @@ package main
 
 import (
 	"context"
+	"icore-gateway/internal/application/identity_policy"
+	appgateway "icore-gateway/internal/application/pipeline"
+	"icore-gateway/internal/application/route_policy"
+	"icore-gateway/internal/domain/rate_limit"
+	domain2 "icore-gateway/internal/domain/request_id"
 	"log"
 	"net/http"
 	"os/signal"
@@ -10,13 +15,11 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	appgateway "icore-gateway/internal/application/gateway"
 	"icore-gateway/internal/config"
-	domain "icore-gateway/internal/domain/gateway"
 	jwtinfra "icore-gateway/internal/infrastructure/jwt"
 	logginginfra "icore-gateway/internal/infrastructure/logging"
 	proxyinfra "icore-gateway/internal/infrastructure/proxy"
-	ratelimitinfra "icore-gateway/internal/infrastructure/redisratelimit"
+	ratelimitinfra "icore-gateway/internal/infrastructure/rate_limiter"
 	httpapi "icore-gateway/internal/interfaces/http"
 	httpserver "icore-services-lib-go/http/server"
 	sharedlogging "icore-services-lib-go/logging"
@@ -39,33 +42,33 @@ func main() {
 	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()
 
-	loggingClient := sharedlogging.NewLoggingServiceClient(sharedlogging.LoggingServiceClientConfig{
-		BaseURL: cfg.LoggingServiceURL,
-		Token:   cfg.LoggingServiceToken,
-		Timeout: cfg.LoggingServiceTimeout,
-	})
-	accessLogger := logginginfra.NewAsyncAccessLogger(logginginfra.Config{
-		Emitter:   loggingClient,
-		Timeout:   cfg.LoggingServiceTimeout,
-		QueueSize: cfg.AccessLogQueueSize,
-	})
-	pipeline := appgateway.NewPipeline(appgateway.PipelineConfig{
-		ServiceName:     cfg.LoggingServiceName,
-		RoutePolicy:     appgateway.NewDefaultRoutePolicy(cfg.BackendURL),
-		RequestIDPolicy: domain.RequestIDPolicy{},
-		IdentityPolicy:  appgateway.IdentityPolicy{},
-		Location:        timeLocation,
-		Now:             time.Now,
-	}, appgateway.PipelineDependencies{
-		Authenticator: jwtinfra.NewAuthenticator(jwtinfra.Config{
-			Secret:   cfg.JWTSecret,
-			Issuer:   cfg.JWTIssuer,
-			Audience: cfg.JWTAudience,
-		}),
+	loggingClient := sharedlogging.NewLoggingServiceClient(
+		sharedlogging.LoggingServiceClientConfig{
+			BaseURL: cfg.LoggingServiceURL,
+			Token:   cfg.LoggingServiceToken,
+			Timeout: cfg.LoggingServiceTimeout,
+		},
+	)
+	accessLogger := logginginfra.NewAsyncAccessLogger(
+		logginginfra.Config{
+			Emitter:   loggingClient,
+			Timeout:   cfg.LoggingServiceTimeout,
+			QueueSize: cfg.AccessLogQueueSize,
+		},
+	)
+
+	pipelineDependencies := appgateway.PipelineDependencies{
+		Authenticator: jwtinfra.NewAuthenticator(
+			jwtinfra.Config{
+				Secret:   cfg.JWTSecret,
+				Issuer:   cfg.JWTIssuer,
+				Audience: cfg.JWTAudience,
+			},
+		),
 		ClientIPLimiter: ratelimitinfra.NewRedisLimiter(
 			redisClient,
 			ratelimitinfra.TokenBucketProfile{
-				Scope:         domain.RateLimitScopeClientIP,
+				Scope:         rate_limit.RateLimitScopeClientIP,
 				RatePerSecond: cfg.ClientIPRateLimit.RatePerSecond,
 				Burst:         cfg.ClientIPRateLimit.Burst,
 			},
@@ -75,7 +78,7 @@ func main() {
 		UserIDLimiter: ratelimitinfra.NewRedisLimiter(
 			redisClient,
 			ratelimitinfra.TokenBucketProfile{
-				Scope:         domain.RateLimitScopeUserID,
+				Scope:         rate_limit.RateLimitScopeUserID,
 				RatePerSecond: cfg.UserIDRateLimit.RatePerSecond,
 				Burst:         cfg.UserIDRateLimit.Burst,
 			},
@@ -85,7 +88,7 @@ func main() {
 		ServiceLimiter: ratelimitinfra.NewRedisLimiter(
 			redisClient,
 			ratelimitinfra.TokenBucketProfile{
-				Scope:         domain.RateLimitScopeService,
+				Scope:         rate_limit.RateLimitScopeService,
 				RatePerSecond: cfg.ServiceRateLimitProfile("icore-agent").RatePerSecond,
 				Burst:         cfg.ServiceRateLimitProfile("icore-agent").Burst,
 			},
@@ -94,7 +97,18 @@ func main() {
 		),
 		Proxy:        proxyinfra.NewReverseProxy(cfg.BackendURL, nil),
 		AccessLogger: accessLogger,
-	})
+	}
+	pipeline := appgateway.NewPipeline(
+		appgateway.PipelineConfig{
+			ServiceName:     cfg.LoggingServiceName,
+			RoutePolicy:     route_policy.NewDefaultRoutePolicy(cfg.BackendURL),
+			RequestIDPolicy: domain2.RequestIDPolicy{},
+			IdentityPolicy:  identity_policy.IdentityPolicy{},
+			Location:        timeLocation,
+			Now:             time.Now,
+		},
+		pipelineDependencies,
+	)
 	router := httpapi.NewRouter(httpapi.NewHandler(pipeline))
 	server := httpserver.New(cfg.HTTPServerConfig(), router)
 

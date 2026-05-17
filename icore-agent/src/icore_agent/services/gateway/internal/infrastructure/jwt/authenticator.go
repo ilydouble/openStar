@@ -6,10 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"icore-gateway/internal/domain/identity"
 	"strings"
 	"time"
-
-	domain "icore-gateway/internal/domain/gateway"
 )
 
 // Config contains the JWT validation settings consumed by the gateway.
@@ -30,12 +29,12 @@ func NewAuthenticator(config Config) *Authenticator {
 }
 
 // Authenticate validates a bearer token and returns the trusted upstream identity.
-func (auth *Authenticator) Authenticate(token string, now time.Time) (domain.Identity, error) {
+func (auth *Authenticator) Authenticate(token string, now time.Time) (identity.Identity, error) {
 	claims, err := validateJWT(token, auth.config, now)
 	if err != nil {
-		return domain.Identity{}, err
+		return identity.Identity{}, err
 	}
-	return domain.Identity{UserID: claims.Subject, Roles: claims.Roles}, nil
+	return identity.Identity{UserID: claims.Subject, Roles: claims.Roles}, nil
 }
 
 type claims struct {

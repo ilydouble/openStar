@@ -2,11 +2,11 @@ package logging
 
 import (
 	"context"
+	"icore-gateway/internal/domain/logging"
 	"sync"
 	"testing"
 	"time"
 
-	domain "icore-gateway/internal/domain/gateway"
 	sharedlogging "icore-services-lib-go/logging"
 )
 
@@ -83,14 +83,14 @@ func TestAsyncAccessLoggerDropsWhenQueueIsFullWithoutBlocking(t *testing.T) {
 	}
 }
 
-func testAccessLogEvent(requestID string) domain.AccessLogEvent {
-	return domain.AccessLogEvent{
+func testAccessLogEvent(requestID string) logging.AccessLogEvent {
+	return logging.AccessLogEvent{
 		Timestamp: time.Date(2026, 5, 16, 15, 22, 0, 0, time.UTC),
 		Level:     sharedlogging.LogLevelInfo,
 		Service:   "icore-gateway",
 		Message:   "gateway request",
 		TraceID:   requestID,
-		Metadata: domain.AccessLogMetadata{
+		Metadata: logging.AccessLogMetadata{
 			RequestID: requestID,
 		},
 	}

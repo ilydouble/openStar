@@ -1,12 +1,11 @@
-package redisratelimit
+package redis_rate_limiter
 
 import (
 	"context"
+	"icore-gateway/internal/domain/rate_limit"
 	"strings"
 	"testing"
 	"time"
-
-	domain "icore-gateway/internal/domain/gateway"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -33,13 +32,13 @@ func (client *spyRedisClient) Eval(ctx context.Context, script string, keys []st
 func TestRedisLimiterDisabledWhenRateOrBurstIsZero(t *testing.T) {
 	client := &spyRedisClient{}
 	limiter := NewRedisLimiter(client, TokenBucketProfile{
-		Scope:         domain.RateLimitScopeService,
+		Scope:         rate_limit.RateLimitScopeService,
 		RatePerSecond: 0,
 		Burst:         10,
 	}, "icore-gateway:rate", time.Now)
 
-	decision, err := limiter.GetRateLimitDecision(context.Background(), domain.RateLimitTarget{
-		Scope: domain.RateLimitScopeService,
+	decision, err := limiter.GetRateLimitDecision(context.Background(), rate_limit.RateLimitTarget{
+		Scope: rate_limit.RateLimitScopeService,
 		Key:   "icore-agent",
 	})
 	if err != nil {
@@ -57,13 +56,13 @@ func TestRedisLimiterUsesSingleEvalWithTokenBucketArguments(t *testing.T) {
 	now := time.Date(2026, 5, 17, 9, 30, 0, 123000000, time.UTC)
 	client := &spyRedisClient{result: []interface{}{int64(1), "allowed", "4"}}
 	limiter := NewRedisLimiter(client, TokenBucketProfile{
-		Scope:         domain.RateLimitScopeService,
+		Scope:         rate_limit.RateLimitScopeService,
 		RatePerSecond: 10,
 		Burst:         20,
 	}, "icore-gateway:rate", func() time.Time { return now })
 
-	decision, err := limiter.GetRateLimitDecision(context.Background(), domain.RateLimitTarget{
-		Scope: domain.RateLimitScopeService,
+	decision, err := limiter.GetRateLimitDecision(context.Background(), rate_limit.RateLimitTarget{
+		Scope: rate_limit.RateLimitScopeService,
 		Key:   "icore-agent",
 	})
 	if err != nil {
@@ -94,13 +93,13 @@ func TestRedisLimiterUsesSingleEvalWithTokenBucketArguments(t *testing.T) {
 func TestRedisLimiterRejectedDecisionDoesNotConsumeTokenInScript(t *testing.T) {
 	client := &spyRedisClient{result: []interface{}{int64(0), "rejected", "0"}}
 	limiter := NewRedisLimiter(client, TokenBucketProfile{
-		Scope:         domain.RateLimitScopeClientIP,
+		Scope:         rate_limit.RateLimitScopeClientIP,
 		RatePerSecond: 1,
 		Burst:         1,
 	}, "icore-gateway:rate", time.Now)
 
-	decision, err := limiter.GetRateLimitDecision(context.Background(), domain.RateLimitTarget{
-		Scope: domain.RateLimitScopeClientIP,
+	decision, err := limiter.GetRateLimitDecision(context.Background(), rate_limit.RateLimitTarget{
+		Scope: rate_limit.RateLimitScopeClientIP,
 		Key:   "203.0.113.10",
 	})
 	if err != nil {

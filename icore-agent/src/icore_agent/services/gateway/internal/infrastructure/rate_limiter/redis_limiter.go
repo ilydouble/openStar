@@ -1,13 +1,12 @@
-package redisratelimit
+package redis_rate_limiter
 
 import (
 	"context"
 	"fmt"
+	"icore-gateway/internal/domain/rate_limit"
 	"strconv"
 	"strings"
 	"time"
-
-	domain "icore-gateway/internal/domain/gateway"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -53,7 +52,7 @@ type scriptRunner interface {
 
 // TokenBucketProfile configures a Redis token bucket limiter.
 type TokenBucketProfile struct {
-	Scope         domain.RateLimitScope
+	Scope         rate_limit.RateLimitScope
 	RatePerSecond int
 	Burst         int
 }
@@ -88,12 +87,12 @@ func NewRedisLimiter(
 }
 
 // GetRateLimitDecision atomically refills and consumes one token for a target.
-func (limiter *RedisLimiter) GetRateLimitDecision(ctx context.Context, target domain.RateLimitTarget) (domain.RateLimitDecision, error) {
+func (limiter *RedisLimiter) GetRateLimitDecision(ctx context.Context, target rate_limit.RateLimitTarget) (rate_limit.RateLimitDecision, error) {
 	if limiter.profile.RatePerSecond <= 0 || limiter.profile.Burst <= 0 {
-		return domain.RateLimitDecision{Allowed: true, Result: "disabled"}, nil
+		return rate_limit.RateLimitDecision{Allowed: true, Result: "disabled"}, nil
 	}
 	if limiter.client == nil {
-		return domain.RateLimitDecision{}, fmt.Errorf("redis limiter client is nil")
+		return rate_limit.RateLimitDecision{}, fmt.Errorf("redis limiter client is nil")
 	}
 	if target.Scope == "" {
 		target.Scope = limiter.profile.Scope
@@ -109,12 +108,12 @@ func (limiter *RedisLimiter) GetRateLimitDecision(ctx context.Context, target do
 		limiter.ttl().Milliseconds(),
 	).Result()
 	if err != nil {
-		return domain.RateLimitDecision{}, err
+		return rate_limit.RateLimitDecision{}, err
 	}
 	return parseTokenBucketResult(result)
 }
 
-func (limiter *RedisLimiter) redisKey(target domain.RateLimitTarget) string {
+func (limiter *RedisLimiter) redisKey(target rate_limit.RateLimitTarget) string {
 	scope := string(target.Scope)
 	if scope == "" {
 		scope = "unknown"
@@ -130,20 +129,20 @@ func (limiter *RedisLimiter) ttl() time.Duration {
 	return refill
 }
 
-func parseTokenBucketResult(value interface{}) (domain.RateLimitDecision, error) {
+func parseTokenBucketResult(value interface{}) (rate_limit.RateLimitDecision, error) {
 	values, ok := value.([]interface{})
 	if !ok || len(values) < 2 {
-		return domain.RateLimitDecision{}, fmt.Errorf("unexpected redis token bucket result %#v", value)
+		return rate_limit.RateLimitDecision{}, fmt.Errorf("unexpected redis token bucket result %#v", value)
 	}
 	allowed, err := asInt64(values[0])
 	if err != nil {
-		return domain.RateLimitDecision{}, err
+		return rate_limit.RateLimitDecision{}, err
 	}
 	result := fmt.Sprint(values[1])
 	if allowed == 1 {
-		return domain.RateLimitDecision{Allowed: true, Result: result}, nil
+		return rate_limit.RateLimitDecision{Allowed: true, Result: result}, nil
 	}
-	return domain.RateLimitDecision{Allowed: false, Result: result}, nil
+	return rate_limit.RateLimitDecision{Allowed: false, Result: result}, nil
 }
 
 func asInt64(value interface{}) (int64, error) {

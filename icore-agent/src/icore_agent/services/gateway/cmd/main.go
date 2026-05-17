@@ -4,6 +4,7 @@ import (
 	"context"
 	"icore-gateway/internal/application/identity_policy"
 	appgateway "icore-gateway/internal/application/pipeline"
+	pipeline_deps "icore-gateway/internal/application/pipeline/deps"
 	"icore-gateway/internal/application/route_policy"
 	"icore-gateway/internal/domain/rate_limit"
 	domain2 "icore-gateway/internal/domain/request_id"
@@ -44,20 +45,19 @@ func main() {
 
 	loggingClient := sharedlogging.NewLoggingServiceClient(
 		sharedlogging.LoggingServiceClientConfig{
-			BaseURL: cfg.LoggingServiceURL,
-			Token:   cfg.LoggingServiceToken,
-			Timeout: cfg.LoggingServiceTimeout,
-		},
-	)
-	accessLogger := logginginfra.NewAsyncAccessLogger(
-		logginginfra.Config{
-			Emitter:   loggingClient,
+			BaseURL:   cfg.LoggingServiceURL,
+			Token:     cfg.LoggingServiceToken,
 			Timeout:   cfg.LoggingServiceTimeout,
 			QueueSize: cfg.AccessLogQueueSize,
 		},
 	)
+	accessLogger := logginginfra.NewGatewayAccessLogger(
+		logginginfra.GatewayAccessLoggerConfig{
+			Emitter: loggingClient,
+		},
+	)
 
-	pipelineDependencies := appgateway.PipelineDependencies{
+	pipelineDependencies := pipeline_deps.PipelineDependencies{
 		Authenticator: jwtinfra.NewAuthenticator(
 			jwtinfra.Config{
 				Secret:   cfg.JWTSecret,

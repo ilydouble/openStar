@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -51,6 +52,11 @@ func TestLoggingServiceClientEmitsEventToLoggingService(t *testing.T) {
 	if err := client.Emit(context.Background(), event); err != nil {
 		t.Fatalf("emit event: %v", err)
 	}
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second)
+	defer closeCancel()
+	if err := client.Close(closeCtx); err != nil {
+		t.Fatalf("close client: %v", err)
+	}
 
 	if capturedPath != "/v1/log-events" {
 		t.Fatalf("path = %q, want /v1/log-events", capturedPath)
@@ -69,8 +75,142 @@ func TestLoggingServiceClientEmitsEventToLoggingService(t *testing.T) {
 	}
 }
 
+func TestLoggingServiceClientDrainsQueuedEventsOnClose(t *testing.T) {
+	recorder := &recordingTransport{}
+	client := NewLoggingServiceClient(LoggingServiceClientConfig{
+		BaseURL:   "http://logging-service:8091",
+		Client:    &http.Client{Transport: recorder},
+		QueueSize: 2,
+	})
+
+	if err := client.Emit(context.Background(), testLogEvent("req-1")); err != nil {
+		t.Fatalf("emit first event: %v", err)
+	}
+	if err := client.Emit(context.Background(), testLogEvent("req-2")); err != nil {
+		t.Fatalf("emit second event: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := client.Close(ctx); err != nil {
+		t.Fatalf("close client: %v", err)
+	}
+	if got := recorder.Count(); got != 2 {
+		t.Fatalf("delivered events = %d, want 2", got)
+	}
+}
+
+func TestLoggingServiceClientDropsWhenQueueIsFullWithoutBlocking(t *testing.T) {
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	recorder := &recordingTransport{block: unblock, started: started}
+	client := NewLoggingServiceClient(LoggingServiceClientConfig{
+		BaseURL:   "http://logging-service:8091",
+		Client:    &http.Client{Transport: recorder},
+		QueueSize: 1,
+		Timeout:   time.Second,
+	})
+
+	_ = client.Emit(context.Background(), testLogEvent("req-1"))
+	<-started
+	_ = client.Emit(context.Background(), testLogEvent("req-2"))
+	start := time.Now()
+	_ = client.Emit(context.Background(), testLogEvent("req-3"))
+	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+		t.Fatalf("Emit blocked for %s on full queue", elapsed)
+	}
+
+	close(unblock)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := client.Close(ctx); err != nil {
+		t.Fatalf("close client: %v", err)
+	}
+	if got := recorder.Count(); got > 2 {
+		t.Fatalf("delivered events = %d, want at most 2 after one drop", got)
+	}
+}
+
+func TestLoggingServiceClientUsesTimeoutContextForDelivery(t *testing.T) {
+	observed := make(chan error, 1)
+	client := NewLoggingServiceClient(LoggingServiceClientConfig{
+		BaseURL: "http://logging-service:8091",
+		Client: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			<-request.Context().Done()
+			observed <- request.Context().Err()
+			return nil, request.Context().Err()
+		})},
+		QueueSize: 1,
+		Timeout:   10 * time.Millisecond,
+	})
+
+	_ = client.Emit(context.Background(), testLogEvent("req-slow"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := client.Close(ctx); err != nil {
+		t.Fatalf("close client: %v", err)
+	}
+
+	select {
+	case err := <-observed:
+		if err != context.DeadlineExceeded {
+			t.Fatalf("delivery context error = %v, want deadline exceeded", err)
+		}
+	default:
+		t.Fatal("transport did not observe delivery timeout")
+	}
+}
+
+func testLogEvent(traceID string) LogEvent {
+	return LogEvent{
+		Timestamp: time.Date(2026, 5, 16, 15, 22, 0, 0, time.FixedZone("CST", 8*3600)),
+		Level:     LogLevelInfo,
+		Service:   "icore-gateway",
+		Message:   "gateway request",
+		TraceID:   traceID,
+		Metadata: struct {
+			RequestID string `json:"request_id"`
+		}{RequestID: traceID},
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return fn(request)
+}
+
+type recordingTransport struct {
+	mu      sync.Mutex
+	count   int
+	block   <-chan struct{}
+	started chan struct{}
+}
+
+func (transport *recordingTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	if transport.started != nil {
+		select {
+		case <-transport.started:
+		default:
+			close(transport.started)
+		}
+	}
+	if transport.block != nil {
+		<-transport.block
+	}
+	transport.mu.Lock()
+	transport.count++
+	transport.mu.Unlock()
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"accepted":1}`)),
+	}, nil
+}
+
+func (transport *recordingTransport) Count() int {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	return transport.count
 }

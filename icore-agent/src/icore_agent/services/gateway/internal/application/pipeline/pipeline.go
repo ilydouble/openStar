@@ -178,9 +178,9 @@ func (pipeline *Pipeline) isAllowedByLimiter(
 	return false
 }
 
-func (pipeline *Pipeline) emitLog(start time.Time, metadata *logging.AccessLogMetadata, recorder ResponseStatusRecorder) {
+func (pipeline *Pipeline) emitLog(startTime time.Time, metadata *logging.AccessLogMetadata, recorder ResponseStatusRecorder) {
 	metadata.FinalStatusCode = recorder.Status()
-	metadata.RequestElapsedTime = pipeline.now().Sub(start).Milliseconds()
+	metadata.RequestElapsedTime = pipeline.now().Sub(startTime).Milliseconds()
 	if metadata.FinalStatusCode >= http.StatusInternalServerError {
 		errorType := "upstream_error"
 		metadata.ErrorType = &errorType
@@ -195,7 +195,7 @@ func (pipeline *Pipeline) emitLog(start time.Time, metadata *logging.AccessLogMe
 		level = sharedlogging.LogLevelWarning
 	}
 	pipeline.deps.AccessLogger.Emit(logging.AccessLogEvent{
-		Timestamp: start,
+		Timestamp: startTime,
 		Level:     level,
 		Service:   pipeline.serviceName,
 		Message:   "gateway request",

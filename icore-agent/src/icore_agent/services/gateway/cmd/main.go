@@ -62,10 +62,33 @@ func main() {
 			Issuer:   cfg.JWTIssuer,
 			Audience: cfg.JWTAudience,
 		}),
-		Limiter: ratelimitinfra.NewRedisLimiter(
+		ClientIPLimiter: ratelimitinfra.NewRedisLimiter(
 			redisClient,
-			cfg.RateLimitWindowLimit,
-			cfg.RateLimitWindow,
+			ratelimitinfra.TokenBucketProfile{
+				Scope:         domain.RateLimitScopeClientIP,
+				RatePerSecond: cfg.ClientIPRateLimit.RatePerSecond,
+				Burst:         cfg.ClientIPRateLimit.Burst,
+			},
+			cfg.RateLimitKeyPrefix,
+			time.Now,
+		),
+		UserIDLimiter: ratelimitinfra.NewRedisLimiter(
+			redisClient,
+			ratelimitinfra.TokenBucketProfile{
+				Scope:         domain.RateLimitScopeUserID,
+				RatePerSecond: cfg.UserIDRateLimit.RatePerSecond,
+				Burst:         cfg.UserIDRateLimit.Burst,
+			},
+			cfg.RateLimitKeyPrefix,
+			time.Now,
+		),
+		ServiceLimiter: ratelimitinfra.NewRedisLimiter(
+			redisClient,
+			ratelimitinfra.TokenBucketProfile{
+				Scope:         domain.RateLimitScopeService,
+				RatePerSecond: cfg.ServiceRateLimitProfile("icore-agent").RatePerSecond,
+				Burst:         cfg.ServiceRateLimitProfile("icore-agent").Burst,
+			},
 			cfg.RateLimitKeyPrefix,
 			time.Now,
 		),

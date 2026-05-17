@@ -32,7 +32,7 @@ type staticLimiter struct {
 	decision domain.RateLimitDecision
 }
 
-func (limiter staticLimiter) Allow(_ context.Context, _ string) (domain.RateLimitDecision, error) {
+func (limiter staticLimiter) GetRateLimitDecision(_ context.Context, _ domain.RateLimitTarget) (domain.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -43,13 +43,15 @@ func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error)
 }
 
 type routerTestConfig struct {
-	backendURL string
-	secret     string
-	logger     *captureAccessLogger
-	limiter    appgateway.RateLimiter
-	transport  http.RoundTripper
-	now        func() time.Time
-	location   *time.Location
+	backendURL      string
+	secret          string
+	logger          *captureAccessLogger
+	clientIPLimiter appgateway.ClientIPLimiter
+	userIDLimiter   appgateway.UserIDLimiter
+	serviceLimiter  appgateway.ServiceLimiter
+	transport       http.RoundTripper
+	now             func() time.Time
+	location        *time.Location
 }
 
 func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
@@ -63,7 +65,11 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	router := newTestRouter(routerTestConfig{
 		logger:    logger,
 		transport: transport,
-		limiter: staticLimiter{decision: domain.RateLimitDecision{
+		clientIPLimiter: staticLimiter{decision: domain.RateLimitDecision{
+			Allowed: true,
+			Result:  "allowed",
+		}},
+		serviceLimiter: staticLimiter{decision: domain.RateLimitDecision{
 			Allowed: true,
 			Result:  "allowed",
 		}},
@@ -118,7 +124,7 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	if metadata.FinalStatusCode != http.StatusAccepted {
 		t.Fatalf("unexpected final status %d", metadata.FinalStatusCode)
 	}
-	if metadata.RateLimitResult != "allowed" {
+	if metadata.RateLimitResult != "client_ip:allowed,user_id:skipped,service:allowed" {
 		t.Fatalf("unexpected rate limit result %q", metadata.RateLimitResult)
 	}
 }
@@ -233,7 +239,11 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 	router := newTestRouter(routerTestConfig{
 		logger:    logger,
 		transport: transport,
-		limiter: staticLimiter{decision: domain.RateLimitDecision{
+		clientIPLimiter: staticLimiter{decision: domain.RateLimitDecision{
+			Allowed: true,
+			Result:  "allowed",
+		}},
+		serviceLimiter: staticLimiter{decision: domain.RateLimitDecision{
 			Allowed:      false,
 			Result:       "rejected",
 			RejectReason: "service rate limit exceeded",
@@ -251,7 +261,7 @@ func TestGatewayRateLimitRejectsBeforeProxy(t *testing.T) {
 		t.Fatal("rate limited request should not reach upstream")
 	}
 	metadata := logger.events[0].Metadata
-	if metadata.RateLimitResult != "rejected" {
+	if metadata.RateLimitResult != "client_ip:allowed,user_id:skipped,service:rejected" {
 		t.Fatalf("unexpected rate limit result %q", metadata.RateLimitResult)
 	}
 }
@@ -291,9 +301,11 @@ func newTestRouter(config routerTestConfig) http.Handler {
 			Issuer:   "icore-agent",
 			Audience: "icore-gateway",
 		}),
-		Limiter:      config.limiter,
-		Proxy:        proxyinfra.NewReverseProxy(backendURL, config.transport),
-		AccessLogger: logger,
+		ClientIPLimiter: config.clientIPLimiter,
+		UserIDLimiter:   config.userIDLimiter,
+		ServiceLimiter:  config.serviceLimiter,
+		Proxy:           proxyinfra.NewReverseProxy(backendURL, config.transport),
+		AccessLogger:    logger,
 	})
 	return NewRouter(NewHandler(pipeline))
 }

@@ -33,3 +33,32 @@ func TestLoadReadsAccessLogQueueSize(t *testing.T) {
 		t.Fatalf("AccessLogQueueSize = %d, want 128", cfg.AccessLogQueueSize)
 	}
 }
+
+// TestLoadReadsGatewayRateLimitProfiles verifies token bucket profiles come from env.
+func TestLoadReadsGatewayRateLimitProfiles(t *testing.T) {
+	t.Setenv("GATEWAY_CLIENT_IP_RATE", "21")
+	t.Setenv("GATEWAY_CLIENT_IP_BURST", "42")
+	t.Setenv("GATEWAY_USER_ID_RATE", "11")
+	t.Setenv("GATEWAY_USER_ID_BURST", "22")
+	t.Setenv("ICORE_AGENT_RATE", "7")
+	t.Setenv("ICORE_AGENT_BURST", "14")
+
+	cfg := Load()
+
+	if cfg.ClientIPRateLimit != (RateLimitProfile{RatePerSecond: 21, Burst: 42}) {
+		t.Fatalf("ClientIPRateLimit = %#v", cfg.ClientIPRateLimit)
+	}
+	if cfg.UserIDRateLimit != (RateLimitProfile{RatePerSecond: 11, Burst: 22}) {
+		t.Fatalf("UserIDRateLimit = %#v", cfg.UserIDRateLimit)
+	}
+	if cfg.ServiceRateLimitProfile("icore-agent") != (RateLimitProfile{RatePerSecond: 7, Burst: 14}) {
+		t.Fatalf("service profile = %#v", cfg.ServiceRateLimitProfile("icore-agent"))
+	}
+}
+
+// TestServiceRateLimitEnvPrefixNormalizesServiceNames documents service env naming.
+func TestServiceRateLimitEnvPrefixNormalizesServiceNames(t *testing.T) {
+	if got := ServiceRateLimitEnvPrefix("icore-agent"); got != "ICORE_AGENT" {
+		t.Fatalf("prefix = %q, want ICORE_AGENT", got)
+	}
+}

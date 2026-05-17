@@ -255,6 +255,36 @@ def test_gateway_ddd_layers_keep_http_policy_and_infrastructure_split():
     assert (lib_logging_dir / "app_logger.go").is_file()
 
 
+def test_gateway_rate_limit_env_uses_token_bucket_profiles():
+    """Keep gateway env examples and compose on token bucket rate/burst knobs."""
+    gateway_env = (AGENT_ROOT / "dotenv" /
+                   ".env.gateway.example").read_text(encoding="utf-8")
+    gateway_compose = (
+        AGENT_ROOT / "infrastructure" / "docker" /
+        "compose" / "gateway.yml"
+    ).read_text(encoding="utf-8")
+
+    required = {
+        "GATEWAY_RATE_LIMIT_KEY_PREFIX",
+        "GATEWAY_CLIENT_IP_RATE",
+        "GATEWAY_CLIENT_IP_BURST",
+        "GATEWAY_USER_ID_RATE",
+        "GATEWAY_USER_ID_BURST",
+        "ICORE_AGENT_RATE",
+        "ICORE_AGENT_BURST",
+    }
+    forbidden = {
+        "GATEWAY_RATE_LIMIT_WINDOW",
+        "GATEWAY_RATE_LIMIT_WINDOW_LIMIT",
+    }
+    for name in required:
+        assert name in gateway_env
+        assert name in gateway_compose
+    for name in forbidden:
+        assert name not in gateway_env
+        assert name not in gateway_compose
+
+
 def test_dockerfile_keeps_dependency_layer_before_source_copy():
     dockerfile = (AGENT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 

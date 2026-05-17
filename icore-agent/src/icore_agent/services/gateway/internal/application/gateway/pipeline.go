@@ -19,7 +19,22 @@ type Authenticator interface {
 
 // RateLimiter decides whether a request may enter an upstream service.
 type RateLimiter interface {
-	Allow(context.Context, string) (domain.RateLimitDecision, error)
+	GetRateLimitDecision(context.Context, domain.RateLimitTarget) (domain.RateLimitDecision, error)
+}
+
+// ClientIPLimiter decides whether a client IP may continue through the gateway.
+type ClientIPLimiter interface {
+	GetRateLimitDecision(context.Context, domain.RateLimitTarget) (domain.RateLimitDecision, error)
+}
+
+// UserIDLimiter decides whether an authenticated user may continue through the gateway.
+type UserIDLimiter interface {
+	GetRateLimitDecision(context.Context, domain.RateLimitTarget) (domain.RateLimitDecision, error)
+}
+
+// ServiceLimiter decides whether a request may enter an upstream service.
+type ServiceLimiter interface {
+	GetRateLimitDecision(context.Context, domain.RateLimitTarget) (domain.RateLimitDecision, error)
 }
 
 // UpstreamProxy forwards a request to the selected upstream service.
@@ -50,10 +65,12 @@ type PipelineConfig struct {
 
 // PipelineDependencies are side-effecting collaborators used by Pipeline.
 type PipelineDependencies struct {
-	Authenticator Authenticator
-	Limiter       RateLimiter
-	Proxy         UpstreamProxy
-	AccessLogger  AccessLogger
+	Authenticator   Authenticator
+	ClientIPLimiter ClientIPLimiter
+	UserIDLimiter   UserIDLimiter
+	ServiceLimiter  ServiceLimiter
+	Proxy           UpstreamProxy
+	AccessLogger    AccessLogger
 }
 
 // Pipeline orchestrates request-id, route policy, auth, rate limit, proxy, and access log.
@@ -65,7 +82,9 @@ type Pipeline struct {
 	location        *time.Location
 	now             func() time.Time
 	authenticator   Authenticator
-	limiter         RateLimiter
+	clientIPLimiter ClientIPLimiter
+	userIDLimiter   UserIDLimiter
+	serviceLimiter  ServiceLimiter
 	proxy           UpstreamProxy
 	accessLogger    AccessLogger
 }
@@ -92,7 +111,9 @@ func NewPipeline(config PipelineConfig, deps PipelineDependencies) *Pipeline {
 		location:        location,
 		now:             now,
 		authenticator:   deps.Authenticator,
-		limiter:         deps.Limiter,
+		clientIPLimiter: deps.ClientIPLimiter,
+		userIDLimiter:   deps.UserIDLimiter,
+		serviceLimiter:  deps.ServiceLimiter,
 		proxy:           deps.Proxy,
 		accessLogger:    deps.AccessLogger,
 	}
@@ -114,18 +135,43 @@ func (pipeline *Pipeline) HandleProxy(recorder ResponseRecorder, r *http.Request
 	route := pipeline.routePolicy.Resolve(r.URL.Path)
 	metadata, start := pipeline.beginRequest(recorder, r, route)
 	defer pipeline.emitLog(start, metadata, recorder)
+	rateResults := newRateLimitResults()
 
-	identity, ok := pipeline.authenticate(r, metadata, route)
-	if !ok {
-		writeJSON(recorder, http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
-		return
-	}
-	pipeline.identityPolicy.Apply(r.Header, identity)
-
-	if !pipeline.allowRequest(r.Context(), metadata, route) {
+	if !pipeline.allowByLimiter(r.Context(), metadata, rateResults, pipeline.clientIPLimiter, domain.RateLimitTarget{
+		Scope: domain.RateLimitScopeClientIP,
+		Key:   metadata.ClientIP,
+	}) {
 		writeJSON(recorder, http.StatusTooManyRequests, map[string]string{"message": "rate limit exceeded"})
 		return
 	}
+	identity, ok := pipeline.authenticate(r, metadata, route)
+	if !ok {
+		rateResults.Skip(domain.RateLimitScopeUserID)
+		rateResults.Skip(domain.RateLimitScopeService)
+		metadata.RateLimitResult = rateResults.String()
+		writeJSON(recorder, http.StatusUnauthorized, map[string]string{"message": "unauthorized"})
+		return
+	}
+	if identity != nil {
+		if !pipeline.allowByLimiter(r.Context(), metadata, rateResults, pipeline.userIDLimiter, domain.RateLimitTarget{
+			Scope: domain.RateLimitScopeUserID,
+			Key:   identity.UserID,
+		}) {
+			writeJSON(recorder, http.StatusTooManyRequests, map[string]string{"message": "rate limit exceeded"})
+			return
+		}
+	} else {
+		rateResults.Skip(domain.RateLimitScopeUserID)
+		metadata.RateLimitResult = rateResults.String()
+	}
+	if !pipeline.allowByLimiter(r.Context(), metadata, rateResults, pipeline.serviceLimiter, domain.RateLimitTarget{
+		Scope: domain.RateLimitScopeService,
+		Key:   route.UpstreamService,
+	}) {
+		writeJSON(recorder, http.StatusTooManyRequests, map[string]string{"message": "rate limit exceeded"})
+		return
+	}
+	pipeline.identityPolicy.Apply(r.Header, identity)
 
 	if pipeline.proxy != nil {
 		pipeline.proxy.ServeHTTP(recorder, r)
@@ -198,31 +244,77 @@ func (pipeline *Pipeline) authenticate(r *http.Request, metadata *domain.AccessL
 	return &identity, true
 }
 
-func (pipeline *Pipeline) allowRequest(ctx context.Context, metadata *domain.AccessLogMetadata, route Route) bool {
-	if route.UpstreamService == "" || pipeline.limiter == nil {
-		metadata.RateLimitResult = "skipped"
+func (pipeline *Pipeline) allowByLimiter(
+	ctx context.Context,
+	metadata *domain.AccessLogMetadata,
+	results *rateLimitResults,
+	limiter RateLimiter,
+	target domain.RateLimitTarget,
+) bool {
+	if target.Key == "" || limiter == nil {
+		results.Skip(target.Scope)
+		metadata.RateLimitResult = results.String()
 		return true
 	}
-	decision, err := pipeline.limiter.Allow(ctx, route.UpstreamService)
+	decision, err := limiter.GetRateLimitDecision(ctx, target)
 	if err != nil {
-		metadata.RateLimitResult = "error"
+		results.Set(target.Scope, "error")
+		metadata.RateLimitResult = results.String()
 		errorType := "rate_limit_error"
 		metadata.ErrorType = &errorType
 		return true
 	}
-	metadata.RateLimitResult = decision.Result
-	if decision.Result == "" {
-		metadata.RateLimitResult = "allowed"
+	result := decision.Result
+	if result == "" {
+		result = "allowed"
 	}
+	results.Set(target.Scope, result)
+	metadata.RateLimitResult = results.String()
 	if decision.Allowed {
 		return true
 	}
 	reason := decision.RejectReason
 	if reason == "" {
-		reason = "service rate limit exceeded"
+		reason = string(target.Scope) + " rate limit exceeded"
 	}
 	metadata.RejectReason = &reason
 	return false
+}
+
+type rateLimitResults struct {
+	values map[domain.RateLimitScope]string
+}
+
+func newRateLimitResults() *rateLimitResults {
+	return &rateLimitResults{values: map[domain.RateLimitScope]string{}}
+}
+
+func (results *rateLimitResults) Set(scope domain.RateLimitScope, result string) {
+	if scope == "" {
+		return
+	}
+	results.values[scope] = result
+}
+
+func (results *rateLimitResults) Skip(scope domain.RateLimitScope) {
+	results.Set(scope, "skipped")
+}
+
+func (results *rateLimitResults) String() string {
+	parts := make([]string, 0, 3)
+	for _, scope := range []domain.RateLimitScope{
+		domain.RateLimitScopeClientIP,
+		domain.RateLimitScopeUserID,
+		domain.RateLimitScopeService,
+	} {
+		if value, ok := results.values[scope]; ok {
+			parts = append(parts, string(scope)+":"+value)
+		}
+	}
+	if len(parts) == 0 {
+		return "skipped"
+	}
+	return strings.Join(parts, ",")
 }
 
 func (pipeline *Pipeline) emitLog(start time.Time, metadata *domain.AccessLogMetadata, recorder ResponseRecorder) {

@@ -24,7 +24,7 @@ type fakeLimiter struct {
 	decision domain.RateLimitDecision
 }
 
-func (limiter fakeLimiter) Allow(_ context.Context, _ string) (domain.RateLimitDecision, error) {
+func (limiter fakeLimiter) GetRateLimitDecision(_ context.Context, _ domain.RateLimitTarget) (domain.RateLimitDecision, error) {
 	return limiter.decision, nil
 }
 
@@ -192,9 +192,9 @@ func newTestPipeline(auth Authenticator, limiter RateLimiter, proxy UpstreamProx
 			return time.Date(2026, 5, 16, 15, 22, 0, 0, time.FixedZone("CST", 8*3600))
 		},
 	}, PipelineDependencies{
-		Authenticator: auth,
-		Limiter:       limiter,
-		Proxy:         proxy,
-		AccessLogger:  logger,
+		Authenticator:  auth,
+		ServiceLimiter: limiter,
+		Proxy:          proxy,
+		AccessLogger:   logger,
 	})
 }

@@ -6,11 +6,11 @@ Strands @tool wrapper around httpx.
 from __future__ import annotations
 
 import json
-import structlog
+from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 _TIMEOUT = 30  # seconds
 _MAX_BODY_CHARS = 6_000
@@ -43,7 +43,8 @@ def http_request(
         if body is not None:
             if isinstance(body, dict):
                 kwargs["json"] = body
-                kwargs["headers"].setdefault("Content-Type", "application/json")
+                kwargs["headers"].setdefault(
+                    "Content-Type", "application/json")
             else:
                 kwargs["content"] = body.encode()
 
@@ -54,7 +55,8 @@ def http_request(
         content_type = resp.headers.get("content-type", "")
         try:
             if "json" in content_type:
-                body_str = json.dumps(resp.json(), ensure_ascii=False, indent=2)
+                body_str = json.dumps(
+                    resp.json(), ensure_ascii=False, indent=2)
             else:
                 body_str = resp.text
         except Exception:

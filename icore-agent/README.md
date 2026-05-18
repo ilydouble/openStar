@@ -81,4 +81,4 @@ ruff format .
 
 ## API 文档
 
-本地直接运行默认访问 http://localhost:8080/docs；通过 `./compose.sh` 启动时默认访问 http://localhost:10001/docs。
+本地直接运行后端默认访问 http://localhost:11001/docs；通过 `./compose.sh` 启动时默认从网关访问 http://localhost:11000/docs。

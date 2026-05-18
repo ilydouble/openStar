@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from types import SimpleNamespace
 from unittest.mock import patch
 

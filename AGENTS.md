@@ -23,6 +23,7 @@ This repository should be developed with clear domain boundaries and verified ch
 - Do not bundle unrelated workspace changes into the same commit.
 - Every code change must include or update focused tests.
 - 每次代码改动都要进行测试，并在测试通过后再交付。
+- use icore-agent/.venv/bin/autopep8 to format all changes
 - Run the relevant test slice before broad verification.
 - Before handing off or committing, run the full applicable test suite and ensure it passes.
 - Commit only after tests pass. Keep git commits scoped to the completed change.

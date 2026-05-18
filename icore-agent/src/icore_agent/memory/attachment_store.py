@@ -14,17 +14,17 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-import structlog
+from icore_agent.lib.logging.app_logger import get_logger
 import redis.asyncio as aioredis
 from typing import Any
 
 from ..application.knowledge.text import chunk_text
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 INLINE_PER_DOC = 40_000    # chars — docs larger than this go straight to RAG
-INLINE_TOTAL   = 120_000   # chars — total inline budget across all session docs
+INLINE_TOTAL = 120_000   # chars — total inline budget across all session docs
 
 
 def _inspect_data_file(
@@ -115,12 +115,15 @@ class AttachmentStore:
         text = att.get("text", "")
         if not text:
             return
-        chunks = chunk_text(text, settings.rag_chunk_size, settings.rag_chunk_overlap)
+        chunks = chunk_text(text, settings.rag_chunk_size,
+                            settings.rag_chunk_overlap)
         metadatas = [
-            {"filename": att["filename"], "chunk_index": i, "source": att["filename"]}
+            {"filename": att["filename"], "chunk_index": i,
+                "source": att["filename"]}
             for i in range(len(chunks))
         ]
-        add_documents(chunks=chunks, metadatas=metadatas, tenant_code=session_id)
+        add_documents(chunks=chunks, metadatas=metadatas,
+                      tenant_code=session_id)
         log.info("attachment_migrated_to_rag", session_id=session_id,
                  filename=att["filename"], chunks=len(chunks))
 
@@ -190,16 +193,19 @@ class AttachmentStore:
         for a in removed:
             if a.get("mode") == "image" and a.get("ref"):
                 try:
-                    (Path(settings.image_save_dir) / a["ref"]).unlink(missing_ok=True)
+                    (Path(settings.image_save_dir) /
+                     a["ref"]).unlink(missing_ok=True)
                 except Exception as exc:
-                    log.warning("image_file_unlink_failed", ref=a["ref"], error=str(exc))
+                    log.warning("image_file_unlink_failed",
+                                ref=a["ref"], error=str(exc))
             elif a.get("mode") == "data" and a.get("ref"):
                 try:
                     (Path(settings.sequential_workspace).resolve() / a["ref"]).unlink(
                         missing_ok=True
                     )
                 except Exception as exc:
-                    log.warning("data_file_unlink_failed", ref=a["ref"], error=str(exc))
+                    log.warning("data_file_unlink_failed",
+                                ref=a["ref"], error=str(exc))
         await self._save(session_id, new_data)
         return True
 
@@ -271,9 +277,11 @@ class AttachmentStore:
         dest.write_bytes(payload)
 
         rel_path = f"data/{session_id}/{filename}"
-        ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        ext = "." + \
+            filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
-        preview_md, columns_info, row_count, preview_error = _inspect_data_file(dest, ext)
+        preview_md, columns_info, row_count, preview_error = _inspect_data_file(
+            dest, ext)
 
         record: dict[str, Any] = {
             "filename": filename,
@@ -284,7 +292,7 @@ class AttachmentStore:
             "row_count": row_count,         # may be None if unknown
             "columns": columns_info,        # list of {name, dtype}
             "preview_md": preview_md,       # markdown table of head(N)
-            "preview_error": preview_error, # non-empty if parsing failed
+            "preview_error": preview_error,  # non-empty if parsing failed
             "uploaded_at": time.time(),
         }
         items = await self._load(session_id)
@@ -326,16 +334,19 @@ class AttachmentStore:
                     f.unlink(missing_ok=True)
                 session_dir.rmdir()
         except Exception as exc:
-            log.warning("image_dir_cleanup_failed", session_id=session_id, error=str(exc))
+            log.warning("image_dir_cleanup_failed",
+                        session_id=session_id, error=str(exc))
         # Best-effort cleanup of data files on disk.
         try:
-            data_dir = Path(settings.sequential_workspace).resolve() / "data" / session_id
+            data_dir = Path(
+                settings.sequential_workspace).resolve() / "data" / session_id
             if data_dir.exists():
                 for f in data_dir.iterdir():
                     f.unlink(missing_ok=True)
                 data_dir.rmdir()
         except Exception as exc:
-            log.warning("data_dir_cleanup_failed", session_id=session_id, error=str(exc))
+            log.warning("data_dir_cleanup_failed",
+                        session_id=session_id, error=str(exc))
 
 
 # App-level singleton

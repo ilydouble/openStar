@@ -7,25 +7,31 @@ from .config.dotenv import load_domain_dotenvs
 
 load_domain_dotenvs()
 
-import litellm
-import structlog
-import uvicorn
 from contextlib import asynccontextmanager
+
+import litellm
+import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings
-from .control_plane import current_runtime_user
-from .api.routers import agent as agent_router
+from .api.dependencies import usage_service
 from .api.routers import account as account_router
+from .api.routers import agent as agent_router
 from .api.routers import health as health_router
 from .api.routers import knowledge as knowledge_router
 from .api.routers import payment as payment_router
 from .api.routers.account import get_current_user
-from .api.middleware.auth import AuthMiddleware
-from .api.dependencies import usage_service
+from .config import settings
+from .control_plane import current_runtime_user
+from .lib.http.middleware import (
+    AuthMiddleware,
+    BackendRequestLoggingMiddleware,
+    RequestIdMiddleware,
+)
+from .lib.logging.app_logger import get_logger
 
-log = structlog.get_logger()
+
+log = get_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────
@@ -102,10 +108,15 @@ def create_app() -> FastAPI:
     if settings.auth_enabled:
         app.add_middleware(AuthMiddleware)
 
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(BackendRequestLoggingMiddleware)
+
     # ── Routers ───────────────────────────────────────────
     app.include_router(health_router.router, tags=["health"])
-    app.include_router(account_router.router, prefix="/api/v1/account", tags=["account"])
-    app.include_router(agent_router.router, prefix="/api/v1/agent", tags=["agent"])
+    app.include_router(account_router.router,
+                       prefix="/api/v1/account", tags=["account"])
+    app.include_router(agent_router.router,
+                       prefix="/api/v1/agent", tags=["agent"])
     app.include_router(
         knowledge_router.router,
         prefix="/api/v1/knowledge",

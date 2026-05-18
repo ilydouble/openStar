@@ -2,6 +2,7 @@ from .app import AppSettings
 from .auth import AuthSettings, auth_settings
 from .database import DatabaseSettings, database_settings
 from .llm import LLMSettings, llm_settings
+from .logging import LoggingSettings, logging_settings
 from .media import MediaSettings, media_settings
 from .memory import MemorySettings, memory_settings
 from .rag import RagSettings, rag_settings
@@ -13,6 +14,7 @@ __all__ = [
     "AppSettings",
     "AuthSettings",
     "DatabaseSettings",
+    "LoggingSettings",
     "LLMSettings",
     "MediaSettings",
     "MemorySettings",
@@ -23,6 +25,7 @@ __all__ = [
     "app_settings",
     "auth_settings",
     "database_settings",
+    "logging_settings",
     "llm_settings",
     "media_settings",
     "memory_settings",

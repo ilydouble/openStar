@@ -15,11 +15,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import structlog
+from icore_agent.lib.logging.app_logger import get_logger
 
-from ...config import settings
-
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 # Truncate very long outputs to keep token costs sane
 _MAX_OUTPUT_CHARS = 8_000
@@ -87,7 +85,8 @@ class DockerEnvironment(BaseEnvironment):
             f"docker exec --workdir {self.working_dir} "
             f"{self.container_name} bash -c {repr(cmd)}"
         )
-        log.debug("docker_env_execute", cmd=cmd[:200], container=self.container_name)
+        log.debug("docker_env_execute",
+                  cmd=cmd[:200], container=self.container_name)
         try:
             result = subprocess.run(
                 docker_cmd,

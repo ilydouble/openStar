@@ -92,7 +92,7 @@ const { t } = useI18n()
 创建 `.env` 文件（开发环境）或 `.env.production`（生产环境）：
 
 ```bash
-VITE_API_PROXY_TARGET=http://localhost:10001
+VITE_API_PROXY_TARGET=http://localhost:11000
 ```
 
 ## 开发建议

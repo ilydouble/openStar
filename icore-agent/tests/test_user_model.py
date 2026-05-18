@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from icore_agent.database.models import Base
 from icore_agent.users.models import User
 
 
 def test_user_model_declares_users_table():
-    table = User.__table__
+    table = cast(Any, User.__table__)
 
     assert table.name == "users"
     assert table is Base.metadata.tables["users"]

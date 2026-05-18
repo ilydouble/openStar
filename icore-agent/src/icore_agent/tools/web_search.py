@@ -10,13 +10,13 @@ Exposed as a Strands @tool for use by the orchestrator and sub-agents.
 
 from __future__ import annotations
 
-import structlog
+from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
 
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 _TAVILY_URL = "https://api.tavily.com/search"
 _DDG_URL = "https://api.duckduckgo.com/"
@@ -68,7 +68,8 @@ def _zhipu_search(query: str, max_results: int) -> list[dict]:
         "search_intent": False,         # False = 跳过意图识别，直接搜索（必填）
         "count": max_results,
     }
-    resp = httpx.post(_ZHIPU_SEARCH_URL, json=payload, headers=headers, timeout=20)
+    resp = httpx.post(_ZHIPU_SEARCH_URL, json=payload,
+                      headers=headers, timeout=20)
     resp.raise_for_status()
     data = resp.json()
     formatted = []
@@ -125,7 +126,8 @@ def web_search(query: str, max_results: int = 5) -> str:
             log.info("web_search_backend", backend="tavily")
             results = _tavily_search(query, max_results)
         except Exception as exc:
-            log.warning("web_search_tavily_failed", error=str(exc), fallback="next")
+            log.warning("web_search_tavily_failed",
+                        error=str(exc), fallback="next")
             last_error = exc
 
     # ── 2. Zhipu Search ────────────────────────────────────────────────────
@@ -135,7 +137,8 @@ def web_search(query: str, max_results: int = 5) -> str:
                      engine=settings.zhipu_search_engine)
             results = _zhipu_search(query, max_results)
         except Exception as exc:
-            log.warning("web_search_zhipu_failed", error=str(exc), fallback="duckduckgo")
+            log.warning("web_search_zhipu_failed",
+                        error=str(exc), fallback="duckduckgo")
             last_error = exc
 
     # ── 3. DuckDuckGo fallback ─────────────────────────────────────────────

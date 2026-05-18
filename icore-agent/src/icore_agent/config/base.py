@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _DOMAINS = (
     "app",
     "database",
+    "logging",
     "llm",
     "sequential",
     "memory",

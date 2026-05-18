@@ -14,6 +14,12 @@ class FakeIdentityRepository:
         self.calls.append(("get_user_by_token", (token,), {}))
         return self.user_by_token.get(token)
 
+    def get_user_by_id(self, user_id: str) -> dict | None:
+        self.calls.append(("get_user_by_id", (user_id,), {}))
+        if user_id == "u1":
+            return {"id": "u1", "email": "trial@example.com", "roles": ["owner"]}
+        return None
+
     def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
         self.calls.append(("send_verification_code", (email, client_ip), {}))
         return True, f"sent:{email}:{client_ip}"
@@ -109,7 +115,8 @@ class FakeBillingSummaryRepository:
         return {"user_id": user_id, "plan": "free"}
 
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict:
-        self.calls.append(("update_byok", (user_id, api_key, api_base, model), {}))
+        self.calls.append(
+            ("update_byok", (user_id, api_key, api_base, model), {}))
         return {"enabled": True, "model": model}
 
 
@@ -139,7 +146,8 @@ class FakeTeamRepository:
         return {"organization": {"id": "org-1"}}
 
     def rename_organization(self, user_id: str, organization_name: str) -> dict:
-        self.calls.append(("rename_organization", (user_id, organization_name), {}))
+        self.calls.append(
+            ("rename_organization", (user_id, organization_name), {}))
         return {"organization": {"name": organization_name}}
 
     def add_team_member(self, user_id: str, **payload) -> dict:
@@ -173,7 +181,7 @@ def test_account_service_registers_trial_after_validation():
         client_ip="127.0.0.1",
     )
 
-    assert token == "tok"
+    assert token.count(".") == 2
     assert user["email"] == "trial@example.com"
     assert [call[0] for call in verification.calls] == ["verify_code"]
     assert [call[0] for call in identity.calls] == ["get_user_by_email"]
@@ -181,6 +189,11 @@ def test_account_service_registers_trial_after_validation():
         "check_ip_registration_limit",
         "register_trial",
     ]
+
+    resolved = service.get_current_user(f"Bearer {token}")
+
+    assert resolved["id"] == "u1"
+    assert resolved["roles"] == ["owner"]
 
 
 def test_account_service_rejects_missing_bearer_token():
@@ -220,4 +233,5 @@ def test_account_service_uses_usage_repository_for_quota_checks():
     service.consume_quota("u1", "messages")
 
     assert (allowed, reason) == (True, None)
-    assert [call[0] for call in usage.calls] == ["check_quota", "consume_quota"]
+    assert [call[0] for call in usage.calls] == [
+        "check_quota", "consume_quota"]

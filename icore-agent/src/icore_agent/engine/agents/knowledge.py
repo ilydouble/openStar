@@ -15,10 +15,11 @@ no separate summarise tool is needed.
 
 from __future__ import annotations
 
-import re
 import json
+import re
 from typing import Any
-import structlog
+
+from icore_agent.lib.logging.app_logger import get_logger
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
@@ -27,7 +28,7 @@ from ...config import settings
 from ...memory.chroma_store import search as _chroma_search_raw
 from ..callback_ctx import sub_agent_callback
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 _SYSTEM_PROMPT = """
 You are an internal knowledge specialist with access to the company's
@@ -63,12 +64,15 @@ def rerank_results(query: str, passages_json: str) -> str:
         The same passages re-ordered from most to least relevant, as JSON.
     """
     try:
-        passages: list[str] = json.loads(passages_json)
+        loaded_passages: object = json.loads(passages_json)
     except json.JSONDecodeError:
         return "[ERROR] passages_json must be a valid JSON array of strings."
 
-    if not isinstance(passages, list):
-        return "[ERROR] Expected a JSON array."
+    if not isinstance(loaded_passages, list) or not all(
+        isinstance(passage, str) for passage in loaded_passages
+    ):
+        return "[ERROR] Expected a JSON array of strings."
+    passages = loaded_passages
 
     # Keyword overlap score (token-level Jaccard-like)
     query_tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
@@ -123,7 +127,8 @@ def _create_knowledge_agent(tenant_code: str = "") -> Agent:
                 query=query, tenant_code=tenant_code, top_k=top_k, filters=filters
             )
         except Exception as exc:
-            log.warning("chroma_search_failed", error=str(exc), query=query[:80])
+            log.warning("chroma_search_failed",
+                        error=str(exc), query=query[:80])
             return f"[Knowledge base search failed: {exc}]"
 
         if not results:

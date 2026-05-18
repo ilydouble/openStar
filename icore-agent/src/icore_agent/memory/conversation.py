@@ -17,15 +17,15 @@ from earlier in the conversation.
 from __future__ import annotations
 
 import json
-import structlog
-import redis.asyncio as aioredis
-from typing import Any
+from typing import Any, cast
 
 import litellm
+import redis.asyncio as aioredis
+from icore_agent.lib.logging.app_logger import get_logger
 
 from ..config import settings
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 _Message = dict[str, Any]
 
@@ -71,7 +71,8 @@ class ConversationMemory:
                 return {"summary": "", "messages": data}
             return data
         except json.JSONDecodeError:
-            log.warning("conversation_memory_decode_error", session_id=session_id)
+            log.warning("conversation_memory_decode_error",
+                        session_id=session_id)
             return {"summary": "", "messages": []}
 
     async def _save(self, session_id: str, data: dict[str, Any]) -> None:
@@ -93,7 +94,7 @@ class ConversationMemory:
             else f"Conversation turns:\n{turns}"
         )
         try:
-            resp = await litellm.acompletion(
+            resp = cast(Any, await litellm.acompletion(
                 model=settings.model_id,
                 messages=[
                     {"role": "system", "content": _SUMMARY_SYSTEM},
@@ -102,8 +103,8 @@ class ConversationMemory:
                 max_tokens=512,
                 temperature=0.1,
                 **settings.litellm_kwargs(model_id=settings.model_id),
-            )
-            summary = resp.choices[0].message.content.strip()
+            ))
+            summary = (resp.choices[0].message.content or "").strip()
             log.info("conversation_summary_updated", chars=len(summary))
             return summary
         except Exception as exc:

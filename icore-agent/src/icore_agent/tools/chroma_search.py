@@ -7,12 +7,12 @@ results itself, avoiding an extra LLM round-trip from a sub-agent.
 
 from __future__ import annotations
 
-import structlog
+from icore_agent.lib.logging.app_logger import get_logger
 from strands import tool
 
 from ..memory.chroma_store import search as chroma_search_raw
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 
 @tool
@@ -38,7 +38,8 @@ def chroma_search(query: str, tenant_code: str = "", top_k: int = 5) -> str:
         no relevant chunks are found.
     """
     try:
-        results = chroma_search_raw(query=query, tenant_code=tenant_code, top_k=top_k)
+        results = chroma_search_raw(
+            query=query, tenant_code=tenant_code, top_k=top_k)
     except Exception as exc:
         log.warning("chroma_search_failed", error=str(exc), query=query[:80])
         return f"[Knowledge base search failed: {exc}]"

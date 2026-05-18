@@ -11,7 +11,8 @@ def test_alembic_scaffold_is_in_backend_root():
     assert (AGENT_ROOT / "alembic" / "env.py").is_file()
     versions = AGENT_ROOT / "alembic" / "versions"
     assert versions.is_dir()
-    assert any(path.name.startswith("0001") and "users" in path.name for path in versions.iterdir())
+    assert any(path.name.startswith("0001")
+               and "users" in path.name for path in versions.iterdir())
 
 
 def test_root_agents_md_documents_repo_workflow():
@@ -35,6 +36,13 @@ def test_dotenv_files_are_split_by_domain():
         "rag",
         "tools",
         "media",
+        "minio",
+        "kafka",
+        "storage",
+        "logging",
+        "clickhouse",
+        "gateway",
+        "build",
     }
     for domain in domains:
         assert (dotenv_dir / f".env.{domain}").is_file()
@@ -48,23 +56,264 @@ def test_gitignore_ignores_real_domain_envs_but_allows_examples():
 
 
 def test_compose_wrapper_loads_split_env_files():
-    wrapper = AGENT_ROOT / "compose.sh"
+    root_wrapper = (AGENT_ROOT / "compose.sh").read_text(encoding="utf-8")
+    assert 'exec "$SCRIPT_DIR/scripts/compose.sh" "$@"' in root_wrapper
+
+    wrapper = AGENT_ROOT / "scripts" / "compose.sh"
     text = wrapper.read_text(encoding="utf-8")
     assert "docker compose" in text
-    for domain in ("app", "database", "llm", "sequential", "memory", "auth", "rag", "tools", "media"):
-        assert f"--env-file dotenv/.env.{domain}" in text
+    for domain in (
+        "app",
+        "build",
+        "database",
+        "memory",
+        "minio",
+        "kafka",
+        "storage",
+        "logging",
+        "clickhouse",
+        "gateway",
+        "llm",
+        "sequential",
+        "auth",
+        "rag",
+        "tools",
+        "media",
+    ):
+        assert f'dotenv/.env.{domain}"' in text
+
+    for compose_file in (
+        "base.yml",
+        "postgres.yml",
+        "redis.yml",
+        "minio.yml",
+        "kafka.yml",
+        "storage-service.yml",
+        "logging-service.yml",
+        "click-house.yml",
+        "backend.yml",
+        "gateway.yml",
+    ):
+        assert f"infrastructure/docker/compose/{compose_file}" in text
+
+
+def test_app_env_documents_build_proxy_overrides():
+    build_example = (AGENT_ROOT / "dotenv" / ".env.build.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "BUILD_HTTP_PROXY=" in build_example
+    assert "BUILD_GOPROXY=https://goproxy.cn,direct" in build_example
+
+
+def test_compose_files_are_split_under_infrastructure():
+    compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
+    expected = {
+        "base.yml",
+        "backend.yml",
+        "postgres.yml",
+        "redis.yml",
+        "minio.yml",
+        "kafka.yml",
+        "storage-service.yml",
+        "logging-service.yml",
+        "click-house.yml",
+        "gateway.yml",
+    }
+
+    assert compose_dir.is_dir()
+    assert expected <= {path.name for path in compose_dir.iterdir()}
+    assert not (AGENT_ROOT / "docker-compose.yml").exists()
+
+
+def test_infrastructure_compose_base_declares_shared_resources():
+    base = (
+        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "base.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "name: icore-agent" in base
+    assert "icore-net:" in base
+    assert "icore_db:" in base
+    assert "redis-data:" in base
+    assert "minio-data:" in base
+    assert "kafka-data:" in base
+    assert "logging-service-data:" in base
+    assert "clickhouse-data:" in base
+
+
+def test_clickhouse_logging_infra_is_declared():
+    compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
+    clickhouse = (compose_dir / "click-house.yml").read_text(encoding="utf-8")
+    clickhouse_example = (AGENT_ROOT / "dotenv" / ".env.clickhouse.example").read_text(
+        encoding="utf-8"
+    )
+    logging_example = (AGENT_ROOT / "dotenv" / ".env.logging.example").read_text(
+        encoding="utf-8"
+    )
+    migrations_dir = AGENT_ROOT / "infrastructure" / "clickhouse" / "migrations"
+
+    assert "clickhouse/clickhouse-server" in clickhouse
+    assert "clickhouse-migrate:" in clickhouse
+    assert "clickhouse-writer:" in clickhouse
+    assert "CLICKHOUSE_DATABASE=icore_logging_db" in clickhouse_example
+    assert "CLICKHOUSE_WRITER_GROUP_ID=logging-clickhouse-writer" in clickhouse_example
+    assert "kafka_invalid_temp_events.jsonl" in logging_example
+    assert "kafka_invalid_temp_error_audit_events.jsonl" in logging_example
+    assert (
+        AGENT_ROOT / "infrastructure" / "clickhouse" / "bootstrap.sh"
+    ).is_file()
+    assert (migrations_dir / "000001_create_icore_logs.up.sql").is_file()
+    assert (migrations_dir / "000001_create_icore_logs.down.sql").is_file()
 
 
 def test_postgres_port_mapping_uses_split_database_ports():
-    compose = (AGENT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    compose = (
+        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "postgres.yml"
+    ).read_text(encoding="utf-8")
     database_example = (AGENT_ROOT / "dotenv" / ".env.database.example").read_text(
         encoding="utf-8"
     )
 
-    assert "${DB_HOST_PORT:-5432}:${DB_INTERNAL_PORT:-5432}" in compose
+    assert (
+        "${DB_HOST_BIND:-127.0.0.1}:${DB_HOST_PORT:-15432}:${DB_INTERNAL_PORT:-5432}"
+        in compose
+    )
     assert "DB_INTERNAL_PORT=5432" in database_example
-    assert "DB_HOST_PORT=5432" in database_example
+    assert "DB_HOST_BIND=127.0.0.1" in database_example
+    assert "DB_HOST_PORT=15432" in database_example
     assert "DB_PORT=" not in database_example
+
+
+def test_object_and_logging_infra_have_init_services():
+    compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
+    minio = (compose_dir / "minio.yml").read_text(encoding="utf-8")
+    kafka = (compose_dir / "kafka.yml").read_text(encoding="utf-8")
+
+    assert "minio-init:" in minio
+    assert "mc mb --ignore-existing local/icore-agent-images" in minio
+    assert "mc mb --ignore-existing local/icore-agent-attachments" in minio
+
+    assert "kafka-init:" in kafka
+    assert "--if-not-exists" in kafka
+    assert 'topic "$$LOGGING_KAFKA_TOPIC"' in kafka
+
+
+def test_go_microservice_dockerfiles_use_buildkit_caches():
+    services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
+
+    for service_name in ("storage-service", "logging-service"):
+        dockerfile = (services_dir / service_name / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+
+        assert "--mount=type=cache,target=/go/pkg/mod" in dockerfile
+        assert "--mount=type=cache,target=/root/.cache/go-build" in dockerfile
+
+
+def test_go_modules_use_icore_names():
+    services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
+    stale_markers = (
+        "xiehe-services-lib-go",
+        "xiehe-gateway",
+        "xiehe-logging-service",
+        "xiehe-storage-service",
+    )
+    scanned_paths = [
+        path
+        for pattern in ("*.go", "go.mod", "go.work")
+        for path in services_dir.rglob(pattern)
+    ]
+    stale_paths = [
+        str(path.relative_to(services_dir))
+        for path in scanned_paths
+        if any(marker in path.read_text(encoding="utf-8") for marker in stale_markers)
+    ]
+
+    lib_go_mod = (services_dir / "lib-go" /
+                  "go.mod").read_text(encoding="utf-8")
+    assert "module icore-services-lib-go" in lib_go_mod
+    assert stale_paths == []
+
+
+def test_gateway_ddd_layers_keep_http_policy_and_infrastructure_split():
+    """Verify gateway HTTP adapters stay thin and DDD layer boundaries remain explicit."""
+    services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
+    gateway_internal = services_dir / "gateway" / "internal"
+    domain_dir = gateway_internal / "domain"
+    application_dir = gateway_internal / "application"
+    interfaces_dir = gateway_internal / "interfaces" / "http"
+    infrastructure_dir = gateway_internal / "infrastructure"
+    lib_logging_dir = services_dir / "lib-go" / "logging"
+
+    assert (domain_dir / "identity" / "identity.go").is_file()
+    assert (domain_dir / "auth" / "auth_decision.go").is_file()
+    assert (domain_dir / "rate_limit" / "rate_limit_decision.go").is_file()
+    assert (domain_dir / "logging" / "access_log.go").is_file()
+    assert (domain_dir / "request_id" / "request_id.go").is_file()
+
+    assert (application_dir / "pipeline" / "pipeline.go").is_file()
+    assert (application_dir / "route_policy" / "route_policy.go").is_file()
+    assert (application_dir / "identity_policy" /
+            "identity_policy.go").is_file()
+
+    assert (interfaces_dir / "router.go").is_file()
+    assert (interfaces_dir / "router_test.go").is_file()
+    assert (interfaces_dir / "handler.go").is_file()
+    assert (interfaces_dir / "response_status_recorder.go").is_file()
+
+    assert (infrastructure_dir / "jwt" / "authenticator.go").is_file()
+    assert (infrastructure_dir / "rate_limiter" /
+            "redis_limiter.go").is_file()
+    assert (infrastructure_dir / "logging" /
+            "gateway_access_logger.go").is_file()
+    assert (infrastructure_dir / "proxy" / "reverse_proxy.go").is_file()
+
+    old_gateway_dir = gateway_internal / "gateway"
+    assert not list(old_gateway_dir.rglob("*.go"))
+
+    handler_text = (interfaces_dir / "handler.go").read_text(
+        encoding="utf-8")
+    for forbidden in (
+        "Authenticate(",
+        "RateLimit",
+        "ReverseProxy",
+        "httputil",
+        "LoggingServiceClient",
+    ):
+        assert forbidden not in handler_text
+
+    assert (lib_logging_dir / "logging_service_client.go").is_file()
+    assert (lib_logging_dir / "app_logger.go").is_file()
+
+
+def test_gateway_rate_limit_env_uses_token_bucket_profiles():
+    """Keep gateway env examples and compose on token bucket rate/burst knobs."""
+    gateway_env = (AGENT_ROOT / "dotenv" /
+                   ".env.gateway.example").read_text(encoding="utf-8")
+    gateway_compose = (
+        AGENT_ROOT / "infrastructure" / "docker" /
+        "compose" / "gateway.yml"
+    ).read_text(encoding="utf-8")
+
+    required = {
+        "GATEWAY_RATE_LIMIT_KEY_PREFIX",
+        "GATEWAY_CLIENT_IP_RATE",
+        "GATEWAY_CLIENT_IP_BURST",
+        "GATEWAY_USER_ID_RATE",
+        "GATEWAY_USER_ID_BURST",
+        "ICORE_AGENT_RATE",
+        "ICORE_AGENT_BURST",
+    }
+    forbidden = {
+        "GATEWAY_RATE_LIMIT_WINDOW",
+        "GATEWAY_RATE_LIMIT_WINDOW_LIMIT",
+    }
+    for name in required:
+        assert name in gateway_env
+        assert name in gateway_compose
+    for name in forbidden:
+        assert name not in gateway_env
+        assert name not in gateway_compose
 
 
 def test_dockerfile_keeps_dependency_layer_before_source_copy():
@@ -80,6 +329,56 @@ def test_dockerfile_keeps_dependency_layer_before_source_copy():
     assert "COPY --from=builder /install/deps /usr/local" in dockerfile
     assert "COPY --from=builder /install/app /usr/local" in dockerfile
     assert "--no-deps dist/*.whl" in dockerfile
+
+
+def test_copied_logging_client_does_not_reference_old_project_packages():
+    client = (AGENT_ROOT / "src" / "icore_agent" / "lib" /
+              "logging" / "logging_service_client.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from lib.logging" not in client
+    assert "app.core.system.request_context" not in client
+    assert "medical_backend" not in client
+
+
+def test_logging_facade_uses_clear_layered_names():
+    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging"
+
+    assert (logging_dir / "logging_service_client.py").exists()
+    assert (logging_dir / "app_logger.py").exists()
+    assert not (logging_dir / "logger.py").exists()
+    assert not (logging_dir / "service_logger.py").exists()
+
+
+def test_fastapi_app_installs_request_id_middleware():
+    main = (AGENT_ROOT / "src" / "icore_agent" /
+            "main.py").read_text(encoding="utf-8")
+
+    assert "RequestIdMiddleware" in main
+    assert "app.add_middleware(RequestIdMiddleware)" in main
+    assert "BackendRequestLoggingMiddleware" in main
+    assert "app.add_middleware(BackendRequestLoggingMiddleware)" in main
+
+
+def test_backend_no_longer_depends_on_legacy_structured_logger():
+    """Verify backend logs go through the internal logging-service facade."""
+    pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    requirements = (
+        AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    legacy_package = "struct" + "log"
+
+    assert legacy_package not in pyproject
+    assert legacy_package not in requirements
+
+
+def test_email_validator_dependency_is_declared_for_emailstr_models():
+    pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    requirements = (
+        AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert '"email-validator' in pyproject
+    assert "email-validator==" in requirements
 
 
 def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():

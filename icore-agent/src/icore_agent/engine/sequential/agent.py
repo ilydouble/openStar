@@ -10,16 +10,16 @@ Design principles (mirroring mini-SWE-agent v2):
 from __future__ import annotations
 
 import re
-import structlog
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
+from icore_agent.lib.logging.app_logger import get_logger
 from litellm import completion
 
 from ...config import settings
-from .environment import LocalEnvironment, BaseEnvironment
+from .environment import BaseEnvironment, LocalEnvironment
 
-log = structlog.get_logger()
+log = get_logger(__name__)
 
 _SYSTEM_PROMPT = """
 You are a sequential task executor. You solve tasks by running bash commands one at a time.
@@ -51,9 +51,12 @@ class SequentialResult:
 class SequentialAgent:
     """mini-SWE-agent style sequential executor."""
 
-    model: str = field(default_factory=lambda: settings.effective_sequential_model)
-    max_steps: int = field(default_factory=lambda: settings.sequential_max_steps)
-    timeout: int = field(default_factory=lambda: settings.sequential_timeout_per_step)
+    model: str = field(
+        default_factory=lambda: settings.effective_sequential_model)
+    max_steps: int = field(
+        default_factory=lambda: settings.sequential_max_steps)
+    timeout: int = field(
+        default_factory=lambda: settings.sequential_timeout_per_step)
     environment: BaseEnvironment = field(default_factory=LocalEnvironment)
 
     def run(self, task: str) -> SequentialResult:
@@ -69,11 +72,12 @@ class SequentialAgent:
             model_kwargs = settings.litellm_kwargs(model_id=self.model)
             model_kwargs["model"] = self.model
             model_kwargs["messages"] = messages
-            resp = completion(**model_kwargs)
+            resp = cast(Any, completion(**model_kwargs))
             content: str = resp.choices[0].message.content or ""
             messages.append({"role": "assistant", "content": content})
 
-            log.debug("sequential_agent_step", step=step, content_preview=content[:200])
+            log.debug("sequential_agent_step", step=step,
+                      content_preview=content[:200])
 
             # ── Terminal conditions ────────────────────────
             done = _DONE_PATTERN.match(content.strip())
@@ -93,7 +97,8 @@ class SequentialAgent:
 
             cmd = cmd_match.group(1).strip()
             cmd_output = self.environment.execute(cmd, timeout=self.timeout)
-            messages.append({"role": "user", "content": f"Output:\n{cmd_output}"})
+            messages.append(
+                {"role": "user", "content": f"Output:\n{cmd_output}"})
 
         log.warning("sequential_agent_timeout", max_steps=self.max_steps)
         return SequentialResult(

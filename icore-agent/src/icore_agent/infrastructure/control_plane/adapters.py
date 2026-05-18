@@ -4,19 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...control_plane.store import ControlPlaneStore
-
 
 class ControlPlaneIdentityRepository:
     """Adapter exposing only identity and token lookup operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create an identity repository adapter bound to one control-plane store."""
         self._store = store
 
     def get_user_by_token(self, token: str) -> dict[str, Any] | None:
         """Load a user by bearer token."""
         return self._store.get_user_by_token(token)
+
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        """Load a user by stable user id."""
+        return self._store.get_user_by_id(user_id)
 
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         """Load a user by email address."""
@@ -30,7 +32,7 @@ class ControlPlaneIdentityRepository:
 class ControlPlaneVerificationRepository:
     """Adapter exposing verification delivery and validation operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a verification repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -46,7 +48,7 @@ class ControlPlaneVerificationRepository:
 class ControlPlaneRegistrationRepository:
     """Adapter exposing registration-specific persistence operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a registration repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -62,7 +64,7 @@ class ControlPlaneRegistrationRepository:
 class ControlPlaneLeadRepository:
     """Adapter exposing lead capture operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a lead repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -74,7 +76,7 @@ class ControlPlaneLeadRepository:
 class ControlPlaneTeamRepository:
     """Adapter exposing organization and team management operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a team repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -98,7 +100,7 @@ class ControlPlaneTeamRepository:
 class ControlPlaneProjectRepository:
     """Adapter exposing project and session metadata operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a project repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -114,7 +116,7 @@ class ControlPlaneProjectRepository:
 class ControlPlaneBillingSummaryRepository:
     """Adapter exposing plan summary and BYOK operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a billing summary repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -130,7 +132,7 @@ class ControlPlaneBillingSummaryRepository:
 class ControlPlaneBillingRepository:
     """Adapter exposing billing-related store operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a billing repository adapter bound to one control-plane store."""
         self._store = store
 
@@ -142,7 +144,7 @@ class ControlPlaneBillingRepository:
 class ControlPlaneUsageRepository:
     """Adapter exposing usage, quota, and admin reporting operations."""
 
-    def __init__(self, store: ControlPlaneStore) -> None:
+    def __init__(self, store: Any) -> None:
         """Create a usage repository adapter bound to one control-plane store."""
         self._store = store
 

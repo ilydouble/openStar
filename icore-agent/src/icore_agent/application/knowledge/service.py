@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any
 
 from .parsers import parse_file
 from .text import chunk_text
-
-
-class CollectionLike(Protocol):
-    """Minimal Chroma-like collection protocol used by delete flow tests and runtime."""
-
-    def get(self, **kwargs: Any) -> dict[str, Any]: ...
-    def delete(self, ids: list[str]) -> None: ...
 
 
 class KnowledgeService:
@@ -23,7 +17,7 @@ class KnowledgeService:
         *,
         add_documents: Callable[..., int],
         list_documents: Callable[..., list[dict[str, Any]]],
-        get_collection: Callable[..., CollectionLike],
+        get_collection: Callable[..., Any],
         rag_chunk_size: int,
         rag_chunk_overlap: int,
         file_size_limit_mb: int,
@@ -54,7 +48,8 @@ class KnowledgeService:
         """Reject documents that exceed the configured upload size budget."""
         max_bytes = self._file_size_limit_mb * 1024 * 1024
         if len(data) > max_bytes:
-            raise ValueError(f"File exceeds {self._file_size_limit_mb} MB limit")
+            raise ValueError(
+                f"File exceeds {self._file_size_limit_mb} MB limit")
 
     def chunk_document(self, text: str) -> list[str]:
         """Chunk plain text according to the configured RAG settings."""
@@ -84,7 +79,8 @@ class KnowledgeService:
     def delete_document(self, *, filename: str, tenant_code: str) -> int:
         """Delete all indexed chunks belonging to one uploaded document."""
         collection = self._get_collection(tenant_code=tenant_code)
-        results = collection.get(where={"filename": filename}, include=["metadatas"])
+        results = collection.get(
+            where={"filename": filename}, include=["metadatas"])
         ids = results.get("ids") or []
         if not ids:
             raise LookupError(f"Document '{filename}' not found")

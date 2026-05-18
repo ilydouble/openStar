@@ -19,6 +19,7 @@ type Config struct {
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
 	FlushInterval     time.Duration
+	ReplayInterval    time.Duration
 	QueueSize         int
 	MaxBatchSize      int
 	KafkaBrokers      []string
@@ -41,12 +42,13 @@ func Load() Config {
 		IdleTimeout:       envconfig.Duration("LOGGING_SERVICE_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:   envconfig.Duration("LOGGING_SERVICE_SHUTDOWN_TIMEOUT", 10*time.Second),
 		FlushInterval:     time.Duration(envconfig.Int("LOGGING_BATCH_FLUSH_MS", 500)) * time.Millisecond,
+		ReplayInterval:    envconfig.Duration("LOGGING_KAFKA_REPLAY_INTERVAL", 5*time.Second),
 		QueueSize:         envconfig.Int("LOGGING_QUEUE_SIZE", 4096),
 		MaxBatchSize:      envconfig.Int("LOGGING_MAX_BATCH_SIZE", 512),
 		KafkaBrokers:      envconfig.CSV("LOGGING_KAFKA_BROKERS", "kafka:9092"),
 		KafkaTopic:        envconfig.String("LOGGING_KAFKA_TOPIC", "logging.events.v1"),
-		SpoolFile:         envconfig.String("LOGGING_SPOOL_FILE", dataDir+"/spool/events.jsonl"),
-		ErrorAuditFile:    envconfig.String("LOGGING_ERROR_AUDIT_FILE", dataDir+"/archive/error_audit.jsonl"),
+		SpoolFile:         envconfig.String("LOGGING_SPOOL_FILE", dataDir+"/spool/kafka_invalid_temp_events.jsonl"),
+		ErrorAuditFile:    envconfig.String("LOGGING_ERROR_AUDIT_FILE", dataDir+"/archive/kafka_invalid_temp_error_audit_events.jsonl"),
 	}
 }
 

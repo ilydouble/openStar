@@ -73,6 +73,9 @@ func TestLoggingServiceClientEmitsEventToLoggingService(t *testing.T) {
 	if capturedPayload.Event.TraceID != "req-1" {
 		t.Fatalf("trace id = %q, want req-1", capturedPayload.Event.TraceID)
 	}
+	if capturedPayload.Event.EventID == "" {
+		t.Fatal("event_id was not assigned before delivery")
+	}
 }
 
 func TestLoggingServiceClientDrainsQueuedEventsOnClose(t *testing.T) {

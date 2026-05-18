@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,6 +70,9 @@ func NewLoggingServiceClient(config LoggingServiceClientConfig) *LoggingServiceC
 
 // Emit enqueues one event for asynchronous logging-service delivery.
 func (client *LoggingServiceClient) Emit(_ context.Context, event LogEvent) error {
+	if event.EventID == "" {
+		event.EventID = newEventID()
+	}
 	client.mu.RLock()
 	defer client.mu.RUnlock()
 	if client.closed {
@@ -81,6 +85,23 @@ func (client *LoggingServiceClient) Emit(_ context.Context, event LogEvent) erro
 		log.Printf("logging-service client queue is full; dropping trace_id=%s", event.TraceID)
 	}
 	return nil
+}
+
+func newEventID() string {
+	var bytes [16]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return fmt.Sprintf("event-%d", time.Now().UnixNano())
+	}
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	return fmt.Sprintf(
+		"%08x-%04x-%04x-%04x-%012x",
+		bytes[0:4],
+		bytes[4:6],
+		bytes[6:8],
+		bytes[8:10],
+		bytes[10:16],
+	)
 }
 
 // Close stops accepting events and waits for queued events to drain.

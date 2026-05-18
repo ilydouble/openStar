@@ -33,6 +33,7 @@ var validLevels = map[LogLevel]struct{}{
 
 // LogEvent is the canonical event record accepted from backend services.
 type LogEvent struct {
+	EventID   string         `json:"event_id"`
 	Timestamp time.Time      `json:"timestamp"`
 	Level     LogLevel       `json:"level"`
 	Service   string         `json:"service"`
@@ -51,6 +52,9 @@ func (level LogLevel) Validate() error {
 
 // ValidateEvent verifies the fields required before an event enters the batch pipeline.
 func ValidateEvent(event LogEvent) error {
+	if strings.TrimSpace(event.EventID) == "" {
+		return errors.New("event_id is required")
+	}
 	if event.Timestamp.IsZero() {
 		return errors.New("timestamp is required")
 	}

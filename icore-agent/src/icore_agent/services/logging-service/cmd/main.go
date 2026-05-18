@@ -44,7 +44,10 @@ func main() {
 		}
 	}()
 
-	service := applogging.NewService(
+	fallbackStore := filesink.NewKafkaFallbackStore(cfg.SpoolFile, cfg.ErrorAuditFile)
+	fallbackStore.StartReplay(ctx, publisher, cfg.ReplayInterval)
+
+	service := applogging.NewServiceWithFallback(
 		applogging.Config{
 			FlushInterval: cfg.FlushInterval,
 			QueueSize:     cfg.QueueSize,
@@ -52,12 +55,13 @@ func main() {
 		},
 		[]applogging.BatchSink{
 			&console.Sink{Writer: os.Stdout, Color: cfg.ConsoleColor},
-			filesink.New(cfg.SpoolFile, filesink.AllEvents),
-			filesink.New(cfg.ErrorAuditFile, filesink.ErrorAndAuditOnly),
 		},
+		fallbackStore,
 		publisher,
 	)
-	service.Start(ctx)
+	serviceCtx, stopService := context.WithCancel(context.Background())
+	defer stopService()
+	service.Start(serviceCtx)
 
 	handler := httpapi.NewHandler(service, cfg.ServiceToken)
 	server := httpserver.New(cfg.HTTPServerConfig(), httpapi.NewRouter(handler))
@@ -69,6 +73,10 @@ func main() {
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("logging-service shutdown failed: %v", err)
 		}
+		if err := service.Shutdown(shutdownCtx); err != nil {
+			log.Printf("logging-service drain failed: %v", err)
+		}
+		stopService()
 	}()
 
 	log.Printf("logging-service listening on %s", cfg.Addr)

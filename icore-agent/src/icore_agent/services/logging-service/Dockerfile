@@ -30,6 +30,9 @@ WORKDIR /src/logging-service
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -o /out/logging-service ./cmd
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/clickhouse-writer ./cmd/clickhouse-writer
 
 FROM alpine:3.20
 ARG HTTP_PROXY
@@ -45,6 +48,7 @@ RUN apk add --no-cache su-exec \
     && chown -R appuser:appuser /var/lib/logging-service
 COPY logging-service/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=builder /out/logging-service /usr/local/bin/logging-service
+COPY --from=builder /out/clickhouse-writer /usr/local/bin/clickhouse-writer
 EXPOSE 8091
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["logging-service"]

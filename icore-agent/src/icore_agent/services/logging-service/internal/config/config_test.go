@@ -27,6 +27,17 @@ func TestLoadReadsKafkaBrokersAndTopic(t *testing.T) {
 	}
 }
 
+func TestLoadUsesKafkaInvalidTempFileDefaults(t *testing.T) {
+	cfg := Load()
+
+	if cfg.SpoolFile != "/var/lib/logging-service/spool/kafka_invalid_temp_events.jsonl" {
+		t.Fatalf("unexpected spool file: %q", cfg.SpoolFile)
+	}
+	if cfg.ErrorAuditFile != "/var/lib/logging-service/archive/kafka_invalid_temp_error_audit_events.jsonl" {
+		t.Fatalf("unexpected error audit file: %q", cfg.ErrorAuditFile)
+	}
+}
+
 func TestLoadReadsHTTPTimeouts(t *testing.T) {
 	t.Setenv("LOGGING_SERVICE_READ_HEADER_TIMEOUT", "2s")
 	t.Setenv("LOGGING_SERVICE_READ_TIMEOUT", "7s")

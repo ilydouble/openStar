@@ -8,6 +8,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from typing import Any, cast
+from uuid import uuid4
 
 import httpx
 
@@ -62,6 +63,7 @@ class LoggingServiceClient:
 
         resolved_trace_id = trace_id if trace_id is not None else get_request_id() or ""
         event = LogEvent(
+            event_id=str(uuid4()),
             timestamp=timestamp or datetime.now(UTC),
             level=level,
             service=service,

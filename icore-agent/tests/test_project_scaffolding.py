@@ -40,6 +40,7 @@ def test_dotenv_files_are_split_by_domain():
         "kafka",
         "storage",
         "logging",
+        "clickhouse",
         "gateway",
         "build",
     }
@@ -70,6 +71,7 @@ def test_compose_wrapper_loads_split_env_files():
         "kafka",
         "storage",
         "logging",
+        "clickhouse",
         "gateway",
         "llm",
         "sequential",
@@ -88,6 +90,7 @@ def test_compose_wrapper_loads_split_env_files():
         "kafka.yml",
         "storage-service.yml",
         "logging-service.yml",
+        "click-house.yml",
         "backend.yml",
         "gateway.yml",
     ):
@@ -114,6 +117,7 @@ def test_compose_files_are_split_under_infrastructure():
         "kafka.yml",
         "storage-service.yml",
         "logging-service.yml",
+        "click-house.yml",
         "gateway.yml",
     }
 
@@ -134,6 +138,30 @@ def test_infrastructure_compose_base_declares_shared_resources():
     assert "minio-data:" in base
     assert "kafka-data:" in base
     assert "logging-service-data:" in base
+    assert "clickhouse-data:" in base
+
+
+def test_clickhouse_logging_infra_is_declared():
+    compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
+    clickhouse = (compose_dir / "click-house.yml").read_text(encoding="utf-8")
+    clickhouse_example = (AGENT_ROOT / "dotenv" / ".env.clickhouse.example").read_text(
+        encoding="utf-8"
+    )
+    logging_example = (AGENT_ROOT / "dotenv" / ".env.logging.example").read_text(
+        encoding="utf-8"
+    )
+    migrations_dir = PROJECT_ROOT / "infra" / "clickhouse" / "migrations"
+
+    assert "clickhouse/clickhouse-server" in clickhouse
+    assert "clickhouse-migrate:" in clickhouse
+    assert "clickhouse-writer:" in clickhouse
+    assert "CLICKHOUSE_DATABASE=icore_logging_db" in clickhouse_example
+    assert "CLICKHOUSE_WRITER_GROUP_ID=logging-clickhouse-writer" in clickhouse_example
+    assert "kafka_invalid_temp_events.jsonl" in logging_example
+    assert "kafka_invalid_temp_error_audit_events.jsonl" in logging_example
+    assert (PROJECT_ROOT / "infra" / "clickhouse" / "bootstrap.sh").is_file()
+    assert (migrations_dir / "000001_create_icore_logs.up.sql").is_file()
+    assert (migrations_dir / "000001_create_icore_logs.down.sql").is_file()
 
 
 def test_postgres_port_mapping_uses_split_database_ports():
@@ -209,32 +237,33 @@ def test_gateway_ddd_layers_keep_http_policy_and_infrastructure_split():
     """Verify gateway HTTP adapters stay thin and DDD layer boundaries remain explicit."""
     services_dir = AGENT_ROOT / "src" / "icore_agent" / "services"
     gateway_internal = services_dir / "gateway" / "internal"
-    domain_dir = gateway_internal / "domain" / "gateway"
-    application_dir = gateway_internal / "application" / "gateway"
+    domain_dir = gateway_internal / "domain"
+    application_dir = gateway_internal / "application"
     interfaces_dir = gateway_internal / "interfaces" / "http"
     infrastructure_dir = gateway_internal / "infrastructure"
     lib_logging_dir = services_dir / "lib-go" / "logging"
 
-    assert (domain_dir / "identity.go").is_file()
-    assert (domain_dir / "auth_decision.go").is_file()
-    assert (domain_dir / "rate_limit_decision.go").is_file()
-    assert (domain_dir / "access_log.go").is_file()
-    assert (domain_dir / "request_id.go").is_file()
+    assert (domain_dir / "identity" / "identity.go").is_file()
+    assert (domain_dir / "auth" / "auth_decision.go").is_file()
+    assert (domain_dir / "rate_limit" / "rate_limit_decision.go").is_file()
+    assert (domain_dir / "logging" / "access_log.go").is_file()
+    assert (domain_dir / "request_id" / "request_id.go").is_file()
 
-    assert (application_dir / "pipeline.go").is_file()
-    assert (application_dir / "route_policy.go").is_file()
-    assert (application_dir / "identity_policy.go").is_file()
+    assert (application_dir / "pipeline" / "pipeline.go").is_file()
+    assert (application_dir / "route_policy" / "route_policy.go").is_file()
+    assert (application_dir / "identity_policy" /
+            "identity_policy.go").is_file()
 
     assert (interfaces_dir / "router.go").is_file()
     assert (interfaces_dir / "router_test.go").is_file()
     assert (interfaces_dir / "handler.go").is_file()
-    assert (interfaces_dir / "response_recorder.go").is_file()
+    assert (interfaces_dir / "response_status_recorder.go").is_file()
 
     assert (infrastructure_dir / "jwt" / "authenticator.go").is_file()
-    assert (infrastructure_dir / "redisratelimit" /
+    assert (infrastructure_dir / "rate_limiter" /
             "redis_limiter.go").is_file()
     assert (infrastructure_dir / "logging" /
-            "async_access_logger.go").is_file()
+            "gateway_access_logger.go").is_file()
     assert (infrastructure_dir / "proxy" / "reverse_proxy.go").is_file()
 
     old_gateway_dir = gateway_internal / "gateway"

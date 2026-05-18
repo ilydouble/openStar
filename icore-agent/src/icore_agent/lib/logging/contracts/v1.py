@@ -23,6 +23,7 @@ class LogLevel(StrEnum):
 class LogEvent(BaseModel):
     """LogEvent is the JSON payload shared by backend and logging-service."""
 
+    event_id: str
     timestamp: datetime
     level: LogLevel
     service: str

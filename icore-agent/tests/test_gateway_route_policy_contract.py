@@ -17,7 +17,7 @@ def test_gateway_and_backend_public_route_policies_do_not_drift():
         / "gateway"
         / "internal"
         / "application"
-        / "gateway"
+        / "route_policy"
         / "route_policy.go"
     ).read_text(encoding="utf-8")
     python_policy = (

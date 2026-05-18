@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
 from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
@@ -88,3 +89,17 @@ def test_logging_client_allows_empty_trace_id_outside_http_request():
     )
 
     assert client.events[0].trace_id == ""
+
+
+def test_logging_client_assigns_event_id_to_each_event():
+    """Verify every event has a stable id before it leaves the backend process."""
+    client = CapturingLoggingClient()
+
+    client.emit_event(
+        LogLevel.INFO,
+        message="background task",
+        service="icore-agent",
+        timestamp=datetime(2026, 5, 14, tzinfo=UTC),
+    )
+
+    assert UUID(client.events[0].event_id)

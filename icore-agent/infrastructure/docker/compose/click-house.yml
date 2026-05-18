@@ -1,0 +1,95 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_TAG:-24.8}
+    container_name: icore-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-icore_logging_db}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-icore_logging}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev-clickhouse-password}
+    expose:
+      - '8123'
+      - '9000'
+    ports:
+      - '${CLICKHOUSE_HOST_BIND:-127.0.0.1}:${CLICKHOUSE_HOST_HTTP_PORT:-18123}:8123'
+      - '${CLICKHOUSE_HOST_BIND:-127.0.0.1}:${CLICKHOUSE_HOST_NATIVE_PORT:-19000}:9000'
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - icore-net
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'clickhouse-client --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD" --query "SELECT 1"',
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  clickhouse-migrate:
+    build:
+      context: ../../../../infra/clickhouse
+      dockerfile: Dockerfile.migrate
+    image: icore-clickhouse-migrate:dev
+    container_name: icore-clickhouse-migrate
+    restart: 'no'
+    environment:
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-icore_logging_db}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-icore_logging}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev-clickhouse-password}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - icore-net
+
+  clickhouse-writer:
+    build:
+      context: ../../../src/icore_agent/services
+      dockerfile: logging-service/Dockerfile
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        GOPROXY: ${BUILD_GOPROXY:-https://proxy.golang.org,direct}
+        GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
+        GONOPROXY: ${BUILD_GONOPROXY:-}
+        GONOSUMDB: ${BUILD_GONOSUMDB:-}
+    image: icore-logging-service:dev
+    container_name: icore-clickhouse-writer
+    restart: unless-stopped
+    command: ['clickhouse-writer']
+    environment:
+      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-kafka:9092}
+      LOGGING_KAFKA_TOPIC: ${LOGGING_KAFKA_TOPIC:-logging.events.v1}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HTTP_PORT:-8123}
+      CLICKHOUSE_HTTP_URL: ${CLICKHOUSE_HTTP_URL:-http://clickhouse:8123}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-icore_logging_db}
+      CLICKHOUSE_LOGS_TABLE: ${CLICKHOUSE_LOGS_TABLE:-icore_logs}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-icore_logging}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev-clickhouse-password}
+      CLICKHOUSE_WRITER_GROUP_ID: ${CLICKHOUSE_WRITER_GROUP_ID:-logging-clickhouse-writer}
+      CLICKHOUSE_WRITER_BATCH_SIZE: ${CLICKHOUSE_WRITER_BATCH_SIZE:-500}
+      CLICKHOUSE_WRITER_FLUSH_INTERVAL: ${CLICKHOUSE_WRITER_FLUSH_INTERVAL:-1s}
+      CLICKHOUSE_WRITER_HTTP_TIMEOUT: ${CLICKHOUSE_WRITER_HTTP_TIMEOUT:-5s}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},kafka,clickhouse,icore-kafka,icore-clickhouse
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},kafka,clickhouse,icore-kafka,icore-clickhouse
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      clickhouse-migrate:
+        condition: service_completed_successfully
+    networks:
+      - icore-net

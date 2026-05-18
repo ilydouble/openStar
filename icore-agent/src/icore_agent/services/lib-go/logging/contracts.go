@@ -20,6 +20,7 @@ const (
 
 // LogEvent is the canonical event record accepted by logging-service.
 type LogEvent struct {
+	EventID   string    `json:"event_id"`
 	Timestamp time.Time `json:"timestamp"`
 	Level     LogLevel  `json:"level"`
 	Service   string    `json:"service"`

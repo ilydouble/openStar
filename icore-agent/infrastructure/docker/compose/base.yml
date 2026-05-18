@@ -17,3 +17,5 @@ volumes:
     driver: local
   logging-service-data:
     driver: local
+  clickhouse-data:
+    driver: local

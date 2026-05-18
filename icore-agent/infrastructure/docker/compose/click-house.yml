@@ -30,7 +30,7 @@ services:
 
   clickhouse-migrate:
     build:
-      context: ../../../../infra/clickhouse
+      context: ../../clickhouse
       dockerfile: Dockerfile.migrate
     image: icore-clickhouse-migrate:dev
     container_name: icore-clickhouse-migrate

@@ -150,7 +150,7 @@ def test_clickhouse_logging_infra_is_declared():
     logging_example = (AGENT_ROOT / "dotenv" / ".env.logging.example").read_text(
         encoding="utf-8"
     )
-    migrations_dir = PROJECT_ROOT / "infra" / "clickhouse" / "migrations"
+    migrations_dir = AGENT_ROOT / "infrastructure" / "clickhouse" / "migrations"
 
     assert "clickhouse/clickhouse-server" in clickhouse
     assert "clickhouse-migrate:" in clickhouse
@@ -159,7 +159,9 @@ def test_clickhouse_logging_infra_is_declared():
     assert "CLICKHOUSE_WRITER_GROUP_ID=logging-clickhouse-writer" in clickhouse_example
     assert "kafka_invalid_temp_events.jsonl" in logging_example
     assert "kafka_invalid_temp_error_audit_events.jsonl" in logging_example
-    assert (PROJECT_ROOT / "infra" / "clickhouse" / "bootstrap.sh").is_file()
+    assert (
+        AGENT_ROOT / "infrastructure" / "clickhouse" / "bootstrap.sh"
+    ).is_file()
     assert (migrations_dir / "000001_create_icore_logs.up.sql").is_file()
     assert (migrations_dir / "000001_create_icore_logs.down.sql").is_file()
 

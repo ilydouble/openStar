@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from ...application.account import AccountService
-from ..dependencies import get_account_service
+from ..dependencies import get_account_service, get_current_user
 
 router = APIRouter()
 
@@ -84,19 +84,6 @@ class LeadCaptureRequest(BaseModel):
     needs_private_deploy: bool = False
     source: str = Field(default="landing", max_length=80)
     intent: str = Field(default="demo", pattern="^(demo|enterprise|upgrade-team|upgrade-enterprise)$")
-
-
-def get_current_user(
-    authorization: str = Header(default=""),
-    service: AccountService = Depends(get_account_service),
-) -> dict:
-    """Resolve the current user through the account application service."""
-    try:
-        return service.get_current_user(authorization)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except LookupError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 @router.post("/send-verification-code", response_model=SendVerificationCodeResponse)

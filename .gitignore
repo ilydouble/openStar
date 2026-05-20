@@ -3,13 +3,44 @@
 # ----------------------
 venv/
 env/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
+.Python
+*.egg-info/
+.eggs/
+*.egg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+pip-wheel-metadata/
+.tox/
+.nox/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+cython_debug/
+instance/
 
 # environment variables
 .env
+.env.local
+.env.*.local
 icore-agent/dotenv/.env.*
 !icore-agent/dotenv/.env.*.example
 
@@ -18,22 +49,70 @@ icore-agent/dotenv/.env.*
 # ----------------------
 node_modules/
 dist/
+dist-ssr/
 build/
+out/
+.nuxt/
+.next/
+.turbo/
+.parcel-cache/
+.vite/
+.cache/
+*.tsbuildinfo
+.npm
+.pnpm-store/
+.pnp.*
+.pnp.js
+.yarn/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
 # logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ----------------------
+# Docker
+# ----------------------
+docker-compose.override.yml
+docker-compose.override.yaml
+.docker/
 
 # ----------------------
 # OS & Editor
 # ----------------------
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
 
 # VS Code / Cursor
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.history/
 
 # ----------------------
 # Sənin əlavə etdiklərin

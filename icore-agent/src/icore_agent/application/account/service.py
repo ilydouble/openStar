@@ -44,10 +44,20 @@ class AccountService:
         self._usage_repository = usage_repository
 
     def get_current_user(self, authorization: str) -> dict[str, Any]:
-        """Resolve the bearer JWT into the current user payload."""
+        """Resolve the bearer token into the current user payload."""
         if not authorization.startswith("Bearer "):
             raise ValueError("Missing Bearer token")
         token = authorization[7:].strip()
+        if not token:
+            raise ValueError("Missing Bearer token")
+
+        user = self._resolve_user_from_token(token)
+        if user is None:
+            raise LookupError("Invalid or expired token")
+        return user
+
+    def _resolve_user_from_token(self, token: str) -> dict[str, Any] | None:
+        """Resolve a JWT or legacy opaque token to a persisted user profile."""
         try:
             claims = verify_access_token(
                 token,
@@ -55,13 +65,10 @@ class AccountService:
                 issuer=settings.jwt_issuer,
                 audience=settings.jwt_audience,
             )
-        except JWTValidationError as exc:
-            raise LookupError("Invalid or expired token") from exc
+        except JWTValidationError:
+            return self._identity_repository.get_user_by_token(token)
 
-        user = self._identity_repository.get_user_by_id(claims["sub"])
-        if user is None:
-            raise LookupError("Invalid or expired token")
-        return user
+        return self._identity_repository.get_user_by_id(claims["sub"])
 
     def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
         """Dispatch a verification code to the given email."""

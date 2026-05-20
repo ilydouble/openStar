@@ -11,30 +11,30 @@ from ..application.usage import UsageService
 from ..config import settings
 from ..control_plane import control_plane_store
 from ..infrastructure.control_plane import (
-    ControlPlaneBillingRepository,
-    ControlPlaneBillingSummaryRepository,
-    ControlPlaneIdentityRepository,
     ControlPlaneLeadRepository,
-    ControlPlaneProjectRepository,
-    ControlPlaneRegistrationRepository,
-    ControlPlaneTeamRepository,
-    ControlPlaneUsageRepository,
     ControlPlaneVerificationRepository,
+)
+from ..infrastructure.users import (
+    PostgresBillingRepository,
+    PostgresBillingSummaryRepository,
+    PostgresIdentityRepository,
+    PostgresProjectRepository,
+    PostgresRegistrationRepository,
+    PostgresTeamRepository,
+    PostgresUsageRepository,
 )
 from ..memory.chroma_store import add_documents, get_collection, list_documents
 
-identity_repository = ControlPlaneIdentityRepository(control_plane_store)
+identity_repository = PostgresIdentityRepository(control_plane_store)
 verification_repository = ControlPlaneVerificationRepository(
     control_plane_store)
-registration_repository = ControlPlaneRegistrationRepository(
-    control_plane_store)
+registration_repository = PostgresRegistrationRepository(control_plane_store)
 lead_repository = ControlPlaneLeadRepository(control_plane_store)
-team_repository = ControlPlaneTeamRepository(control_plane_store)
-project_repository = ControlPlaneProjectRepository(control_plane_store)
-billing_summary_repository = ControlPlaneBillingSummaryRepository(
-    control_plane_store)
-usage_repository = ControlPlaneUsageRepository(control_plane_store)
-billing_repository = ControlPlaneBillingRepository(control_plane_store)
+team_repository = PostgresTeamRepository(control_plane_store, identity_repository)
+project_repository = PostgresProjectRepository(control_plane_store, identity_repository)
+billing_summary_repository = PostgresBillingSummaryRepository(control_plane_store)
+usage_repository = PostgresUsageRepository(control_plane_store)
+billing_repository = PostgresBillingRepository(control_plane_store)
 
 account_service = AccountService(
     identity_repository=identity_repository,

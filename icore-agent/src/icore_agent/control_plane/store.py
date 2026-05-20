@@ -14,6 +14,7 @@ from typing import Any
 
 from ..config import settings
 from ..lib.logging.app_logger import get_logger
+from .constants import DEFAULT_USAGE, PLAN_LIMITS
 
 fallback_log = logging.getLogger(__name__)
 log = get_logger(__name__)
@@ -90,51 +91,8 @@ def _emit_verification_code_event(
         fallback_log.warning("verification_code_log_emit_failed: %s", exc)
 
 
-_DEFAULT_USAGE = {
-    "message_count": 0,
-    "token_count": 0,
-    "image_count": 0,
-    "attachment_count": 0,
-    "quota_period_start": 0,  # Unix timestamp of current quota period start
-}
-
-_PLAN_LIMITS = {
-    "trial": {
-        "message_limit": 0,
-        "token_limit": 0,
-        "image_limit": 0,
-        "attachment_limit": 0,
-        "label": "Trial",
-    },
-    "free": {
-        "message_limit": 5,
-        "token_limit": 3_000,
-        "image_limit": 1,
-        "attachment_limit": 1,
-        "label": "Free",
-    },
-    "team": {
-        "message_limit": 800,
-        "token_limit": 2_000_000,
-        "image_limit": 200,
-        "attachment_limit": 400,
-        "label": "Team",
-    },
-    "enterprise": {
-        "message_limit": 10_000,
-        "token_limit": 20_000_000,
-        "image_limit": 2_000,
-        "attachment_limit": 10_000,
-        "label": "Enterprise",
-    },
-    "byok": {
-        "message_limit": 800,
-        "token_limit": 0,
-        "image_limit": 200,
-        "attachment_limit": 400,
-        "label": "BYOK",
-    },
-}
+_DEFAULT_USAGE = DEFAULT_USAGE
+_PLAN_LIMITS = PLAN_LIMITS
 
 
 class ControlPlaneStore:
@@ -341,214 +299,63 @@ class ControlPlaneStore:
             recent_count = len(ip_regs.get(client_ip, []))
             return recent_count < 1
 
-    def register_trial(self, name: str, email: str, client_ip: str = "unknown") -> tuple[dict[str, Any], str]:
-        now = int(time.time())
+    def issue_legacy_token(self, user_id: str) -> str:
+        """Issue a legacy opaque token mapped to a user public id."""
         with self._lock:
             data = self._load()
-            for user in data["users"].values():
-                if user["email"].lower() == email.lower():
-                    self._ensure_org_for_user(data, user)
-                    user["updated_at"] = now
-                    token = self._issue_token(data, user["id"])
-                    self._save(data)
-                    return user, token
-
-            user_id = str(uuid.uuid4())
-            org_id = f"org_{uuid.uuid4().hex[:12]}"
-            user = {
-                "id": user_id,
-                "name": name.strip(),
-                "email": email.strip().lower(),
-                "plan": "free",
-                "plan_label": _PLAN_LIMITS["free"]["label"],
-                "organization_id": org_id,
-                "organization_name": f"{name.strip() or 'Free'} Team",
-                "roles": ["owner"],
-                "byok": {"enabled": False, "api_key": "", "api_base": "", "model": ""},
-                "usage": dict(_DEFAULT_USAGE),
-                "created_at": now,
-                "updated_at": now,
+            token = f"icore_{secrets.token_urlsafe(24)}"
+            data.setdefault("tokens", {})[token] = {
+                "user_id": user_id,
+                "issued_at": int(time.time()),
             }
-            data["users"][user_id] = user
-            data.setdefault("organizations", {})[org_id] = {
-                "id": org_id,
-                "name": user["organization_name"],
-                "owner_user_id": user_id,
-                "knowledge_scope": "organization",
-                "members": [
-                    {
-                        "user_id": user_id,
-                        "name": user["name"],
-                        "email": user["email"],
-                        "role": "owner",
-                        "status": "active",
-                        "created_at": now,
-                    }
-                ],
-                "created_at": now,
-                "updated_at": now,
-            }
-            token = self._issue_token(data, user_id)
-            data["events"].append(
-                {"type": "trial_registered", "user_id": user_id, "timestamp": now})
-
-            # 记录 IP 注册
-            ip_regs = data.setdefault("ip_registrations", {})
-            ip_regs.setdefault(client_ip, []).append(now)
-
-            self._save(data)
-            return user, token
-
-    def _issue_token(self, data: dict[str, Any], user_id: str) -> str:
-        token = f"icore_{secrets.token_urlsafe(24)}"
-        data["tokens"][token] = {
-            "user_id": user_id, "issued_at": int(time.time())}
-        return token
-
-    def get_user_by_token(self, token: str) -> dict[str, Any] | None:
-        with self._lock:
-            data = self._load()
-            token_record = data["tokens"].get(token)
-            if not token_record:
-                return None
-            user = data["users"].get(token_record["user_id"])
-            if user:
-                self._ensure_org_for_user(data, user)
-                self._save(data)
-            return user
-
-    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
-        """Load a user by stable id and ensure organization metadata exists."""
-        with self._lock:
-            data = self._load()
-            user = data["users"].get(user_id)
-            if user:
-                self._ensure_org_for_user(data, user)
-                self._save(data)
-            return user
-
-    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
-        """根据邮箱查找用户（不存在返回 None）"""
-        with self._lock:
-            data = self._load()
-            for user in data["users"].values():
-                if user["email"].lower() == email.lower():
-                    self._ensure_org_for_user(data, user)
-                    user["updated_at"] = int(time.time())
-                    self._save(data)
-                    return user
-            return None
-
-    def issue_token_for_user(self, user_id: str) -> str:
-        """为指定用户签发新 token（用于登录）"""
-        with self._lock:
-            data = self._load()
-            token = self._issue_token(data, user_id)
             self._save(data)
             return token
 
-    def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
+    def get_user_id_for_token(self, token: str) -> str | None:
+        """Resolve a legacy opaque token to a user public id."""
+        with self._lock:
+            data = self._load()
+            token_record = data.get("tokens", {}).get(token)
+            if not token_record:
+                return None
+            return str(token_record.get("user_id") or "") or None
+
+    def append_event(self, event_type: str, **payload: Any) -> None:
+        """Append one control-plane audit event to the JSON store."""
+        with self._lock:
+            data = self._load()
+            data.setdefault("events", []).append(
+                {"type": event_type, "timestamp": int(time.time()), **payload}
+            )
+            self._save(data)
+
+    def record_ip_registration(self, client_ip: str) -> None:
+        """Record one successful registration for IP throttling."""
         now = int(time.time())
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
-            self._ensure_org_for_user(data, user)
-            user["byok"] = {
-                "enabled": bool(api_key),
-                "api_key": api_key.strip(),
-                "api_base": api_base.strip(),
-                "model": model.strip(),
-            }
-            user["updated_at"] = now
-            data["events"].append(
-                {"type": "byok_updated", "user_id": user_id, "timestamp": now})
+            ip_regs = data.setdefault("ip_registrations", {})
+            ip_regs.setdefault(client_ip, []).append(now)
             self._save(data)
-            return user["byok"]
 
-    def update_user_plan(
-        self,
-        user_id: str,
-        new_plan: str,
-        byok_enabled: bool = False,
-        byok_api_key: str = "",
-        byok_api_base: str = "",
-        byok_model: str = "",
-    ) -> dict[str, Any]:
-        """更新用户套餐（手动升级或降级）"""
+    def create_organization_for_user(self, user: dict[str, Any]) -> None:
+        """Persist organization metadata for a newly registered user."""
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
-            now = int(time.time())
-
-            old_plan = user["plan"]
-            user["plan"] = new_plan
-            user["plan_label"] = _PLAN_LIMITS[new_plan]["label"]
-
-            # 如果切换到 BYOK，更新配置
-            if byok_enabled:
-                user["byok"] = {
-                    "enabled": True,
-                    "api_key": byok_api_key.strip(),
-                    "api_base": byok_api_base.strip(),
-                    "model": byok_model.strip(),
-                }
-
-            user["updated_at"] = now
-            data["events"].append({
-                "type": "plan_updated",
-                "user_id": user_id,
-                "old_plan": old_plan,
-                "new_plan": new_plan,
-                "timestamp": now,
-            })
             self._save(data)
-            return user
 
-    def get_plan_summary(self, user_id: str) -> dict[str, Any]:
+    def ensure_organization_for_user(self, user: dict[str, Any]) -> None:
+        """Ensure organization metadata exists for an existing user profile."""
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
-            limits = _PLAN_LIMITS[user["plan"]]
-            usage = user.get("usage") or dict(_DEFAULT_USAGE)
+            self._save(data)
 
-            # 计算下次重置时间（下月 1 号 00:00 UTC）
-            from datetime import datetime
-            now = datetime.now(UTC)
-            if now.month == 12:
-                next_reset = datetime(now.year + 1, 1, 1,
-                                      0, 0, 0, tzinfo=UTC)
-            else:
-                next_reset = datetime(
-                    now.year, now.month + 1, 1, 0, 0, 0, tzinfo=UTC)
-
-            return {
-                "plan": user["plan"],
-                "label": limits["label"],
-                "limits": {
-                    "messages": limits["message_limit"],
-                    "tokens": limits["token_limit"],
-                    "images": limits["image_limit"],
-                    "attachments": limits["attachment_limit"],
-                },
-                "usage": {
-                    "messages": usage["message_count"],
-                    "tokens": usage["token_count"],
-                    "images": usage["image_count"],
-                    "attachments": usage["attachment_count"],
-                },
-                "quota_period": {
-                    "start": usage.get("quota_period_start", 0),
-                    "next_reset": int(next_reset.timestamp()),
-                },
-                "byok": user.get("byok") or {"enabled": False, "api_key": "", "api_base": "", "model": ""},
-            }
-
-    def get_team_profile(self, user_id: str) -> dict[str, Any]:
+    def get_team_profile_for_user(self, user: dict[str, Any]) -> dict[str, Any]:
+        """Return the organization profile for one user dict."""
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
             org_id = user.get("organization_id", "")
             organization = data.get("organizations", {}).get(org_id) or {
@@ -564,40 +371,40 @@ class ControlPlaneStore:
                     "knowledge_scope": organization.get("knowledge_scope", "organization"),
                 },
                 "members": organization.get("members", []),
-                "current_user_id": user_id,
+                "current_user_id": user["id"],
             }
 
-    def rename_organization(self, user_id: str, organization_name: str) -> dict[str, Any]:
+    def rename_organization_for_user(
+        self,
+        user: dict[str, Any],
+        organization_name: str,
+    ) -> dict[str, Any]:
+        """Rename the organization associated with one user."""
         now = int(time.time())
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
             org_id = user["organization_id"]
             organization = data["organizations"][org_id]
             organization["name"] = organization_name.strip()
             organization["updated_at"] = now
-            for member in organization.get("members", []):
-                if member.get("user_id") == user_id:
-                    break
-            user["organization_name"] = organization["name"]
-            user["updated_at"] = now
             self._save(data)
-            return {
-                "organization": {
-                    "id": organization["id"],
-                    "name": organization["name"],
-                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
-                },
-                "members": organization.get("members", []),
-                "current_user_id": user_id,
-            }
+            return self.get_team_profile_for_user(
+                {**user, "organization_name": organization_name.strip()}
+            )
 
-    def add_team_member(self, user_id: str, *, name: str, email: str, role: str) -> dict[str, Any]:
+    def add_team_member_for_user(
+        self,
+        user: dict[str, Any],
+        *,
+        name: str,
+        email: str,
+        role: str,
+    ) -> dict[str, Any]:
+        """Add one invited member to the user's organization."""
         now = int(time.time())
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
             org_id = user["organization_id"]
             organization = data["organizations"][org_id]
@@ -614,91 +421,182 @@ class ControlPlaneStore:
             self._save(data)
             return member
 
-    def update_knowledge_scope(self, user_id: str, scope: str) -> dict[str, Any]:
+    def update_knowledge_scope_for_user(self, user: dict[str, Any], scope: str) -> dict[str, Any]:
+        """Update the knowledge scope for the user's organization."""
         now = int(time.time())
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
             self._ensure_org_for_user(data, user)
             org_id = user["organization_id"]
             organization = data["organizations"][org_id]
             organization["knowledge_scope"] = scope
             organization["updated_at"] = now
             self._save(data)
-            return {
-                "organization": {
-                    "id": organization["id"],
-                    "name": organization.get("name", ""),
-                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
+            return self.get_team_profile_for_user(user)
+
+    def sync_project_for_user(
+        self,
+        user: dict[str, Any],
+        *,
+        project_id: str,
+        project_title: str,
+        scenario_id: str,
+        session_id: str,
+        session_title: str,
+        session_subtitle: str,
+        attachment_count: int,
+    ) -> dict[str, Any]:
+        """Persist project/session metadata for one user profile."""
+        now = int(time.time())
+        user_id = user["id"]
+        with self._lock:
+            data = self._load()
+            self._ensure_org_for_user(data, user)
+            projects_by_user = data.setdefault("projects", {}).setdefault(user_id, {})
+            project = projects_by_user.setdefault(
+                project_id,
+                {
+                    "id": project_id,
+                    "title": project_title,
+                    "scenario_id": scenario_id,
+                    "organization_id": user.get("organization_id", ""),
+                    "updated_at": now,
+                    "sessions": {},
                 },
-                "members": organization.get("members", []),
-                "current_user_id": user_id,
+            )
+            project["title"] = project_title or project["title"]
+            project["scenario_id"] = scenario_id or project.get("scenario_id", "")
+            project["organization_id"] = user.get("organization_id", "")
+            project["updated_at"] = now
+            project["sessions"][session_id] = {
+                "session_id": session_id,
+                "title": session_title,
+                "subtitle": session_subtitle,
+                "attachment_count": max(int(attachment_count or 0), 0),
+                "updated_at": now,
+            }
+            self._save(data)
+            return self._serialize_project(project)
+
+    def list_projects_for_user(self, user: dict[str, Any]) -> dict[str, Any]:
+        """List projects visible to the user's organization."""
+        with self._lock:
+            data = self._load()
+            self._ensure_org_for_user(data, user)
+            org_id = user.get("organization_id", "")
+            all_projects = []
+            for owner_user_id, projects_by_user in data.get("projects", {}).items():
+                for project in projects_by_user.values():
+                    if project.get("organization_id") == org_id:
+                        serialized = self._serialize_project(project)
+                        serialized["owner_user_id"] = owner_user_id
+                        all_projects.append(serialized)
+            all_projects.sort(key=lambda item: item["updated_at"], reverse=True)
+            recent_sessions: list[dict[str, Any]] = []
+            for project in all_projects:
+                for session in project["sessions"]:
+                    recent_sessions.append(
+                        {
+                            **session,
+                            "project_id": project["id"],
+                            "project_title": project["title"],
+                            "scenario_id": project.get("scenario_id", ""),
+                        }
+                    )
+            recent_sessions.sort(key=lambda item: item["updated_at"], reverse=True)
+            return {
+                "projects": all_projects[:10],
+                "recent_sessions": recent_sessions[:12],
             }
 
-    def check_quota(self, user_id: str, kind: str, amount: int = 1) -> tuple[bool, str | None]:
+    def list_legacy_json_users(self) -> list[dict[str, Any]]:
+        """Return user profiles still stored in the JSON file before PostgreSQL migration."""
         with self._lock:
             data = self._load()
-            user = data["users"][user_id]
-            self._ensure_org_for_user(data, user)
-            plan = user["plan"]
-            usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
+            users: list[dict[str, Any]] = []
+            for user_id, profile in data.get("users", {}).items():
+                if isinstance(profile, dict):
+                    users.append({**profile, "id": profile.get("id") or user_id})
+            return users
 
-            # 检查是否需要重置配额周期
-            quota_period_start = usage.get("quota_period_start", 0)
-            if self._should_reset_quota(quota_period_start):
-                # 重置所有计数器，但保留 quota_period_start 字段
-                usage["message_count"] = 0
-                usage["token_count"] = 0
-                usage["image_count"] = 0
-                usage["attachment_count"] = 0
-                usage["quota_period_start"] = self._get_quota_period_start()
-                user["updated_at"] = int(time.time())
-                self._save(data)
+    def get_user_by_token(self, token: str) -> dict[str, Any] | None:
+        """Deprecated: legacy token lookup retained for adapter compatibility."""
+        user_id = self.get_user_id_for_token(token)
+        if not user_id:
+            return None
+        return {"id": user_id}
 
-            limits = _PLAN_LIMITS[plan]
-            if kind == "messages":
-                limit = limits["message_limit"]
-                used = usage["message_count"]
-            elif kind == "tokens":
-                limit = limits["token_limit"]
-                used = usage["token_count"]
-            elif kind == "images":
-                limit = limits["image_limit"]
-                used = usage["image_count"]
-            else:
-                limit = limits["attachment_limit"]
-                used = usage["attachment_count"]
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        """Deprecated: user profiles are loaded from PostgreSQL."""
+        _ = user_id
+        return None
 
-            if limit and used + amount > limit:
-                return False, f"{kind} quota exceeded for {plan}"
-            return True, None
+    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        """Deprecated: user profiles are loaded from PostgreSQL."""
+        _ = email
+        return None
+
+    def issue_token_for_user(self, user_id: str) -> str:
+        """Deprecated alias for legacy token issuance."""
+        return self.issue_legacy_token(user_id)
+
+    def register_trial(self, name: str, email: str, client_ip: str = "unknown") -> tuple[dict[str, Any], str]:
+        """Deprecated: registration is handled by PostgreSQL repositories."""
+        _ = (name, email, client_ip)
+        raise RuntimeError("register_trial is handled by PostgresRegistrationRepository")
+
+    def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
+        """Deprecated: BYOK settings are stored on PostgreSQL user profiles."""
+        _ = (user_id, api_key, api_base, model)
+        raise RuntimeError("update_byok is handled by PostgresBillingSummaryRepository")
+
+    def update_user_plan(
+        self,
+        user_id: str,
+        new_plan: str,
+        byok_enabled: bool = False,
+        byok_api_key: str = "",
+        byok_api_base: str = "",
+        byok_model: str = "",
+    ) -> dict[str, Any]:
+        """Deprecated: billing plans are stored on PostgreSQL user profiles."""
+        _ = (user_id, new_plan, byok_enabled, byok_api_key, byok_api_base, byok_model)
+        raise RuntimeError("update_user_plan is handled by PostgresBillingRepository")
+
+    def get_plan_summary(self, user_id: str) -> dict[str, Any]:
+        """Deprecated: plan summaries are loaded from PostgreSQL."""
+        _ = user_id
+        raise RuntimeError("get_plan_summary is handled by PostgresBillingSummaryRepository")
+
+    def get_team_profile(self, user_id: str) -> dict[str, Any]:
+        """Deprecated: use get_team_profile_for_user with a PostgreSQL user dict."""
+        _ = user_id
+        raise RuntimeError("get_team_profile is handled by PostgresTeamRepository")
+
+    def rename_organization(self, user_id: str, organization_name: str) -> dict[str, Any]:
+        """Deprecated: use rename_organization_for_user with a PostgreSQL user dict."""
+        _ = (user_id, organization_name)
+        raise RuntimeError("rename_organization is handled by PostgresTeamRepository")
+
+    def add_team_member(self, user_id: str, *, name: str, email: str, role: str) -> dict[str, Any]:
+        """Deprecated: use add_team_member_for_user with a PostgreSQL user dict."""
+        _ = (user_id, name, email, role)
+        raise RuntimeError("add_team_member is handled by PostgresTeamRepository")
+
+    def update_knowledge_scope(self, user_id: str, scope: str) -> dict[str, Any]:
+        """Deprecated: use update_knowledge_scope_for_user with a PostgreSQL user dict."""
+        _ = (user_id, scope)
+        raise RuntimeError("update_knowledge_scope is handled by PostgresTeamRepository")
+
+    def check_quota(self, user_id: str, kind: str, amount: int = 1) -> tuple[bool, str | None]:
+        """Deprecated: quota checks are handled by PostgreSQL user profiles."""
+        _ = (user_id, kind, amount)
+        raise RuntimeError("check_quota is handled by PostgresUsageRepository")
 
     def consume_quota(self, user_id: str, kind: str, amount: int = 1) -> None:
-        with self._lock:
-            data = self._load()
-            user = data["users"][user_id]
-            self._ensure_org_for_user(data, user)
-            usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
-
-            # 检查是否需要重置配额周期（consume 时也需要检查）
-            quota_period_start = usage.get("quota_period_start", 0)
-            if self._should_reset_quota(quota_period_start):
-                usage["message_count"] = 0
-                usage["token_count"] = 0
-                usage["image_count"] = 0
-                usage["attachment_count"] = 0
-                usage["quota_period_start"] = self._get_quota_period_start()
-
-            if kind == "messages":
-                usage["message_count"] += amount
-            elif kind == "tokens":
-                usage["token_count"] += amount
-            elif kind == "images":
-                usage["image_count"] += amount
-            else:
-                usage["attachment_count"] += amount
-            user["updated_at"] = int(time.time())
-            self._save(data)
+        """Deprecated: quota consumption is handled by PostgreSQL user profiles."""
+        _ = (user_id, kind, amount)
+        raise RuntimeError("consume_quota is handled by PostgresUsageRepository")
 
     def record_usage_event(
         self,
@@ -726,11 +624,6 @@ class ControlPlaneStore:
                     "timestamp": int(time.time()),
                 }
             )
-            user = data["users"].get(user_id)
-            if user:
-                usage = user.setdefault("usage", dict(_DEFAULT_USAGE))
-                usage["token_count"] += total_tokens
-                user["updated_at"] = int(time.time())
             self._save(data)
 
     def usage_summary(self, user_id: str) -> dict[str, Any]:
@@ -751,10 +644,9 @@ class ControlPlaneStore:
                 entry["cost"] = round(entry["cost"], 6)
             return {"total_tokens": total_tokens, "total_cost": total_cost, "by_model": by_model, "events": events[-20:]}
 
-    def admin_overview(self) -> dict[str, Any]:
+    def admin_overview(self, users: list[dict[str, Any]]) -> dict[str, Any]:
         with self._lock:
             data = self._load()
-            users = list(data["users"].values())
             usage_events = data["usage_events"]
             leads = data.get("leads", [])
             now = int(time.time())
@@ -792,7 +684,9 @@ class ControlPlaneStore:
                 "users": {
                     "total": len(users),
                     "active_7d": sum(1 for user in users if int(user.get("updated_at", 0) or 0) >= active_window),
-                    "trial": sum(1 for user in users if user.get("plan") == "trial"),
+                    "trial": sum(
+                        1 for user in users if user.get("plan") in ("trial", "free")
+                    ),
                     "byok_enabled": sum(1 for user in users if (user.get("byok") or {}).get("enabled")),
                     "new_trials_7d": recent_trials,
                 },
@@ -844,83 +738,6 @@ class ControlPlaneStore:
                 {"type": "lead_created", "email": lead["email"], "intent": lead["intent"], "timestamp": now})
             self._save(data)
             return lead
-
-    def sync_project_session(
-        self,
-        *,
-        user_id: str,
-        project_id: str,
-        project_title: str,
-        scenario_id: str,
-        session_id: str,
-        session_title: str,
-        session_subtitle: str,
-        attachment_count: int,
-    ) -> dict[str, Any]:
-        now = int(time.time())
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, data["users"][user_id])
-            projects_by_user = data.setdefault(
-                "projects", {}).setdefault(user_id, {})
-            project = projects_by_user.setdefault(
-                project_id,
-                {
-                    "id": project_id,
-                    "title": project_title,
-                    "scenario_id": scenario_id,
-                    "organization_id": data["users"][user_id].get("organization_id", ""),
-                    "updated_at": now,
-                    "sessions": {},
-                },
-            )
-            project["title"] = project_title or project["title"]
-            project["scenario_id"] = scenario_id or project.get(
-                "scenario_id", "")
-            project["organization_id"] = data["users"][user_id].get(
-                "organization_id", "")
-            project["updated_at"] = now
-            project["sessions"][session_id] = {
-                "session_id": session_id,
-                "title": session_title,
-                "subtitle": session_subtitle,
-                "attachment_count": max(int(attachment_count or 0), 0),
-                "updated_at": now,
-            }
-            self._save(data)
-            return self._serialize_project(project)
-
-    def list_projects(self, user_id: str) -> dict[str, Any]:
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, data["users"][user_id])
-            org_id = data["users"][user_id].get("organization_id", "")
-            all_projects = []
-            for owner_user_id, projects_by_user in data.get("projects", {}).items():
-                for project in projects_by_user.values():
-                    if project.get("organization_id") == org_id:
-                        serialized = self._serialize_project(project)
-                        serialized["owner_user_id"] = owner_user_id
-                        all_projects.append(serialized)
-            projects = all_projects
-            projects.sort(key=lambda item: item["updated_at"], reverse=True)
-            recent_sessions: list[dict[str, Any]] = []
-            for project in projects:
-                for session in project["sessions"]:
-                    recent_sessions.append(
-                        {
-                            **session,
-                            "project_id": project["id"],
-                            "project_title": project["title"],
-                            "scenario_id": project.get("scenario_id", ""),
-                        }
-                    )
-            recent_sessions.sort(
-                key=lambda item: item["updated_at"], reverse=True)
-            return {
-                "projects": projects[:10],
-                "recent_sessions": recent_sessions[:12],
-            }
 
     @staticmethod
     def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:

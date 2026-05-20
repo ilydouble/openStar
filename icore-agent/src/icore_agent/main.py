@@ -14,15 +14,14 @@ import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.dependencies import usage_service
+from .api.dependencies import get_current_user, usage_service
 from .api.routers import account as account_router
 from .api.routers import agent as agent_router
 from .api.routers import health as health_router
 from .api.routers import knowledge as knowledge_router
 from .api.routers import payment as payment_router
-from .api.routers.account import get_current_user
 from .config import settings
-from .control_plane import current_runtime_user
+from .control_plane import control_plane_store, current_runtime_user
 from .lib.http.middleware import (
     AuthMiddleware,
     BackendRequestLoggingMiddleware,
@@ -75,6 +74,12 @@ async def lifespan(_: FastAPI):
         debug=settings.debug,
         model=settings.model_id,
     )
+    if settings.import_json_users_on_startup:
+        from .users.json_import import import_legacy_users_from_store
+
+        imported = import_legacy_users_from_store(control_plane_store)
+        if imported:
+            log.info("json_users_imported", count=imported)
     try:
         yield
     finally:

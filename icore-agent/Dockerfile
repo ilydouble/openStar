@@ -67,4 +67,4 @@ ENV PYTHONUNBUFFERED=1 \
     API_HOST=0.0.0.0 \
     API_PORT=11001
 
-CMD ["sh", "-c", "uvicorn icore_agent.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-11001}"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn icore_agent.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-11001}"]

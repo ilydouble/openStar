@@ -19,11 +19,11 @@ from starlette.responses import JSONResponse, Response
 
 from ....config import settings
 from ....control_plane import control_plane_store
-from ....infrastructure.control_plane import ControlPlaneIdentityRepository
+from ....infrastructure.users import PostgresIdentityRepository
 from ...auth.jwt import JWTValidationError, verify_access_token
 
 log = get_logger(__name__)
-account_repository = ControlPlaneIdentityRepository(control_plane_store)
+account_repository = PostgresIdentityRepository(control_plane_store)
 
 # Paths that skip auth entirely
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}
@@ -50,7 +50,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not token:
             return JSONResponse({"code": 401, "message": "Missing Bearer token"}, status_code=401)
 
-        local_user = self._validate_local_jwt(token)
+        local_user = self._validate_local_token(token)
         if local_user is not None:
             request.state.user = local_user
             return await call_next(request)
@@ -95,8 +95,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return None
 
     @staticmethod
-    def _validate_local_jwt(token: str) -> dict[str, Any] | None:
-        """Validate the local JWT and load the matching control-plane user."""
+    def _validate_local_token(token: str) -> dict[str, Any] | None:
+        """Validate a local JWT or legacy opaque token and load the user profile."""
         try:
             claims = verify_access_token(
                 token,
@@ -105,5 +105,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 audience=settings.jwt_audience,
             )
         except JWTValidationError:
-            return None
+            return account_repository.get_user_by_token(token)
+
         return account_repository.get_user_by_id(claims["sub"])

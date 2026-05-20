@@ -2,7 +2,7 @@
 
 POST /api/v1/agent/chat         — single-turn or multi-turn (streaming SSE)
 POST /api/v1/agent/sequential   — run a mini-SWE-agent sequential task
-POST /api/v1/agent/transcribe  — Speech-to-text via OpenAI Whisper (multipart audio)
+POST /api/v1/agent/transcribe  — Speech-to-text via Z.AI GLM-ASR (multipart audio)
 DELETE /api/v1/agent/session/{id} — clear conversation memory
 """
 
@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from ...application.account import AccountService
 from ...application.knowledge import SUPPORTED_EXTENSIONS, parse_file
 from ...config import settings
+from ...lib.audio_convert import AudioConversionError, prepare_audio_for_zai_asr
 from ...control_plane import clear_runtime_user, set_runtime_user
 from ...engine.callback_ctx import reset_parent_callback, set_parent_callback
 from ...engine.sequential import SequentialAgent
@@ -171,68 +172,117 @@ class SequentialResponse(BaseModel):
 
 
 class TranscribeResponse(BaseModel):
-    text: str = Field(..., description="Plain text from Whisper")
+    text: str = Field(..., description="Plain text from GLM-ASR transcription")
 
 
-_WHISPER_MAX_BYTES = 25 * 1024 * 1024
-_OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
+_TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024
+_ZAI_ASR_MODEL = "glm-asr-2512"
+_ZAI_DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 
 
-async def _whisper_transcribe(
+def _zai_transcribe_url() -> str:
+    """Build the Z.AI audio transcriptions endpoint from configured base URL."""
+    base = (settings.zai_base_url or _ZAI_DEFAULT_BASE_URL).rstrip("/")
+    return f"{base}/audio/transcriptions"
+
+
+def _zai_transcribe_error_detail(resp: httpx.Response) -> str:
+    """Extract a human-readable error message from a Z.AI API error response."""
+    detail = resp.text
+    try:
+        payload = resp.json()
+        if not isinstance(payload, dict):
+            return detail
+        err = payload.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        if isinstance(err, str):
+            return err
+        if payload.get("message"):
+            return str(payload["message"])
+    except Exception:
+        pass
+    return detail
+
+
+async def _zai_transcribe(
     *,
     audio: bytes,
     filename: str,
     mime: str | None,
     language: str | None,
 ) -> str:
-    """Send audio bytes to OpenAI Whisper and return transcript text."""
-    api_key = (settings.openai_api_key or "").strip()
+    """Send audio bytes to Z.AI GLM-ASR and return transcript text."""
+    api_key = (settings.zai_api_key or "").strip()
     if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="OpenAI API key is not configured (OPENAI_API_KEY / openai_api_key).",
+            detail="Z.AI API key is not configured (ZAI_API_KEY / zai_api_key).",
         )
-    if len(audio) > _WHISPER_MAX_BYTES:
+    if len(audio) > _TRANSCRIBE_MAX_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"Audio exceeds {_WHISPER_MAX_BYTES // (1024 * 1024)} MB Whisper limit",
+            detail=(
+                f"Audio exceeds {_TRANSCRIBE_MAX_BYTES // (1024 * 1024)} MB "
+                "transcription limit"
+            ),
         )
-    safe_name = (filename or "audio").replace("\r", "").replace("\n", "").strip() or "audio.webm"
-    content_type = (mime or "application/octet-stream").split(";")[0].strip()
+    try:
+        audio, safe_name, content_type = await asyncio.to_thread(
+            prepare_audio_for_zai_asr,
+            audio,
+            filename,
+            mime,
+        )
+    except AudioConversionError as exc:
+        log.warning("zai_transcribe_convert_error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if len(audio) > _TRANSCRIBE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Converted audio exceeds {_TRANSCRIBE_MAX_BYTES // (1024 * 1024)} MB "
+                "transcription limit"
+            ),
+        )
     files = {"file": (safe_name, audio, content_type)}
-    data: dict[str, str] = {"model": "whisper-1"}
-    if language:
-        data["language"] = language
+    data: dict[str, str] = {
+        "model": _ZAI_ASR_MODEL,
+        "stream": "false",
+    }
+    if language == "zh":
+        data["prompt"] = "请使用中文转写。"
+    elif language == "en":
+        data["prompt"] = "Transcribe in English."
     headers = {"Authorization": f"Bearer {api_key}"}
+    url = _zai_transcribe_url()
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
-            resp = await client.post(_OPENAI_TRANSCRIBE_URL, headers=headers, files=files, data=data)
+            resp = await client.post(url, headers=headers, files=files, data=data)
     except httpx.RequestError as exc:
-        log.warning("whisper_request_error", error=str(exc))
-        raise HTTPException(status_code=502, detail=f"Whisper request failed: {exc}") from exc
+        log.warning("zai_transcribe_request_error", error=str(exc))
+        raise HTTPException(
+            status_code=502, detail=f"Z.AI transcription request failed: {exc}"
+        ) from exc
 
     if resp.status_code >= 400:
-        detail = resp.text
-        try:
-            payload = resp.json()
-            err = payload.get("error") if isinstance(payload, dict) else None
-            if isinstance(err, dict) and err.get("message"):
-                detail = str(err["message"])
-            elif isinstance(err, str):
-                detail = err
-        except Exception:
-            pass
+        detail = _zai_transcribe_error_detail(resp)
         log.warning(
-            "whisper_api_error",
+            "zai_transcribe_api_error",
             status=resp.status_code,
             detail_preview=detail[:200],
         )
-        raise HTTPException(status_code=502, detail=detail or f"Whisper HTTP {resp.status_code}")
+        raise HTTPException(
+            status_code=502,
+            detail=detail or f"Z.AI transcription HTTP {resp.status_code}",
+        )
 
     try:
         payload = resp.json()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Invalid JSON from Whisper") from exc
+        raise HTTPException(
+            status_code=502, detail="Invalid JSON from Z.AI transcription API"
+        ) from exc
     text = (payload.get("text") or "").strip() if isinstance(payload, dict) else ""
     return text
 
@@ -453,7 +503,9 @@ async def _stream_agent(
                     session_id=session_id, budget_sec=_SSE_WALL_BUDGET_SEC)
         yield _sse({
             "type": "error",
-            "message": f"Agent 运行超过 {_SSE_WALL_BUDGET_SEC}s 预算，已中止",
+            "message": (
+                f"Agent run exceeded {_SSE_WALL_BUDGET_SEC}s budget and was stopped"
+            ),
         })
 
     yield _sse({"type": "done"})
@@ -751,34 +803,34 @@ async def attach_data(
     )
 
 
-# ── Speech-to-text (Whisper) ──────────────────────────────────────────────
+# ── Speech-to-text (Z.AI GLM-ASR) ───────────────────────────────────────
 
 
 @router.post(
     "/transcribe",
     response_model=TranscribeResponse,
-    summary="Transcribe audio with OpenAI Whisper",
+    summary="Transcribe audio with Z.AI GLM-ASR",
 )
 async def transcribe_audio(
     file: Annotated[UploadFile, File(description="Audio file (webm, mp3, wav, m4a, …)")],
     language: str = Form(""),
     user: dict = Depends(get_current_user),
 ) -> TranscribeResponse:
-    """Accept multipart audio from the browser, forward to Whisper, return text."""
+    """Accept multipart audio from the browser, forward to Z.AI GLM-ASR, return text."""
     _ = user
     lang_norm = language.strip().lower()[:16]
     base = lang_norm.split("-")[0] if lang_norm else ""
-    whisper_lang = base if base in {"zh", "en"} else ""
+    asr_lang = base if base in {"zh", "en"} else ""
     audio = await file.read()
     if not audio:
         raise HTTPException(status_code=400, detail="Empty audio upload")
-    text = await _whisper_transcribe(
+    text = await _zai_transcribe(
         audio=audio,
         filename=file.filename or "speech.webm",
         mime=file.content_type,
-        language=whisper_lang or None,
+        language=asr_lang or None,
     )
-    log.info("whisper_transcribed", chars=len(text), whisper_lang=whisper_lang or "auto")
+    log.info("zai_transcribed", chars=len(text), asr_lang=asr_lang or "auto")
     return TranscribeResponse(text=text)
 
 

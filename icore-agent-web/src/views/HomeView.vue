@@ -15,6 +15,9 @@
     <HomeSidebar
       class="fixed inset-y-0 left-0 z-40 max-lg:shadow-[4px_0_24px_-4px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-out lg:relative lg:z-auto lg:translate-x-0 lg:shadow-none lg:transition-none dark:max-lg:shadow-black/50"
       :class="sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+      :current-session-id="sessionId"
+      :recent-sessions="recentSessions"
+      :recent-projects="recentProjects"
       @new="onSidebarNew"
       @navigate="sidebarMobileOpen = false"
     />

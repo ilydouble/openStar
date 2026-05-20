@@ -70,10 +70,12 @@ class AccountService:
     def login_with_email_code(self, email: str, verification_code: str) -> tuple[dict[str, Any], str]:
         """Validate a one-time code and issue a fresh access token."""
         if not self._verification_repository.verify_code(email, verification_code):
-            raise ValueError("验证码错误或已过期")
+            raise ValueError("Invalid or expired verification code")
         user = self._identity_repository.get_user_by_email(email)
         if not user:
-            raise LookupError("该邮箱尚未注册，请先注册试用账号")
+            raise LookupError(
+                "This email is not registered. Please sign up for a trial account first."
+            )
         return user, self._issue_access_token(user)
 
     def register_trial(
@@ -86,12 +88,16 @@ class AccountService:
     ) -> tuple[dict[str, Any], str]:
         """Register a new trial user after code and IP checks pass."""
         if not self._verification_repository.verify_code(email, verification_code):
-            raise ValueError("验证码错误或已过期")
+            raise ValueError("Invalid or expired verification code")
         existing_user = self._identity_repository.get_user_by_email(email)
         if existing_user:
-            raise ValueError("该邮箱已注册，请使用「邮箱登录」功能")
+            raise ValueError(
+                "This email is already registered. Please use email login instead."
+            )
         if not self._registration_repository.check_ip_registration_limit(client_ip):
-            raise PermissionError("同一 IP 24 小时内只能注册 1 次账号")
+            raise PermissionError(
+                "Only one account can be registered from the same IP within 24 hours"
+            )
         user, _legacy_token = self._registration_repository.register_trial(
             name, email, client_ip)
         return user, self._issue_access_token(user)

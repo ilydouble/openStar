@@ -40,7 +40,7 @@ WORKDIR /app
 
 # Runtime system deps (bash required by sequential agent)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash curl git \
+    bash curl ffmpeg git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency and application installs as separate cacheable layers.

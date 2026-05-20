@@ -110,6 +110,33 @@ def test_register_trial_wrong_code_rejected(client: TestClient):
         json={"name": "Trial User", "email": email, "verification_code": "000000"},
     )
     assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid or expired verification code"
+
+
+def test_email_login_unregistered_email_returns_english_message(client: TestClient):
+    email = f"missing-{uuid4().hex[:8]}@example.com"
+    code = "654321"
+
+    from icore_agent.control_plane import control_plane_store
+
+    with control_plane_store._lock:
+        data = control_plane_store._load()
+        data.setdefault("verification_codes", {})[email.lower()] = {
+            "code": code,
+            "expires_at": int(time.time()) + 600,
+            "ip": "127.0.0.1",
+            "timestamp": int(time.time()),
+        }
+        control_plane_store._save(data)
+
+    resp = client.post(
+        "/api/v1/account/login",
+        json={"email": email, "verification_code": code},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == (
+        "This email is not registered. Please sign up for a trial account first."
+    )
 
 
 def test_send_verification_code_endpoint(client: TestClient):
@@ -139,7 +166,7 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
     )
     assert resp.status_code == 200
     assert resp.json()["success"] is True
-    assert "验证码已发送到" in resp.json()["message"]
+    assert "Verification code sent to" in resp.json()["message"]
 
 
 @patch("icore_agent.api.routers.agent.create_orchestrator")

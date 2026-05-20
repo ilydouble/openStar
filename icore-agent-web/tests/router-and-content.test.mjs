@@ -6,6 +6,15 @@ import zhCN from '../src/locales/zh-CN.js'
 import enUS from '../src/locales/en-US.js'
 import { existsSync, readFileSync } from 'node:fs'
 
+test('sidebar chat nav targets workspace-session so home and chat are not both active', () => {
+  const sidebarSource = readFileSync(new URL('../src/components/HomeSidebar.vue', import.meta.url), 'utf8')
+
+  assert.ok(sidebarSource.includes("name: 'workspace'"), 'expected home nav to target workspace')
+  assert.ok(sidebarSource.includes("name: 'workspace-session'"), 'expected chat nav to target workspace-session')
+  assert.ok(sidebarSource.includes('isExactActive'), 'expected home nav to use exact active matching')
+  assert.match(sidebarSource, /:to="chatNavTo"/, 'expected chat nav to use a dedicated session route target')
+})
+
 test('router exposes marketing home, app workspace, and chat compatibility redirect', () => {
   const homeRoute = routes.find((route) => route.path === '/')
   const appRoute = routes.find((route) => route.path === '/app')

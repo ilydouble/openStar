@@ -297,7 +297,7 @@ export async function removeAttachment(sessionId, filename) {
 }
 
 /**
- * Transcribe microphone audio via backend Whisper proxy.
+ * Transcribe microphone audio via backend Z.AI GLM-ASR proxy.
  * @param {Blob} audioBlob
  * @param {{ language?: string, signal?: AbortSignal, filename?: string }} [opts]
  * @returns {Promise<string>}

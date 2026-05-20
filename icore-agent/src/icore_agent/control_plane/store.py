@@ -262,7 +262,7 @@ class ControlPlaneStore:
                 if info.get("ip") == client_ip and info.get("timestamp", 0) > now - 86400
             ]
             if len(ip_sends) >= 3:
-                return False, "同一 IP 24 小时内最多发送 3 次验证码"
+                return False, "Maximum of 3 verification codes per IP within 24 hours"
 
             # 生成 6 位数字验证码
             code = f"{secrets.randbelow(1000000):06d}"
@@ -292,10 +292,13 @@ class ControlPlaneStore:
                         client_ip=client_ip,
                     )
                     _print_dev_verification_email(email, code)
-                    return True, f"验证码已发送到 {email}，10 分钟内有效（开发模式：请查看后端日志）"
-                return False, "验证码发送失败，请稍后重试"
+                    return True, (
+                        f"Verification code sent to {email}. Valid for 10 minutes "
+                        "(dev mode: check backend logs)"
+                    )
+                return False, "Failed to send verification code. Please try again later."
 
-            return True, f"验证码已发送到 {email}，10 分钟内有效"
+            return True, f"Verification code sent to {email}. Valid for 10 minutes."
 
     def verify_code(self, email: str, code: str) -> bool:
         """验证邮箱验证码"""

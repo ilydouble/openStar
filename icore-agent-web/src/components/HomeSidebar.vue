@@ -47,7 +47,11 @@
         </a>
       </RouterLink>
 
-      <RouterLink :to="{ name: 'workspace' }" custom v-slot="{ href, navigate, isActive }">
+      <RouterLink
+        :to="chatNavTo"
+        custom
+        v-slot="{ href, navigate, isActive }"
+      >
         <a
           :href="href"
           class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-sm font-medium transition-colors duration-200"
@@ -230,7 +234,11 @@ import ThemeToggle from './ThemeToggle.vue'
 
 const emit = defineEmits(['new', 'navigate'])
 
-defineProps({
+const props = defineProps({
+  currentSessionId: {
+    type: String,
+    default: '',
+  },
   recentSessions: {
     type: Array,
     default: () => [],
@@ -248,6 +256,16 @@ const moreRootRef = ref(null)
 const morePanelId = `sidebar-more-${Math.random().toString(36).slice(2, 9)}`
 
 const currentLocale = computed(() => locale.value)
+
+/** Chat nav targets the session route so it does not share active state with Home. */
+const chatNavTo = computed(() => {
+  const sessionId =
+    props.currentSessionId || props.recentSessions[0]?.sessionId || ''
+  return {
+    name: 'workspace-session',
+    params: { sessionId },
+  }
+})
 
 function navItemClass(active) {
   return active

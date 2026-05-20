@@ -82,7 +82,33 @@ def get_current_user(
     authorization: str = Header(default=""),
     service: AccountService = Depends(get_account_service),
 ) -> dict:
-    """Resolve the authenticated user from the bearer token header."""
+    """Resolve the authenticated user from the bearer token header.
+
+    When AUTH_ENABLED=false, returns the first user in the database as a fallback
+    for local development without authentication.
+    """
+    # 如果认证已禁用，返回数据库中第一个用户（仅限本地开发）
+    if not settings.auth_enabled:
+        users = control_plane_store._load().get("users", {})
+        if users:
+            first_user_id = next(iter(users.keys()))
+            user = control_plane_store.get_user_by_token("")  # 使用空 token 触发加载
+            if not user:
+                # 直接返回第一个用户
+                user = users[first_user_id]
+                # 确保有 organization
+                control_plane_store._ensure_org_for_user(control_plane_store._load(), user)
+            return user
+        # 如果没有用户，返回一个虚拟的默认用户
+        return {
+            "id": "dev-user-id",
+            "email": "dev@local.test",
+            "name": "Development User",
+            "plan": "free",
+            "roles": ["owner"],
+        }
+
+    # 正常认证流程
     try:
         return service.get_current_user(authorization)
     except ValueError as exc:

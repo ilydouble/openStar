@@ -7,6 +7,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 from ...application.account import AccountService
 from ..dependencies import get_account_service
+from ...config import settings
+from ...control_plane import control_plane_store
 
 router = APIRouter()
 
@@ -90,7 +92,31 @@ def get_current_user(
     authorization: str = Header(default=""),
     service: AccountService = Depends(get_account_service),
 ) -> dict:
-    """Resolve the current user through the account application service."""
+    """Resolve the current user through the account application service.
+
+    When AUTH_ENABLED=false, returns the first user in the database as a fallback
+    for local development without authentication.
+    """
+    # 如果认证已禁用，返回数据库中第一个用户（仅限本地开发）
+    if not settings.auth_enabled:
+        users = control_plane_store._load().get("users", {})
+        if users:
+            first_user_id = next(iter(users.keys()))
+            user = users[first_user_id]
+            # 确保有 organization
+            data = control_plane_store._load()
+            control_plane_store._ensure_org_for_user(data, user)
+            return user
+        # 如果没有用户，返回一个虚拟的默认用户
+        return {
+            "id": "dev-user-id",
+            "email": "dev@local.test",
+            "name": "Development User",
+            "plan": "free",
+            "roles": ["owner"],
+        }
+
+    # 正常认证流程
     try:
         return service.get_current_user(authorization)
     except ValueError as exc:

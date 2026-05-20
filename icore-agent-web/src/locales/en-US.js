@@ -12,6 +12,7 @@ export default {
       signIn: 'Plans',
       startFree: 'Start free',
       mobileCta: 'Try',
+      goToApp: 'Open workspace',
       language: 'Language',
       menu: 'Open menu',
       closeMenu: 'Close menu',

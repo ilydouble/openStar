@@ -12,6 +12,7 @@ export default {
       signIn: '选择方案',
       startFree: '免费试用',
       mobileCta: '试用',
+      goToApp: '进入工作台',
       language: '语言',
       menu: '打开菜单',
       closeMenu: '关闭菜单',

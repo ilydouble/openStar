@@ -30,18 +30,29 @@
         >
           {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
         </button>
-        <RouterLink
-          to="/#plans"
-          class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
-        >
-          {{ t('landing.nav.signIn') }}
-        </RouterLink>
-        <RouterLink
-          to="/auth"
-          class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
-        >
-          {{ t('landing.nav.startFree') }}
-        </RouterLink>
+        <!-- 已登录：显示"进入工作台"；未登录：显示"选择方案"+"免费试用" -->
+        <template v-if="loggedIn">
+          <RouterLink
+            to="/app"
+            class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
+          >
+            {{ t('landing.nav.goToApp') }}
+          </RouterLink>
+        </template>
+        <template v-else>
+          <RouterLink
+            to="/#plans"
+            class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            {{ t('landing.nav.signIn') }}
+          </RouterLink>
+          <RouterLink
+            to="/auth"
+            class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
+          >
+            {{ t('landing.nav.startFree') }}
+          </RouterLink>
+        </template>
       </div>
 
       <div class="flex items-center gap-2 lg:hidden">
@@ -53,11 +64,12 @@
         >
           {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
         </button>
+        <!-- 移动端：已登录跳工作台，未登录跳注册 -->
         <RouterLink
-          to="/auth"
+          :to="loggedIn ? '/app' : '/auth'"
           class="inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-3.5 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 dark:bg-white dark:text-zinc-950"
         >
-          {{ t('landing.nav.mobileCta') }}
+          {{ loggedIn ? t('landing.nav.goToApp') : t('landing.nav.mobileCta') }}
         </RouterLink>
         <button
           type="button"
@@ -137,11 +149,14 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
+import { isAuthenticated } from '../../auth/session.js'
 
 const { t, tm, locale } = useI18n()
 
 const menuOpen = ref(false)
 const currentLocale = computed(() => locale.value)
+/** 是否已登录，决定导航栏显示"进入工作台"还是"免费试用" */
+const loggedIn = computed(() => isAuthenticated())
 const navLinks = computed(() => {
   const items = tm('landing.nav.links')
   return Array.isArray(items) ? items : []

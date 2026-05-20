@@ -386,7 +386,9 @@ class ControlPlaneStore:
         """为指定用户签发新 token（用于登录）"""
         with self._lock:
             data = self._load()
-            return self._issue_token(data, user_id)
+            token = self._issue_token(data, user_id)
+            self._save(data)  # 🔧 修复：保存 token 到文件
+            return token
 
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
         now = int(time.time())

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from icore_agent.application.usage import UsageService
+from icore_agent.domain.user import UserProfile
+
 from ...config import settings
-from ...lib.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
+from ...shared.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
 from .contracts import (
     BillingSummaryRepository,
     IdentityRepository,
@@ -13,7 +16,6 @@ from .contracts import (
     ProjectRepository,
     RegistrationRepository,
     TeamRepository,
-    UsageRepository,
     VerificationRepository,
 )
 
@@ -31,7 +33,7 @@ class AccountService:
         team_repository: TeamRepository,
         project_repository: ProjectRepository,
         billing_summary_repository: BillingSummaryRepository,
-        usage_repository: UsageRepository,
+        usage_service: UsageService,
     ) -> None:
         """Create an account service from narrow repository contracts."""
         self._identity_repository = identity_repository
@@ -41,9 +43,9 @@ class AccountService:
         self._team_repository = team_repository
         self._project_repository = project_repository
         self._billing_summary_repository = billing_summary_repository
-        self._usage_repository = usage_repository
+        self._usage_service = usage_service
 
-    def get_current_user(self, authorization: str) -> dict[str, Any]:
+    def get_current_user(self, authorization: str) -> UserProfile:
         """Resolve the bearer token into the current user payload."""
         if not authorization.startswith("Bearer "):
             raise ValueError("Missing Bearer token")
@@ -56,7 +58,7 @@ class AccountService:
             raise LookupError("Invalid or expired token")
         return user
 
-    def _resolve_user_from_token(self, token: str) -> dict[str, Any] | None:
+    def _resolve_user_from_token(self, token: str) -> UserProfile | None:
         """Resolve a JWT or legacy opaque token to a persisted user profile."""
         try:
             claims = verify_access_token(
@@ -74,7 +76,7 @@ class AccountService:
         """Dispatch a verification code to the given email."""
         return self._verification_repository.send_verification_code(email, client_ip)
 
-    def login_with_email_code(self, email: str, verification_code: str) -> tuple[dict[str, Any], str]:
+    def login_with_email_code(self, email: str, verification_code: str) -> tuple[UserProfile, str]:
         """Validate a one-time code and issue a fresh access token."""
         if not self._verification_repository.verify_code(email, verification_code):
             raise ValueError("Invalid or expired verification code")
@@ -92,7 +94,7 @@ class AccountService:
         email: str,
         verification_code: str,
         client_ip: str,
-    ) -> tuple[dict[str, Any], str]:
+    ) -> tuple[UserProfile, str]:
         """Register a new trial user after code and IP checks pass."""
         if not self._verification_repository.verify_code(email, verification_code):
             raise ValueError("Invalid or expired verification code")
@@ -109,10 +111,10 @@ class AccountService:
             name, email, client_ip)
         return user, self._issue_access_token(user)
 
-    def _issue_access_token(self, user: dict[str, Any]) -> str:
+    def _issue_access_token(self, user: UserProfile) -> str:
         """Create the JWT access token consumed by the Go gateway and backend."""
         return sign_access_token(
-            user=user,
+            user={"id": user.public_id, "roles": user.roles},
             secret=settings.jwt_secret,
             issuer=settings.jwt_issuer,
             audience=settings.jwt_audience,
@@ -125,7 +127,7 @@ class AccountService:
 
     def get_usage_summary(self, user_id: str) -> dict[str, Any]:
         """Load the usage summary for one user."""
-        return self._usage_repository.usage_summary(user_id)
+        return self._usage_service.get_usage_summary(user_id)
 
     def get_admin_overview(self, user: dict[str, Any]) -> dict[str, Any]:
         """Return admin-only usage metrics after a role check."""
@@ -134,7 +136,7 @@ class AccountService:
             raise PermissionError(
                 "Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."
             )
-        return self._usage_repository.admin_overview()
+        return self._usage_service.get_admin_overview()
 
     def get_plan(self, user_id: str) -> dict[str, Any]:
         """Return the billing plan summary for a user."""
@@ -170,8 +172,8 @@ class AccountService:
 
     def check_quota(self, user_id: str, resource: str) -> tuple[bool, str | None]:
         """Read a quota decision without consuming the quota yet."""
-        return self._usage_repository.check_quota(user_id, resource)
+        return self._usage_service.check_quota(user_id, resource)
 
     def consume_quota(self, user_id: str, resource: str) -> None:
         """Consume one quota unit after a request is accepted."""
-        self._usage_repository.consume_quota(user_id, resource)
+        self._usage_service.consume_quota(user_id, resource)

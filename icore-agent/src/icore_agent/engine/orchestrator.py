@@ -15,7 +15,7 @@ the sub-agent's reply into a final user-facing response.
 
 from typing import Any
 
-from icore_agent.lib.logging.app_logger import get_logger
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ..config import settings
 

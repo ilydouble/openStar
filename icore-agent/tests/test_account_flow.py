@@ -18,7 +18,7 @@ def client():
 
 def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
     """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
-    from icore_agent.control_plane import control_plane_store
+    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
     email = email or f"trial-{uuid4().hex[:8]}@example.com"
     code = "123456"
@@ -55,7 +55,8 @@ def test_register_trial_and_fetch_account_profile(client: TestClient):
     assert payload["access_token"]
     assert payload["user"]["plan"] == "free"
 
-    me = client.get("/api/v1/account/me", headers={"Authorization": f"Bearer {payload['access_token']}"})
+    me = client.get("/api/v1/account/me",
+                    headers={"Authorization": f"Bearer {payload['access_token']}"})
     assert me.status_code == 200
     assert me.json()["email"] == email
 
@@ -67,7 +68,7 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
 
     code = "888888"
 
-    from icore_agent.control_plane import control_plane_store
+    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -88,7 +89,8 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
     token = body["access_token"]
     assert token
 
-    me = client.get("/api/v1/account/me", headers={"Authorization": f"Bearer {token}"})
+    me = client.get("/api/v1/account/me",
+                    headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200, me.text
     assert me.json()["email"] == email
 
@@ -107,7 +109,8 @@ def test_register_trial_wrong_code_rejected(client: TestClient):
     email = f"trial-{uuid4().hex[:8]}@example.com"
     resp = client.post(
         "/api/v1/account/register-trial",
-        json={"name": "Trial User", "email": email, "verification_code": "000000"},
+        json={"name": "Trial User", "email": email,
+              "verification_code": "000000"},
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "Invalid or expired verification code"
@@ -117,7 +120,7 @@ def test_email_login_unregistered_email_returns_english_message(client: TestClie
     email = f"missing-{uuid4().hex[:8]}@example.com"
     code = "654321"
 
-    from icore_agent.control_plane import control_plane_store
+    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -149,10 +152,10 @@ def test_send_verification_code_endpoint(client: TestClient):
     assert resp.json()["success"] is True
 
 
-@patch("icore_agent.control_plane.store.settings.debug", True)
-@patch("icore_agent.control_plane.store._send_verification_email", return_value=False)
+@patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
+@patch("icore_agent.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
 def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
-    from icore_agent.control_plane import control_plane_store
+    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -169,16 +172,18 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
     assert "Verification code sent to" in resp.json()["message"]
 
 
-@patch("icore_agent.api.routers.agent.create_orchestrator")
-@patch("icore_agent.api.routers.agent.memory")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.memory")
 def test_chat_requires_account_token(mock_memory, mock_create_orch, client: TestClient):
-    mock_memory.get_context = AsyncMock(return_value=(None, [], None, False, [], []))
+    mock_memory.get_context = AsyncMock(
+        return_value=(None, [], None, False, [], []))
     mock_memory.append_message = AsyncMock()
     mock_create_orch.return_value = MagicMock(return_value="secured reply")
 
     unauthorized = client.post(
         "/api/v1/agent/chat",
-        json={"message": "Hello", "stream": False, "session_id": "secure-session"},
+        json={"message": "Hello", "stream": False,
+              "session_id": "secure-session"},
     )
     assert unauthorized.status_code == 401
 
@@ -186,7 +191,8 @@ def test_chat_requires_account_token(mock_memory, mock_create_orch, client: Test
     authorized = client.post(
         "/api/v1/agent/chat",
         headers=headers,
-        json={"message": "Hello", "stream": False, "session_id": "secure-session"},
+        json={"message": "Hello", "stream": False,
+              "session_id": "secure-session"},
     )
     assert authorized.status_code == 200
     assert authorized.json()["reply"] == "secured reply"
@@ -198,7 +204,8 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     byok = client.post(
         "/api/v1/account/billing/byok",
         headers=headers,
-        json={"api_key": "demo-key", "api_base": "https://relay.example.com", "model": "openai/gpt-4o-mini"},
+        json={"api_key": "demo-key", "api_base": "https://relay.example.com",
+              "model": "openai/gpt-4o-mini"},
     )
     assert byok.status_code == 200
     assert byok.json()["enabled"] is True
@@ -210,8 +217,8 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     assert payload["byok"]["enabled"] is True
 
 
-@patch("icore_agent.api.routers.agent.attachments")
-@patch("icore_agent.api.routers.agent.memory")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.session.attachments")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
 def test_can_fetch_session_state(mock_memory, mock_attachments, client: TestClient):
     headers = _trial_headers(client)
     mock_memory.get_context = AsyncMock(
@@ -297,8 +304,8 @@ def test_can_read_and_update_team_profile(client: TestClient):
     assert member.json()["member"]["email"] == "ops@example.com"
 
 
-@patch("icore_agent.api.dependencies.knowledge_service._add_documents")
-@patch("icore_agent.api.dependencies.knowledge_service.parse_document")
+@patch("icore_agent.interfaces.http.v1.dependencies.knowledge_service._add_documents")
+@patch("icore_agent.interfaces.http.v1.dependencies.knowledge_service.parse_document")
 def test_knowledge_upload_can_use_organization_scope(mock_parse, mock_add_documents, client: TestClient):
     headers = _trial_headers(client)
     mock_parse.return_value = "Knowledge base content"

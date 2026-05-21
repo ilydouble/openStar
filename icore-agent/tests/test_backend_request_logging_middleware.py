@@ -6,12 +6,12 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request
 
-from icore_agent.lib.http.middleware import (
+from icore_agent.shared.http.middleware import (
     BackendRequestLoggingMiddleware,
     RequestIdMiddleware,
 )
-from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
+from icore_agent.shared.logging.contracts.v1 import LogEvent, LogLevel
+from icore_agent.shared.logging.logging_service_client import LoggingServiceClient
 
 
 class CapturingLoggingClient(LoggingServiceClient):

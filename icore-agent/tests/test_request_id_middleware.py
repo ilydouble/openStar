@@ -4,8 +4,8 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request
 
-from icore_agent.lib.http.middleware import RequestIdMiddleware
-from icore_agent.lib.http.request.request_context import get_request_id
+from icore_agent.shared.http.middleware import RequestIdMiddleware
+from icore_agent.shared.http.request.request_context import get_request_id
 
 
 def _build_app(*, fail: bool = False) -> FastAPI:

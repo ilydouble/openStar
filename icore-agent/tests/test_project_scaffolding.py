@@ -332,7 +332,7 @@ def test_dockerfile_keeps_dependency_layer_before_source_copy():
 
 
 def test_copied_logging_client_does_not_reference_old_project_packages():
-    client = (AGENT_ROOT / "src" / "icore_agent" / "lib" /
+    client = (AGENT_ROOT / "src" / "icore_agent" / "shared" /
               "logging" / "logging_service_client.py").read_text(
         encoding="utf-8"
     )
@@ -343,7 +343,7 @@ def test_copied_logging_client_does_not_reference_old_project_packages():
 
 
 def test_logging_facade_uses_clear_layered_names():
-    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging"
+    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "shared" / "logging"
 
     assert (logging_dir / "logging_service_client.py").exists()
     assert (logging_dir / "app_logger.py").exists()
@@ -379,6 +379,169 @@ def test_email_validator_dependency_is_declared_for_emailstr_models():
 
     assert '"email-validator' in pyproject
     assert "email-validator==" in requirements
+
+
+def test_python_backend_uses_clean_architecture_layers():
+    """Keep Python backend code grouped by abstraction layer, not mixed top-level folders."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+
+    expected_layers = {
+        "application",
+        "config",
+        "domain",
+        "engine",
+        "infrastructure",
+        "interfaces",
+        "services",
+        "shared",
+        "tools",
+    }
+    assert expected_layers <= {
+        path.name for path in package_dir.iterdir() if path.is_dir()
+    }
+
+    mixed_top_level_dirs = {
+        "api",
+        "control_plane",
+        "database",
+        "lib",
+        "memory",
+        "users",
+    }
+    assert not (mixed_top_level_dirs & {
+        path.name for path in package_dir.iterdir() if path.is_dir()
+    })
+
+
+def test_http_interface_layer_is_split_by_business_domain():
+    """Keep HTTP adapters grouped by domain with fine-grained schemas and handlers."""
+    http_dir = AGENT_ROOT / "src" / "icore_agent" / "interfaces" / "http"
+    v1_dir = http_dir / "v1"
+
+    assert (v1_dir / "router.py").is_file()
+
+    expected_domains = {
+        "account": {
+            "schemas": {"auth.py", "billing.py", "lead.py", "project.py", "team.py"},
+            "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
+        },
+        "agent": {
+            "schemas": {"attachment.py", "chat.py", "sequential.py", "transcribe.py"},
+            "handlers": {"attachment.py", "chat.py", "media.py", "sequential.py", "session.py", "transcribe.py"},
+        },
+        "health": {
+            "schemas": {"probe.py"},
+            "handlers": {"probe.py"},
+        },
+        "knowledge": {
+            "schemas": {"document.py"},
+            "handlers": {"documents.py"},
+        },
+        "payment": {
+            "schemas": {"checkout.py", "order.py", "upgrade.py"},
+            "handlers": {"checkout.py", "order.py", "upgrade.py", "webhook.py"},
+        },
+    }
+    for domain, expected in expected_domains.items():
+        assert not (http_dir / domain).exists()
+        domain_dir = v1_dir / domain
+        assert (domain_dir / "router.py").is_file()
+        for layer, filenames in expected.items():
+            layer_dir = domain_dir / layer
+            assert (layer_dir / "__init__.py").is_file()
+            assert filenames <= {path.name for path in layer_dir.glob("*.py")}
+    assert (v1_dir / "users" / "serializers.py").is_file()
+
+
+def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
+    """Keep application startup decoupled from individual business-domain routers."""
+    main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from .interfaces.http.v1.router import include_api_routers" in main
+    assert "include_api_routers(app)" in main
+    assert "from .api" not in main
+
+
+def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
+    """Keep domain rules, infrastructure adapters, and shared helpers separated."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+
+    assert (package_dir / "domain" / "account" / "plans.py").is_file()
+    assert (package_dir / "domain" / "user" / "user_repository.py").is_file()
+    assert (package_dir / "domain" / "user" / "models.py").is_file()
+    assert (
+        package_dir / "infrastructure" / "persistence" / "users" /
+        "sqlalchemy_repository.py"
+    ).is_file()
+    assert (package_dir / "shared" / "runtime" / "user_context.py").is_file()
+    assert (package_dir / "shared" / "auth" / "jwt.py").is_file()
+    assert (package_dir / "shared" / "logging" / "app_logger.py").is_file()
+    assert (
+        package_dir / "infrastructure" /
+        "persistence" / "sqlalchemy" / "sync_session.py"
+    ).is_file()
+    assert not (
+        package_dir / "infrastructure" / "persistence" / "users" / "repository.py"
+    ).exists()
+    assert (
+        package_dir / "infrastructure" / "control_plane" / "json_store.py"
+    ).is_file()
+    assert (
+        package_dir / "infrastructure" / "memory" / "conversation.py"
+    ).is_file()
+
+
+def test_domain_user_repository_is_abstract_not_sqlalchemy_bound():
+    """Keep the domain repository free of concrete persistence and API serialization."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    repository = (
+        package_dir / "domain" / "user" / "user_repository.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Protocol" in repository
+    assert "sqlalchemy" not in repository.lower()
+    assert "Session" not in repository
+    assert "select(" not in repository
+    assert "infrastructure.persistence.users.models" not in repository
+    assert "user_to_api_dict" not in repository
+
+
+def test_http_v1_owns_user_serialization():
+    """Keep user HTTP payload formatting out of domain and persistence layers."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    serializer = (
+        package_dir / "interfaces" / "http" / "v1" /
+        "users" / "serializers.py"
+    ).read_text(encoding="utf-8")
+    persistence_dir = package_dir / "infrastructure" / "persistence" / "users"
+
+    assert "serialize_user_profile" in serializer
+    assert "UserProfile" in serializer
+    assert not (persistence_dir / "mappers.py").exists()
+
+
+def test_usage_policy_and_user_import_live_in_application_layer():
+    """Keep quota rules and legacy import mapping out of repositories."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    usage_policy = package_dir / "application" / "usage" / "policy.py"
+    user_import = package_dir / "application" / "user_import" / "service.py"
+    postgres_repositories = (
+        package_dir / "infrastructure" / "persistence" /
+        "users" / "postgres_repositories.py"
+    ).read_text(encoding="utf-8")
+    json_import = (
+        package_dir / "infrastructure" / "persistence" /
+        "users" / "json_import.py"
+    ).read_text(encoding="utf-8")
+
+    assert usage_policy.is_file()
+    assert user_import.is_file()
+    assert "def check_quota" not in postgres_repositories
+    assert "def consume_quota" not in postgres_repositories
+    assert "LegacyUserImportService" in json_import
+    assert "upsert_from_legacy_dict" not in json_import
 
 
 def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():

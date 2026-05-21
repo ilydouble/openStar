@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from icore_agent.domain.user import UserProfile
+
 
 class IdentityRepository(Protocol):
     """User identity and token lookup contract."""
 
-    def get_user_by_token(self, token: str) -> dict[str, Any] | None: ...
-    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None: ...
-    def get_user_by_email(self, email: str) -> dict[str, Any] | None: ...
+    def get_user_by_token(self, token: str) -> UserProfile | None: ...
+    def get_user_by_id(self, user_id: str) -> UserProfile | None: ...
+    def get_user_by_email(self, email: str) -> UserProfile | None: ...
     def issue_token_for_user(self, user_id: str) -> str: ...
 
 
@@ -18,7 +20,8 @@ class VerificationRepository(Protocol):
     """Email verification delivery and validation contract."""
 
     def send_verification_code(
-        self, email: str, client_ip: str) -> tuple[bool, str]: ...
+        self, email: str, client_ip: str
+    ) -> tuple[bool, str]: ...
 
     def verify_code(self, email: str, code: str) -> bool: ...
 
@@ -27,8 +30,13 @@ class RegistrationRepository(Protocol):
     """Trial registration contract."""
 
     def check_ip_registration_limit(self, client_ip: str) -> bool: ...
-    def register_trial(self, name: str, email: str,
-                       client_ip: str) -> tuple[dict[str, Any], str]: ...
+
+    def register_trial(
+        self,
+        name: str,
+        email: str,
+        client_ip: str,
+    ) -> tuple[UserProfile, str]: ...
 
 
 class LeadRepository(Protocol):
@@ -43,12 +51,19 @@ class TeamRepository(Protocol):
     def get_team_profile(self, user_id: str) -> dict[str, Any]: ...
 
     def rename_organization(
-        self, user_id: str, organization_name: str) -> dict[str, Any]: ...
+        self,
+        user_id: str,
+        organization_name: str,
+    ) -> dict[str, Any]: ...
 
     def add_team_member(self, user_id: str, **
                         payload: Any) -> dict[str, Any]: ...
+
     def update_knowledge_scope(
-        self, user_id: str, scope: str) -> dict[str, Any]: ...
+        self,
+        user_id: str,
+        scope: str,
+    ) -> dict[str, Any]: ...
 
 
 class ProjectRepository(Protocol):
@@ -62,16 +77,11 @@ class BillingSummaryRepository(Protocol):
     """Plan summary and BYOK management contract."""
 
     def get_plan_summary(self, user_id: str) -> dict[str, Any]: ...
-    def update_byok(self, user_id: str, api_key: str,
-                    api_base: str, model: str) -> dict[str, Any]: ...
 
-
-class UsageRepository(Protocol):
-    """Quota and admin usage reporting contract."""
-
-    def usage_summary(self, user_id: str) -> dict[str, Any]: ...
-    def admin_overview(self) -> dict[str, Any]: ...
-    def check_quota(self, user_id: str,
-                    resource: str) -> tuple[bool, str | None]: ...
-
-    def consume_quota(self, user_id: str, resource: str) -> None: ...
+    def update_byok(
+        self,
+        user_id: str,
+        api_key: str,
+        api_base: str,
+        model: str,
+    ) -> dict[str, Any]: ...

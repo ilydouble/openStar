@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 # ruff: noqa: E402,I001
+# autopep8: off
 
 # Split dotenv files must be loaded before LiteLLM/Strands import time.
 from .config.dotenv import load_domain_dotenvs
@@ -11,23 +12,20 @@ from contextlib import asynccontextmanager
 
 import litellm
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.dependencies import get_current_user, usage_service
-from .api.routers import account as account_router
-from .api.routers import agent as agent_router
-from .api.routers import health as health_router
-from .api.routers import knowledge as knowledge_router
-from .api.routers import payment as payment_router
 from .config import settings
-from .control_plane import control_plane_store, current_runtime_user
-from .lib.http.middleware import (
+from .infrastructure.control_plane.json_store import control_plane_store
+from .interfaces.http.v1.dependencies import usage_service
+from .interfaces.http.v1.router import include_api_routers
+from .shared.http.middleware import (
     AuthMiddleware,
     BackendRequestLoggingMiddleware,
     RequestIdMiddleware,
 )
-from .lib.logging.app_logger import get_logger
+from .shared.logging.app_logger import get_logger
+from .shared.runtime.user_context import current_runtime_user
 
 
 log = get_logger(__name__)
@@ -75,7 +73,7 @@ async def lifespan(_: FastAPI):
         model=settings.model_id,
     )
     if settings.import_json_users_on_startup:
-        from .users.json_import import import_legacy_users_from_store
+        from .infrastructure.persistence.users.json_import import import_legacy_users_from_store
 
         imported = import_legacy_users_from_store(control_plane_store)
         if imported:
@@ -117,23 +115,7 @@ def create_app() -> FastAPI:
     app.add_middleware(BackendRequestLoggingMiddleware)
 
     # ── Routers ───────────────────────────────────────────
-    app.include_router(health_router.router, tags=["health"])
-    app.include_router(account_router.router,
-                       prefix="/api/v1/account", tags=["account"])
-    app.include_router(agent_router.router,
-                       prefix="/api/v1/agent", tags=["agent"])
-    app.include_router(
-        knowledge_router.router,
-        prefix="/api/v1/knowledge",
-        tags=["knowledge"],
-        dependencies=[Depends(get_current_user)],
-    )
-    app.include_router(
-        payment_router.router,
-        prefix="/api/v1",
-        tags=["payment"],
-        dependencies=[Depends(get_current_user)],
-    )
+    include_api_routers(app)
 
     return app
 

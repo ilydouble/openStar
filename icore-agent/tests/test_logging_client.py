@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
-from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
+from icore_agent.shared.http.request.request_context import clear_request_id, set_request_id
+from icore_agent.shared.logging.contracts.v1 import LogEvent, LogLevel
+from icore_agent.shared.logging.logging_service_client import LoggingServiceClient
 
 
 class CapturingLoggingClient(LoggingServiceClient):

@@ -43,7 +43,7 @@ class Settings(
     def effective_model_id(self) -> str:
         """Resolve the current user's BYOK model override or the default model id."""
         try:
-            from ..control_plane.context import current_runtime_user
+            from ..shared.runtime.user_context import current_runtime_user
 
             user = current_runtime_user()
         except Exception:

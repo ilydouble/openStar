@@ -11,15 +11,11 @@ from contextlib import asynccontextmanager
 
 import litellm
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.dependencies import get_current_user, usage_service
-from .api.routers import account as account_router
-from .api.routers import agent as agent_router
-from .api.routers import health as health_router
-from .api.routers import knowledge as knowledge_router
-from .api.routers import payment as payment_router
+from .api.dependencies import usage_service
+from .api.router import include_api_routers
 from .config import settings
 from .control_plane import control_plane_store, current_runtime_user
 from .lib.http.middleware import (
@@ -117,23 +113,7 @@ def create_app() -> FastAPI:
     app.add_middleware(BackendRequestLoggingMiddleware)
 
     # ── Routers ───────────────────────────────────────────
-    app.include_router(health_router.router, tags=["health"])
-    app.include_router(account_router.router,
-                       prefix="/api/v1/account", tags=["account"])
-    app.include_router(agent_router.router,
-                       prefix="/api/v1/agent", tags=["agent"])
-    app.include_router(
-        knowledge_router.router,
-        prefix="/api/v1/knowledge",
-        tags=["knowledge"],
-        dependencies=[Depends(get_current_user)],
-    )
-    app.include_router(
-        payment_router.router,
-        prefix="/api/v1",
-        tags=["payment"],
-        dependencies=[Depends(get_current_user)],
-    )
+    include_api_routers(app)
 
     return app
 

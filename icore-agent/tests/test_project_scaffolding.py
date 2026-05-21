@@ -381,6 +381,55 @@ def test_email_validator_dependency_is_declared_for_emailstr_models():
     assert "email-validator==" in requirements
 
 
+def test_api_layer_is_split_by_business_domain():
+    """Keep FastAPI adapters grouped by domain with fine-grained schemas and handlers."""
+    api_dir = AGENT_ROOT / "src" / "icore_agent" / "api"
+
+    assert (api_dir / "router.py").is_file()
+    assert not (api_dir / "routers").exists()
+
+    expected_domains = {
+        "account": {
+            "schemas": {"auth.py", "billing.py", "lead.py", "project.py", "team.py"},
+            "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
+        },
+        "agent": {
+            "schemas": {"attachment.py", "chat.py", "sequential.py", "transcribe.py"},
+            "handlers": {"attachment.py", "chat.py", "media.py", "sequential.py", "session.py", "transcribe.py"},
+        },
+        "health": {
+            "schemas": {"probe.py"},
+            "handlers": {"probe.py"},
+        },
+        "knowledge": {
+            "schemas": {"document.py"},
+            "handlers": {"documents.py"},
+        },
+        "payment": {
+            "schemas": {"checkout.py", "order.py", "upgrade.py"},
+            "handlers": {"checkout.py", "order.py", "upgrade.py", "webhook.py"},
+        },
+    }
+    for domain, expected in expected_domains.items():
+        domain_dir = api_dir / domain
+        assert (domain_dir / "router.py").is_file()
+        for layer, filenames in expected.items():
+            layer_dir = domain_dir / layer
+            assert (layer_dir / "__init__.py").is_file()
+            assert filenames <= {path.name for path in layer_dir.glob("*.py")}
+
+
+def test_fastapi_app_uses_api_router_composition_entrypoint():
+    """Keep application startup decoupled from individual business-domain routers."""
+    main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from .api.router import include_api_routers" in main
+    assert "include_api_routers(app)" in main
+    assert "from .api.routers" not in main
+
+
 def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():
     dockerignore = (AGENT_ROOT / ".dockerignore").read_text(encoding="utf-8")
 

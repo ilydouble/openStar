@@ -5,15 +5,16 @@ All LLM calls and external services are mocked.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from icore_agent.main import app
 from icore_agent.engine.orchestrator import create_orchestrator
-
+from icore_agent.main import app
 
 # ── TestClient (sync) ──────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def client():
@@ -46,9 +47,9 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.create_orchestrator")
-@patch("icore_agent.api.routers.agent.attachments")
-@patch("icore_agent.api.routers.agent.memory")
+@patch("icore_agent.api.agent.handlers.chat.create_orchestrator")
+@patch("icore_agent.api.agent.handlers.chat.attachments")
+@patch("icore_agent.api.agent.handlers.chat.memory")
 def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
@@ -62,7 +63,8 @@ def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, cli
 
     resp = client.post(
         "/api/v1/agent/chat",
-        json={"message": "Hello", "stream": False, "session_id": "test-session"},
+        json={"message": "Hello", "stream": False,
+              "session_id": "test-session"},
         headers=_auth_headers(client),
     )
     assert resp.status_code == 200
@@ -73,7 +75,7 @@ def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, cli
 
 # ── Sequential endpoint ────────────────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.SequentialAgent")
+@patch("icore_agent.api.agent.handlers.sequential.SequentialAgent")
 def test_sequential_endpoint_success(mock_seq_cls, client):
     from icore_agent.engine.sequential.agent import SequentialResult
     mock_instance = MagicMock()
@@ -95,12 +97,13 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.attachments")
-@patch("icore_agent.api.routers.agent.memory")
+@patch("icore_agent.api.agent.handlers.session.attachments")
+@patch("icore_agent.api.agent.handlers.session.memory")
 def test_clear_session(mock_memory, mock_attachments, client):
     mock_memory.clear = AsyncMock()
     mock_attachments.clear = AsyncMock()
-    resp = client.delete("/api/v1/agent/session/my-session", headers=_auth_headers(client))
+    resp = client.delete("/api/v1/agent/session/my-session",
+                         headers=_auth_headers(client))
     assert resp.status_code == 200
     assert resp.json()["cleared"] is True
     mock_memory.clear.assert_awaited_once_with("my-session")

@@ -38,6 +38,13 @@ type objectRequest struct {
 	ExpiresIn int    `json:"expires_in"`
 }
 
+type presignPutRequest struct {
+	Bucket      string `json:"bucket"`
+	ObjectKey   string `json:"object_key"`
+	ContentType string `json:"content_type"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
 func toCreateMultipartDomain(request createMultipartRequest) domain.CreateMultipartRequest {
 	return domain.CreateMultipartRequest{
 		Bucket:      request.Bucket,

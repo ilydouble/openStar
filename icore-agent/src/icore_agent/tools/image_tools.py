@@ -181,9 +181,8 @@ def generate_image(
     except Exception as exc:
         log.warning("generate_image_local_save_failed", error=str(exc))
 
-    # Prefer our own /images endpoint so the link does not expire with the
-    # 7-day signature on the Zhipu CDN URL.
-    display_url = f"/api/v1/agent/images/{local_rel}" if local_rel else remote_url
+    # No legacy /api/v1/agent/images route remains; return the provider URL.
+    display_url = remote_url
     lines = [
         f"Image generated for prompt: {prompt[:200]}",
         f"Markdown: ![generated]({display_url})",

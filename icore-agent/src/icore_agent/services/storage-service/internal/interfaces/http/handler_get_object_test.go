@@ -29,6 +29,9 @@ func (repo fakeObjectRepository) AbortMultipartUpload(context.Context, domain.Ab
 func (repo fakeObjectRepository) PresignGetObject(context.Context, domain.ObjectRef, int) (string, error) {
 	return "", nil
 }
+func (repo fakeObjectRepository) PresignPutObject(context.Context, domain.ObjectRef, string, int) (string, error) {
+	return "https://upload.example.com/files/demo-object", nil
+}
 func (repo fakeObjectRepository) StatObject(context.Context, domain.ObjectRef) (domain.ObjectStat, error) {
 	return domain.ObjectStat{}, nil
 }
@@ -82,6 +85,29 @@ func TestHandleGetObjectRequiresStorageToken(t *testing.T) {
 
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestHandlePresignPutReturnsUploadURL(t *testing.T) {
+	service := appstorage.NewService(fakeObjectRepository{body: []byte("image-bytes")})
+	router := NewRouter(NewHandler(service, "secret-token"))
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/presign/put",
+		strings.NewReader(`{"bucket":"icore-files","object_key":"files/user-1/file-1","content_type":"text/plain","expires_in":600}`),
+	)
+	request.Header.Set(storageServiceTokenHeader, "secret-token")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"url":"https://upload.example.com/files/demo-object"`) {
+		t.Fatalf("unexpected body %s", response.Body.String())
 	}
 }
 

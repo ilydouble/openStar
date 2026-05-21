@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from ..envelope import ApiEnvelopeRoute
 from .handlers import (
     add_team_member,
     capture_lead,
@@ -25,7 +26,11 @@ from .schemas import (
     TrialRegistrationResponse,
 )
 
-router = APIRouter(prefix="/api/v1/account", tags=["account"])
+router = APIRouter(
+    prefix="/api/v1/account",
+    tags=["account"],
+    route_class=ApiEnvelopeRoute,
+)
 
 router.post(
     "/send-verification-code",

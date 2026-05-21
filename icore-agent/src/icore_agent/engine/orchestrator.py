@@ -233,9 +233,8 @@ def _make_scoped_image_tool(session_id: str):
 def _make_scoped_knowledge_tool(session_id: str):
     """Bind session_id as tenant_code so LLM doesn't have to know it.
 
-    Files attached via /attach are stored in ChromaDB under
-    tenant_code=session_id; without this closure the LLM passes "" and hits
-    the shared collection, missing every session-scoped upload.
+    Knowledge collections are scoped by tenant_code=session_id; without this
+    closure the LLM passes "" and hits the shared collection.
     """
     try:
         from .agents.knowledge import knowledge_agent_tool as _knowledge_agent_tool_raw

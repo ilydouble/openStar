@@ -143,6 +143,26 @@ func (handler *Handler) HandlePresignGet(ctx *sharedhttp.Context) {
 	sharedhttp.WriteJSON(ctx, http.StatusOK, map[string]string{"url": url})
 }
 
+func (handler *Handler) HandlePresignPut(ctx *sharedhttp.Context) {
+	var request presignPutRequest
+	if !sharedhttp.DecodeJSON(ctx, &request, sharedhttp.DefaultJSONBodyLimit) {
+		return
+	}
+
+	url, err := handler.storageService.PresignPutObject(
+		ctx.Request.Context(),
+		domain.ObjectRef{Bucket: request.Bucket, ObjectKey: request.ObjectKey},
+		request.ContentType,
+		request.ExpiresIn,
+	)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+
+	sharedhttp.WriteJSON(ctx, http.StatusOK, map[string]string{"url": url})
+}
+
 func (handler *Handler) HandleStatObject(ctx *sharedhttp.Context) {
 	var request objectRequest
 	if !sharedhttp.DecodeJSON(ctx, &request, sharedhttp.DefaultJSONBodyLimit) {

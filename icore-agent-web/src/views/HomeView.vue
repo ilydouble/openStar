@@ -366,14 +366,14 @@
                 <div v-if="composerAttachments.length || uploading" class="mt-2 flex flex-wrap gap-2 justify-center">
                   <div
                     v-for="att in composerAttachments"
-                    :key="att.filename"
+                    :key="att.file_uuid"
                     class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                            border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                   >
                     <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
-                    <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                    <span class="max-w-[160px] truncate">{{ att.original_filename || att.filename }}</span>
                     <span :class="att.mode === 'rag'
                       ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                       : att.mode === 'data'
@@ -381,7 +381,7 @@
                       : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
                       {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                     </span>
-                    <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                    <button @click="deleteAttachment(att.file_uuid)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                       <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                   </div>
@@ -531,14 +531,14 @@
               <div v-if="composerAttachments.length || uploading" class="flex flex-wrap gap-2">
                 <div
                   v-for="att in composerAttachments"
-                  :key="att.filename"
+                  :key="att.file_uuid"
                   class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                          border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                 >
                   <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
-                  <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                  <span class="max-w-[160px] truncate">{{ att.original_filename || att.filename }}</span>
                   <span :class="att.mode === 'rag'
                     ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                     : att.mode === 'data'
@@ -546,7 +546,7 @@
                     : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
                     {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                   </span>
-                  <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                  <button @click="deleteAttachment(att.file_uuid)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                     <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
                   </button>
                 </div>
@@ -588,14 +588,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   chatStream,
+  deleteFileAsset,
   getSessionState,
   newSessionId,
-  attachFile,
-  attachImage,
-  attachData,
-  imageUrl,
-  listAttachments,
-  removeAttachment,
+  uploadFileAsset,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
@@ -746,9 +742,7 @@ const composerAttachments = computed(() =>
 )
 
 async function refreshAttachments() {
-  try {
-    attachmentList.value = await listAttachments(sessionId.value)
-  } catch { /* 静默失败 */ }
+  // 文件资产由当前会话前端状态持有，旧 session-scoped attachment API 已移除。
 }
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
@@ -765,15 +759,15 @@ async function handleFileSelected(file) {
   try {
     const ext = extOf(file.name)
     if (IMAGE_EXTS.has(ext)) {
-      const { ref: imageRef, filename: savedName } = await attachImage(file, sessionId.value)
-      await refreshAttachments()
-      const url = imageUrl(imageRef)
+      const uploaded = await uploadFileAsset(file)
+      attachmentList.value = [...attachmentList.value, uploaded]
+      const url = uploaded.download_url || URL.createObjectURL(file)
       if (url) {
         messages.value.push({
           id: `${Date.now()}-u`,
           role: 'user',
           type: 'image',
-          images: [{ content: url, filename: savedName || file.name }],
+          images: [{ content: url, filename: uploaded.original_filename || file.name }],
         })
         ensureChatRoute()
         await scrollBottom()
@@ -783,8 +777,8 @@ async function handleFileSelected(file) {
         }
       }
     } else {
-      await attachFile(file, sessionId.value)
-      await refreshAttachments()
+      const uploaded = await uploadFileAsset(file)
+      attachmentList.value = [...attachmentList.value, uploaded]
     }
     saveRecentSession()
     await syncCurrentProject()
@@ -795,10 +789,10 @@ async function handleFileSelected(file) {
   }
 }
 
-async function deleteAttachment(filename) {
+async function deleteAttachment(fileUuid) {
   try {
-    await removeAttachment(sessionId.value, filename)
-    await refreshAttachments()
+    await deleteFileAsset(fileUuid)
+    attachmentList.value = attachmentList.value.filter((item) => item.file_uuid !== fileUuid)
     saveRecentSession()
     await syncCurrentProject()
   } catch (err) {
@@ -1047,7 +1041,7 @@ async function hydrateCurrentSession() {
       stepsCollapsed: true,
       streaming: false,
     }))
-    attachmentList.value = state.attachments || []
+    attachmentList.value = []
     if (!activeShortcutId.value) {
       const recent = recentSessions.value.find((item) => item.sessionId === sessionId.value)
       const matched = scenarioTemplates.value.find((item) => item.title === recent?.title)
@@ -1124,6 +1118,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   try {
     for await (const evt of chatStream(requestText, sessionId.value, agentHint, {
       signal: ac.signal,
+      fileUuids: attachmentList.value.map((item) => item.file_uuid).filter(Boolean),
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1202,16 +1197,22 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
   try {
     const uploadedImages = []
     for (const imageFile of imgs) {
-      const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
-      const url = imageUrl(imageRef)
-      if (url) uploadedImages.push({ content: url, filename: savedName || imageFile.name })
+      const uploaded = await uploadFileAsset(imageFile)
+      attachmentList.value = [...attachmentList.value, uploaded]
+      const url = uploaded.download_url || URL.createObjectURL(imageFile)
+      if (url) {
+        uploadedImages.push({
+          content: url,
+          filename: uploaded.original_filename || imageFile.name,
+        })
+      }
     }
     const uploadedDataMeta = []
     for (const df of datas) {
-      const meta = await attachData(df, sessionId.value)
-      uploadedDataMeta.push({ filename: meta.filename || df.name })
+      const meta = await uploadFileAsset(df)
+      attachmentList.value = [...attachmentList.value, meta]
+      uploadedDataMeta.push({ filename: meta.original_filename || df.name })
     }
-    await refreshAttachments()
 
     const hasImages = uploadedImages.length > 0
     const hasData = uploadedDataMeta.length > 0

@@ -19,6 +19,7 @@ _DOMAINS = (
     "rag",
     "tools",
     "media",
+    "storage",
 )
 
 

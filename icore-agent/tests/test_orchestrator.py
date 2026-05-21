@@ -29,12 +29,21 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
 
+def _api_data(resp):
+    """Return the ApiEnvelope data object from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["message"]
+    assert payload["timestamp"]
+    return payload["data"]
+
+
 # ── Health endpoints ───────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["status"] == "ok"
     assert "version" in data
 
@@ -42,21 +51,16 @@ def test_health_returns_ok(client):
 def test_ready_returns_ready(client):
     resp = client.get("/ready")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ready"
+    assert _api_data(resp)["status"] == "ready"
 
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
-@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.attachments")
 @patch("icore_agent.interfaces.http.v1.agent.handlers.chat.memory")
-def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, client):
+def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
-    mock_attachments.get_inline_text = AsyncMock(return_value="")
-    mock_attachments.has_rag_docs = AsyncMock(return_value=False)
-    mock_attachments.get_image_refs = AsyncMock(return_value=[])
-    mock_attachments.get_data_refs = AsyncMock(return_value=[])
 
     mock_agent = MagicMock(return_value="Hello from iCore Agent!")
     mock_create_orch.return_value = mock_agent
@@ -68,7 +72,7 @@ def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, cli
         headers=_auth_headers(client),
     )
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["reply"] == "Hello from iCore Agent!"
     assert data["session_id"] == "test-session"
 
@@ -90,24 +94,21 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
         headers=_auth_headers(client),
     )
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["status"] == "complete"
     assert data["steps"] == 2
 
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.session.attachments")
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
-def test_clear_session(mock_memory, mock_attachments, client):
+def test_clear_session(mock_memory, client):
     mock_memory.clear = AsyncMock()
-    mock_attachments.clear = AsyncMock()
     resp = client.delete("/api/v1/agent/session/my-session",
                          headers=_auth_headers(client))
     assert resp.status_code == 200
-    assert resp.json()["cleared"] is True
+    assert _api_data(resp)["cleared"] is True
     mock_memory.clear.assert_awaited_once_with("my-session")
-    mock_attachments.clear.assert_awaited_once_with("my-session")
 
 
 # ── Orchestrator factory ───────────────────────────────────────────────────

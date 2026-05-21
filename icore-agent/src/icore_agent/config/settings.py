@@ -12,6 +12,7 @@ from .media import MediaSettings
 from .memory import MemorySettings
 from .rag import RagSettings
 from .sequential import SequentialSettings
+from .storage import StorageSettings
 from .tools import ToolsSettings
 
 
@@ -26,6 +27,7 @@ class Settings(
     RagSettings,
     ToolsSettings,
     MediaSettings,
+    StorageSettings,
 ):
     """Aggregate runtime settings assembled from all domain-specific groups."""
 

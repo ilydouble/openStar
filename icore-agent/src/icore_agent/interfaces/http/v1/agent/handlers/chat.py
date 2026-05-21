@@ -7,19 +7,22 @@ import json
 import re
 import threading
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any, Protocol, cast
 
+import pandas as pd
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from icore_agent.application.account import AccountService
+from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
+from icore_agent.application.knowledge.parsers import parse_file
 from icore_agent.engine.callback_ctx import reset_parent_callback, set_parent_callback
-from icore_agent.infrastructure.memory.attachment_store import attachments
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
-from ...dependencies import get_account_service, get_current_user
+from ...dependencies import get_account_service, get_current_user, get_file_asset_service
 from ..schemas.chat import ChatRequest, ChatResponse
 
 log = get_logger(__name__)
@@ -112,28 +115,142 @@ def _to_strands_messages(history: list[dict]) -> list[dict]:
 
 async def _load_context(
     session_id: str,
+    file_uuids: list[str] | None = None,
+    user_id: str = "",
+    file_service: FileAssetService | None = None,
 ) -> tuple[str | None, list[dict], str | None, bool, list[dict], list[dict]]:
-    """Fetch Redis history, inline attachments, image and data refs concurrently."""
+    """Fetch Redis history and UUID-addressed file context."""
     try:
-        (summary, history), inline_text, has_rag, image_refs, data_refs = await asyncio.gather(
-            memory.get_context(session_id),
-            attachments.get_inline_text(session_id),
-            attachments.has_rag_docs(session_id),
-            attachments.get_image_refs(session_id),
-            attachments.get_data_refs(session_id),
-        )
+        summary, history = await memory.get_context(session_id)
     except Exception as exc:
         log.warning("load_context_fallback",
                     session_id=session_id, error=str(exc))
         return (None, [], None, False, [], [])
+    inline_text, image_refs, data_refs = _load_file_context(
+        file_uuids=file_uuids or [],
+        user_id=user_id,
+        file_service=file_service,
+    )
     return (
         summary or None,
         _to_strands_messages(history),
         inline_text or None,
-        has_rag,
-        image_refs or [],
-        data_refs or [],
+        False,
+        image_refs,
+        data_refs,
     )
+
+
+def _load_file_context(
+    *,
+    file_uuids: list[str],
+    user_id: str,
+    file_service: FileAssetService | None,
+) -> tuple[str | None, list[dict], list[dict]]:
+    """Load files by UUID into orchestrator context buckets."""
+    if not file_uuids or file_service is None or not user_id:
+        return None, [], []
+
+    inline_parts: list[str] = []
+    image_refs: list[dict] = []
+    data_refs: list[dict] = []
+    for file_uuid in _dedupe_file_uuids(file_uuids):
+        try:
+            asset = file_service.get_owned_asset(
+                uploader_public_id=user_id,
+                file_uuid=file_uuid,
+            )
+            if asset.content_type.startswith("image/"):
+                image_refs.append({
+                    "filename": asset.original_filename,
+                    "ref": file_service.create_download_url(
+                        uploader_public_id=user_id,
+                        file_uuid=file_uuid,
+                    ),
+                    "file_uuid": asset.file_uuid,
+                })
+                continue
+            if _is_data_file(asset.original_filename, asset.content_type):
+                data_refs.append(_materialize_data_ref(
+                    file_service=file_service,
+                    user_id=user_id,
+                    file_uuid=file_uuid,
+                ))
+                continue
+            content = parse_file(
+                asset.original_filename,
+                file_service.read_file_bytes(
+                    uploader_public_id=user_id,
+                    file_uuid=file_uuid,
+                ),
+            )
+            inline_parts.append(
+                f"### {asset.original_filename} ({asset.file_uuid})\n\n{content}"
+            )
+        except FileAssetNotFoundError:
+            log.warning("chat_file_not_found",
+                        file_uuid=file_uuid, user_id=user_id)
+        except Exception as exc:
+            log.warning("chat_file_context_failed",
+                        file_uuid=file_uuid, error=str(exc))
+    inline_text = "\n\n".join(inline_parts) if inline_parts else None
+    return inline_text, image_refs, data_refs
+
+
+def _dedupe_file_uuids(file_uuids: list[str]) -> list[str]:
+    """Return file UUIDs in first-seen order without duplicates."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for file_uuid in file_uuids:
+        normalized = str(file_uuid).strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            ordered.append(normalized)
+    return ordered
+
+
+def _is_data_file(filename: str, content_type: str) -> bool:
+    """Return whether a file should be routed to the data agent."""
+    suffix = Path(filename).suffix.lower()
+    return suffix in {".csv", ".xlsx", ".xls"} or content_type in {
+        "text/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
+
+def _materialize_data_ref(
+    *,
+    file_service: FileAssetService,
+    user_id: str,
+    file_uuid: str,
+) -> dict:
+    """Create a local temp copy for data-agent tools and collect preview metadata."""
+    asset, path = file_service.materialize_temp_file(
+        uploader_public_id=user_id,
+        file_uuid=file_uuid,
+    )
+    record = {
+        "filename": asset.original_filename,
+        "file_uuid": asset.file_uuid,
+        "abs_path": str(path),
+        "columns": [],
+        "row_count": None,
+        "preview_md": "",
+        "preview_error": "",
+    }
+    try:
+        frame = pd.read_csv(path) if path.suffix.lower(
+        ) == ".csv" else pd.read_excel(path)
+        record["row_count"] = int(len(frame))
+        record["columns"] = [
+            {"name": str(name), "dtype": str(dtype)}
+            for name, dtype in frame.dtypes.items()
+        ]
+        record["preview_md"] = frame.head(10).to_markdown(index=False)
+    except Exception as exc:
+        record["preview_error"] = str(exc)
+    return record
 
 
 def _resolve_routing(message: str, agent_hint: str) -> tuple[str, bool, str | None]:
@@ -157,6 +274,8 @@ async def _stream_agent(
     session_id: str,
     agent_hint: str = "",
     runtime_user: dict | None = None,
+    file_uuids: list[str] | None = None,
+    file_service: FileAssetService | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream agent tokens, tool status events, and heartbeat frames over SSE."""
     loop = asyncio.get_event_loop()
@@ -174,7 +293,10 @@ async def _stream_agent(
     )
 
     summary, strands_history, inline_text, has_rag, image_refs, data_refs = await _load_context(
-        session_id
+        session_id,
+        file_uuids=file_uuids,
+        user_id=str((runtime_user or {}).get("id") or ""),
+        file_service=file_service,
     )
     if has_rag or image_refs or data_refs:
         enable_tools = True
@@ -311,6 +433,7 @@ async def chat(
     req: ChatRequest,
     user: dict = Depends(get_current_user),
     account_service: AccountService = Depends(get_account_service),
+    file_service: FileAssetService = Depends(get_file_asset_service),
 ):
     """Run a streaming or non-streaming agent chat turn."""
     allowed, reason = account_service.check_quota(user["id"], "messages")
@@ -330,8 +453,14 @@ async def chat(
     if req.stream:
         account_service.consume_quota(user["id"], "messages")
         return StreamingResponse(
-            _stream_agent(req.message, req.session_id,
-                          req.agent_hint, runtime_user=user),
+            _stream_agent(
+                req.message,
+                req.session_id,
+                req.agent_hint,
+                runtime_user=user,
+                file_uuids=req.file_uuids,
+                file_service=file_service,
+            ),
             media_type="text/event-stream",
             headers={
                 "X-Session-Id": req.session_id,
@@ -342,7 +471,10 @@ async def chat(
         )
 
     summary, strands_history, inline_text, has_rag, image_refs, data_refs = await _load_context(
-        req.session_id
+        req.session_id,
+        file_uuids=req.file_uuids,
+        user_id=user["id"],
+        file_service=file_service,
     )
     if has_rag or image_refs or data_refs:
         enable_tools = True

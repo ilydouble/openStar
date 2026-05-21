@@ -3,6 +3,7 @@ import { authTrace } from '../auth/trace.js'
 import { readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
+const FILE_BASE = '/api/v1/files'
 
 /** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
 function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
@@ -64,6 +65,7 @@ function *yieldTokenChunks(text) {
  */
 export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
   const signal = options && options.signal
+  const fileUuids = Array.isArray(options?.fileUuids) ? options.fileUuids : []
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -72,6 +74,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       session_id: sessionId,
       stream: true,
       agent_hint: agentHint || '',
+      file_uuids: fileUuids,
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -154,7 +157,7 @@ export async function chat(message, sessionId, agentHint = '') {
     }),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
@@ -167,7 +170,7 @@ export async function runSequential(task, useDocker = false) {
     body: JSON.stringify({ task, use_docker: useDocker }),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
@@ -179,7 +182,7 @@ export async function clearSession(sessionId) {
     headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 export async function getSessionState(sessionId) {
@@ -187,7 +190,7 @@ export async function getSessionState(sessionId) {
     headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /** 生成随机 session id */
@@ -195,105 +198,107 @@ export function newSessionId() {
   return crypto.randomUUID()
 }
 
-// ── 附件管理 ──────────────────────────────────────────────────────────────
+// ── 文件资产管理 ──────────────────────────────────────────────────────────
 
 /**
- * 上传文件并附加到会话上下文
+ * 计算文件的 SHA-256。
  * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, char_count: number, mode: string}>}
+ * @returns {Promise<string>}
  */
-export async function attachFile(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders(),
-    body: form,
-  })
-  if (!resp.ok) {
-    await readAgentError(resp)
-  }
-  return resp.json()
+async function sha256File(file) {
+  const buffer = await file.arrayBuffer()
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 /**
- * 上传图片（jpg/png/webp 等）并附加到会话上下文
+ * 上传用户文件资产：申请 URL、直传 storage-service、complete 校验。
  * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, ref: string, size: number, mode: string}>}
+ * @returns {Promise<{file_uuid: string, original_filename: string, filename: string,
+ *   content_type: string, storage_etag: string|null, mode: string, download_url?: string}>}
  */
-export async function attachImage(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/image`, {
+export async function uploadFileAsset(file) {
+  const contentType = file.type || 'application/octet-stream'
+  const checksum = await sha256File(file)
+  const uploadResp = await fetch(`${FILE_BASE}/upload-url/`, {
     method: 'POST',
-    headers: mergeAgentAuthHeaders(),
-    body: form,
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-upload-url'),
+    body: JSON.stringify({
+      original_filename: file.name || 'upload',
+      content_type: contentType,
+      checksum_sha256: checksum,
+    }),
   })
-  if (!resp.ok) {
-    await readAgentError(resp)
+  if (!uploadResp.ok) await readAgentError(uploadResp)
+  const upload = await readJsonResponse(uploadResp)
+
+  const putResp = await fetch(upload.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  })
+  if (!putResp.ok) {
+    throw new Error(`Upload failed: HTTP ${putResp.status}`)
   }
-  return resp.json()
+
+  const completeResp = await fetch(`${FILE_BASE}/${upload.file_uuid}/complete/`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-complete'),
+    body: JSON.stringify({ checksum_sha256: checksum }),
+  })
+  if (!completeResp.ok) await readAgentError(completeResp)
+  const completed = await readJsonResponse(completeResp)
+
+  let downloadUrl = ''
+  if (contentType.startsWith('image/')) {
+    try {
+      const download = await getFileDownloadUrl(upload.file_uuid)
+      downloadUrl = download.download_url
+    } catch {
+      downloadUrl = ''
+    }
+  }
+
+  return {
+    ...completed,
+    filename: completed.original_filename,
+    mode: assetMode(file.name || '', contentType),
+    download_url: downloadUrl,
+  }
+}
+
+function assetMode(filename, contentType) {
+  const lower = filename.toLowerCase()
+  if (contentType.startsWith('image/')) return 'image'
+  if (lower.endsWith('.csv') || lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'data'
+  return 'file'
 }
 
 /**
- * 上传结构化数据文件（.csv / .xlsx / .xls）并落盘到 data_agent 可读的 workspace
- * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, ref: string, size: number, ext: string,
- *   row_count: number|null, columns: Array<{name:string,dtype:string}>,
- *   preview_md: string, preview_error: string, mode: string}>}
+ * 获取文件下载 URL。
+ * @param {string} fileUuid
  */
-export async function attachData(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/data`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders(),
-    body: form,
-  })
-  if (!resp.ok) {
-    await readAgentError(resp)
-  }
-  return resp.json()
-}
-
-/** 给一个会话内的图片 ref（形如 `{session_id}/{filename}`）构造前端可访问的 URL */
-export function imageUrl(ref) {
-  if (!ref) return ''
-  if (/^https?:\/\//i.test(ref)) return ref
-  return `${BASE}/images/${ref}`
-}
-
-/**
- * 列出当前会话的附件（不含文本内容）
- * @param {string} sessionId
- * @returns {Promise<Array<{filename: string, char_count: number, mode: string, uploaded_at: number}>>}
- */
-export async function listAttachments(sessionId) {
-  const resp = await fetch(`${BASE}/attachments/${sessionId}`, {
-    headers: mergeAgentAuthHeaders(),
+export async function getFileDownloadUrl(fileUuid) {
+  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/download-url/`, {
+    headers: mergeAgentAuthHeaders({}, 'files-download-url'),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
- * 删除指定附件
- * @param {string} sessionId
- * @param {string} filename
+ * 删除文件资产。
+ * @param {string} fileUuid
  */
-export async function removeAttachment(sessionId, filename) {
-  const resp = await fetch(
-    `${BASE}/attachments/${sessionId}/${encodeURIComponent(filename)}`,
-    { method: 'DELETE', headers: mergeAgentAuthHeaders() },
-  )
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-  return resp.json()
+export async function deleteFileAsset(fileUuid) {
+  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/`, {
+    method: 'DELETE',
+    headers: mergeAgentAuthHeaders({}, 'files-delete'),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
 }
 
 /**

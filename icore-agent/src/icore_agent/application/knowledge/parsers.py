@@ -1,4 +1,4 @@
-"""File parsing helpers shared by knowledge and attachment workflows."""
+"""File parsing helpers shared by knowledge and user file workflows."""
 
 from __future__ import annotations
 

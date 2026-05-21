@@ -6,6 +6,7 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
+from icore_agent.application.files import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.usage import UsageService
 from icore_agent.config import settings
@@ -28,6 +29,8 @@ from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresTeamRepository,
     PostgresUsageRepository,
 )
+from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
+from icore_agent.infrastructure.storage import StorageServiceClient
 
 from .users import serialize_user_profile
 
@@ -68,6 +71,16 @@ knowledge_service = KnowledgeService(
     rag_chunk_overlap=settings.rag_chunk_overlap,
     file_size_limit_mb=settings.file_ops_max_size_mb,
 )
+file_asset_service = FileAssetService(
+    repository=SqlAlchemyFileRepository(),
+    storage_client=StorageServiceClient(
+        base_url=settings.storage_service_url,
+        token=settings.storage_service_token,
+        timeout=settings.storage_service_timeout,
+    ),
+    bucket=settings.file_storage_bucket,
+    default_expires_in=settings.file_upload_url_expires_in,
+)
 
 
 def get_account_service() -> AccountService:
@@ -88,6 +101,11 @@ def get_usage_service() -> UsageService:
 def get_knowledge_service() -> KnowledgeService:
     """Return the singleton knowledge service used by HTTP handlers."""
     return knowledge_service
+
+
+def get_file_asset_service() -> FileAssetService:
+    """Return the singleton file asset service used by HTTP handlers."""
+    return file_asset_service
 
 
 def get_current_user(

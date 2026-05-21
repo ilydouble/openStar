@@ -9,6 +9,8 @@ When AUTH_ENABLED=false (default for dev), all requests pass through.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -49,7 +51,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         token = self._extract_token(request)
         if not token:
-            return JSONResponse({"code": 401, "message": "Missing Bearer token"}, status_code=401)
+            return _auth_error_response(401, "Missing Bearer token")
 
         local_user = self._validate_local_token(token)
         if local_user is not None:
@@ -58,7 +60,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         user_info = await self._validate_token(token)
         if user_info is None:
-            return JSONResponse({"code": 401, "message": "Invalid or expired token"}, status_code=401)
+            return _auth_error_response(401, "Invalid or expired token")
 
         # Attach user info to request state for downstream use
         request.state.user = user_info
@@ -109,3 +111,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return account_repository.get_user_by_token(token)
 
         return account_repository.get_user_by_id(claims["sub"])
+
+
+def _auth_error_response(status_code: int, message: str) -> JSONResponse:
+    """Return a complete ApiEnvelope for auth middleware short-circuits."""
+    return JSONResponse(
+        {
+            "code": status_code,
+            "message": message,
+            "data": None,
+            "error_code": HTTPStatus(status_code).phrase,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+        status_code=status_code,
+    )

@@ -107,14 +107,14 @@
       <div v-if="attachmentList.length" class="mx-auto mb-2 max-w-3xl flex flex-wrap gap-2">
         <div
           v-for="att in attachmentList"
-          :key="att.filename"
+          :key="att.file_uuid"
           class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors
             border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
         >
           <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
-          <span class="max-w-[120px] truncate">{{ att.filename }}</span>
+          <span class="max-w-[120px] truncate">{{ att.original_filename || att.filename }}</span>
           <span
             :class="att.mode === 'rag'
               ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
@@ -123,7 +123,7 @@
               att.mode === 'rag' ? t('chat.attachmentRag') : t('chat.attachmentInline')
             }}</span>
           <button
-            @click="deleteAttachment(att.filename)"
+            @click="deleteAttachment(att.file_uuid)"
             class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400"
           >
             <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import { chatStream, newSessionId, attachFile, listAttachments, removeAttachment } from '../api/agent.js'
+import { chatStream, newSessionId, deleteFileAsset, uploadFileAsset } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 
 const { t } = useI18n()
@@ -252,8 +252,8 @@ async function doUpload(file) {
   uploading.value = true
   uploadError.value = ''
   try {
-    await attachFile(file, sessionId.value)
-    await refreshAttachments()
+    const uploaded = await uploadFileAsset(file)
+    attachmentList.value = [...attachmentList.value, uploaded]
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
   } finally {
@@ -262,11 +262,7 @@ async function doUpload(file) {
 }
 
 async function refreshAttachments() {
-  try {
-    attachmentList.value = await listAttachments(sessionId.value)
-  } catch {
-    // 静默失败，不影响对话
-  }
+  // 文件资产由当前会话前端状态持有，历史会话不再从旧附件 API 拉取。
 }
 
 async function handleFileUpload(e) {
@@ -276,10 +272,10 @@ async function handleFileUpload(e) {
   await doUpload(file)
 }
 
-async function deleteAttachment(filename) {
+async function deleteAttachment(fileUuid) {
   try {
-    await removeAttachment(sessionId.value, filename)
-    await refreshAttachments()
+    await deleteFileAsset(fileUuid)
+    attachmentList.value = attachmentList.value.filter((item) => item.file_uuid !== fileUuid)
   } catch (err) {
     uploadError.value = err.message || t('chat.deleteFailed')
   }
@@ -337,7 +333,9 @@ async function sendMessage(msg) {
   }
 
   try {
-    for await (const evt of chatStream(msg, sessionId.value)) {
+    for await (const evt of chatStream(msg, sessionId.value, '', {
+      fileUuids: attachmentList.value.map((item) => item.file_uuid).filter(Boolean),
+    })) {
       if (!evt) continue
       if (evt.kind === 'token') {
         const cur = messages.value[replyIndex]

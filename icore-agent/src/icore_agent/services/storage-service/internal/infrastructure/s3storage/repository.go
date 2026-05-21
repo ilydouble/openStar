@@ -142,6 +142,30 @@ func (repository *Repository) PresignGetObject(
 	return presigned.URL, nil
 }
 
+func (repository *Repository) PresignPutObject(
+	ctx context.Context,
+	ref domain.ObjectRef,
+	contentType string,
+	expiresIn int,
+) (string, error) {
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	presigned, err := repository.presign.PresignPutObject(
+		context.Background(),
+		&s3.PutObjectInput{
+			Bucket:      aws.String(ref.Bucket),
+			Key:         aws.String(ref.ObjectKey),
+			ContentType: aws.String(contentType),
+		},
+		func(options *s3.PresignOptions) { options.Expires = expiresDuration(expiresIn) },
+	)
+	if err != nil {
+		return "", err
+	}
+	return presigned.URL, nil
+}
+
 func (repository *Repository) StatObject(ctx context.Context, ref domain.ObjectRef) (domain.ObjectStat, error) {
 	out, err := repository.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(ref.Bucket),

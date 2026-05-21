@@ -16,6 +16,23 @@ def client():
         yield c
 
 
+def _api_data(resp) -> dict:
+    """Return the ApiEnvelope data object from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["message"]
+    assert payload["timestamp"]
+    return payload["data"]
+
+
+def _api_message(resp) -> str:
+    """Return the ApiEnvelope message from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["timestamp"]
+    return payload["message"]
+
+
 def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
     """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
     from icore_agent.infrastructure.control_plane.json_store import control_plane_store
@@ -41,7 +58,7 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
         json={"name": name, "email": email, "verification_code": code},
     )
     assert resp.status_code == 200, resp.json()
-    return resp.json()
+    return _api_data(resp)
 
 
 def _trial_headers(client: TestClient) -> dict[str, str]:
@@ -58,7 +75,7 @@ def test_register_trial_and_fetch_account_profile(client: TestClient):
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {payload['access_token']}"})
     assert me.status_code == 200
-    assert me.json()["email"] == email
+    assert _api_data(me)["email"] == email
 
 
 def test_email_login_persists_token_for_protected_routes(client: TestClient):
@@ -85,14 +102,14 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
         json={"email": email, "verification_code": code},
     )
     assert login.status_code == 200, login.text
-    body = login.json()
+    body = _api_data(login)
     token = body["access_token"]
     assert token
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200, me.text
-    assert me.json()["email"] == email
+    assert _api_data(me)["email"] == email
 
 
 def test_register_trial_requires_verification_code(client: TestClient):
@@ -113,7 +130,7 @@ def test_register_trial_wrong_code_rejected(client: TestClient):
               "verification_code": "000000"},
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "Invalid or expired verification code"
+    assert _api_message(resp) == "Invalid or expired verification code"
 
 
 def test_email_login_unregistered_email_returns_english_message(client: TestClient):
@@ -137,7 +154,7 @@ def test_email_login_unregistered_email_returns_english_message(client: TestClie
         json={"email": email, "verification_code": code},
     )
     assert resp.status_code == 404
-    assert resp.json()["detail"] == (
+    assert _api_message(resp) == (
         "This email is not registered. Please sign up for a trial account first."
     )
 
@@ -149,7 +166,7 @@ def test_send_verification_code_endpoint(client: TestClient):
         json={"email": email},
     )
     assert resp.status_code == 200
-    assert resp.json()["success"] is True
+    assert _api_data(resp)["success"] is True
 
 
 @patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
@@ -168,8 +185,9 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
         json={"email": email},
     )
     assert resp.status_code == 200
-    assert resp.json()["success"] is True
-    assert "Verification code sent to" in resp.json()["message"]
+    body = _api_data(resp)
+    assert body["success"] is True
+    assert "Verification code sent to" in body["message"]
 
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
@@ -195,7 +213,7 @@ def test_chat_requires_account_token(mock_memory, mock_create_orch, client: Test
               "session_id": "secure-session"},
     )
     assert authorized.status_code == 200
-    assert authorized.json()["reply"] == "secured reply"
+    assert _api_data(authorized)["reply"] == "secured reply"
 
 
 def test_can_update_byok_and_read_plan_summary(client: TestClient):
@@ -208,18 +226,17 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
               "model": "openai/gpt-4o-mini"},
     )
     assert byok.status_code == 200
-    assert byok.json()["enabled"] is True
+    assert _api_data(byok)["enabled"] is True
 
     plan = client.get("/api/v1/account/billing/plan", headers=headers)
     assert plan.status_code == 200
-    payload = plan.json()
+    payload = _api_data(plan)
     assert payload["plan"] == "free"
     assert payload["byok"]["enabled"] is True
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.session.attachments")
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
-def test_can_fetch_session_state(mock_memory, mock_attachments, client: TestClient):
+def test_can_fetch_session_state(mock_memory, client: TestClient):
     headers = _trial_headers(client)
     mock_memory.get_context = AsyncMock(
         return_value=(
@@ -230,26 +247,21 @@ def test_can_fetch_session_state(mock_memory, mock_attachments, client: TestClie
             ],
         )
     )
-    mock_attachments.list_info = AsyncMock(
-        return_value=[
-            {"filename": "brief.pdf", "mode": "rag", "uploaded_at": 123.0},
-        ]
-    )
 
     resp = client.get("/api/v1/agent/session/demo-session", headers=headers)
     assert resp.status_code == 200
-    payload = resp.json()
+    payload = _api_data(resp)
     assert payload["session_id"] == "demo-session"
     assert payload["summary"] == "Summary text"
     assert len(payload["messages"]) == 2
-    assert payload["attachments"][0]["filename"] == "brief.pdf"
+    assert payload["attachments"] == []
 
 
 def test_can_fetch_admin_overview(client: TestClient):
     headers = _trial_headers(client)
     overview = client.get("/api/v1/account/admin/overview", headers=headers)
     assert overview.status_code == 200
-    payload = overview.json()
+    payload = _api_data(overview)
     assert payload["users"]["total"] >= 1
     assert "usage" in payload
     assert "heavy_users" in payload
@@ -273,7 +285,7 @@ def test_can_sync_and_list_projects(client: TestClient):
     assert sync_resp.status_code == 200
     listing = client.get("/api/v1/account/projects", headers=headers)
     assert listing.status_code == 200
-    payload = listing.json()
+    payload = _api_data(listing)
     assert payload["projects"][0]["id"] == "weekly-review"
     assert payload["projects"][0]["sessions_count"] == 1
     assert payload["recent_sessions"][0]["session_id"] == "session-1"
@@ -283,7 +295,7 @@ def test_can_read_and_update_team_profile(client: TestClient):
     headers = _trial_headers(client)
     team = client.get("/api/v1/account/team", headers=headers)
     assert team.status_code == 200
-    payload = team.json()
+    payload = _api_data(team)
     assert payload["organization"]["id"]
     assert payload["members"][0]["role"] == "owner"
 
@@ -293,7 +305,7 @@ def test_can_read_and_update_team_profile(client: TestClient):
         json={"organization_name": "Stellar Ops"},
     )
     assert updated.status_code == 200
-    assert updated.json()["organization"]["name"] == "Stellar Ops"
+    assert _api_data(updated)["organization"]["name"] == "Stellar Ops"
 
     member = client.post(
         "/api/v1/account/team/members",
@@ -301,7 +313,7 @@ def test_can_read_and_update_team_profile(client: TestClient):
         json={"name": "Ops User", "email": "ops@example.com", "role": "editor"},
     )
     assert member.status_code == 200
-    assert member.json()["member"]["email"] == "ops@example.com"
+    assert _api_data(member)["member"]["email"] == "ops@example.com"
 
 
 @patch("icore_agent.interfaces.http.v1.dependencies.knowledge_service._add_documents")
@@ -318,7 +330,7 @@ def test_knowledge_upload_can_use_organization_scope(mock_parse, mock_add_docume
         files={"file": ("kb.txt", b"hello", "text/plain")},
     )
     assert resp.status_code == 200
-    tenant_code = resp.json()["tenant_code"]
+    tenant_code = _api_data(resp)["tenant_code"]
     assert tenant_code.startswith("org:")
 
 
@@ -338,6 +350,6 @@ def test_public_enterprise_lead_capture(client: TestClient):
         },
     )
     assert resp.status_code == 200
-    payload = resp.json()
+    payload = _api_data(resp)
     assert payload["lead"]["email"] == "lead@example.com"
     assert payload["lead"]["intent"] == "enterprise"

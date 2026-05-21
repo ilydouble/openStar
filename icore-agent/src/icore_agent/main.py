@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .infrastructure.control_plane.json_store import control_plane_store
 from .interfaces.http.v1.dependencies import usage_service
+from .interfaces.http.v1.envelope import install_api_envelope
 from .interfaces.http.v1.router import include_api_routers
 from .shared.http.middleware import (
     AuthMiddleware,
@@ -97,6 +98,8 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+
+    install_api_envelope(app)
 
     # ── CORS ──────────────────────────────────────────────
     app.add_middleware(

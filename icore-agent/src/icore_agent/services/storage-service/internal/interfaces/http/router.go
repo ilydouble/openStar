@@ -16,6 +16,7 @@ func NewRouter(handler *Handler) *sharedhttp.Router {
 	router.POST("/multipart/complete", auth, handler.HandleCompleteMultipart)
 	router.POST("/multipart/abort", auth, handler.HandleAbortMultipart)
 	router.POST("/presign/get", auth, handler.HandlePresignGet)
+	router.POST("/presign/put", auth, handler.HandlePresignPut)
 	router.POST("/objects/stat", auth, handler.HandleStatObject)
 	router.POST("/objects/delete", auth, handler.HandleDeleteObject)
 	router.GET("/objects/*object_path", auth, handler.HandleGetObject)

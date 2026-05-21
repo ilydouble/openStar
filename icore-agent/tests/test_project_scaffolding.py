@@ -191,7 +191,7 @@ def test_object_and_logging_infra_have_init_services():
 
     assert "minio-init:" in minio
     assert "mc mb --ignore-existing local/icore-agent-images" in minio
-    assert "mc mb --ignore-existing local/icore-agent-attachments" in minio
+    assert "mc mb --ignore-existing local/icore-files" in minio
 
     assert "kafka-init:" in kafka
     assert "--if-not-exists" in kafka
@@ -426,8 +426,12 @@ def test_http_interface_layer_is_split_by_business_domain():
             "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
         },
         "agent": {
-            "schemas": {"attachment.py", "chat.py", "sequential.py", "transcribe.py"},
-            "handlers": {"attachment.py", "chat.py", "media.py", "sequential.py", "session.py", "transcribe.py"},
+            "schemas": {"chat.py", "sequential.py", "transcribe.py"},
+            "handlers": {"chat.py", "sequential.py", "session.py", "transcribe.py"},
+        },
+        "files": {
+            "schemas": {"files.py"},
+            "handlers": {"files.py"},
         },
         "health": {
             "schemas": {"probe.py"},

@@ -8,6 +8,7 @@ from .memory import MemorySettings, memory_settings
 from .rag import RagSettings, rag_settings
 from .sequential import SequentialSettings, sequential_settings
 from .settings import Settings, app_settings, settings
+from .storage import StorageSettings, storage_settings
 from .tools import ToolsSettings, tools_settings
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "RagSettings",
     "SequentialSettings",
     "Settings",
+    "StorageSettings",
     "ToolsSettings",
     "app_settings",
     "auth_settings",
@@ -32,5 +34,6 @@ __all__ = [
     "rag_settings",
     "sequential_settings",
     "settings",
+    "storage_settings",
     "tools_settings",
 ]

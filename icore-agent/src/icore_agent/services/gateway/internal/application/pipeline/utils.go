@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func getClientIP(r *http.Request) string {
@@ -41,8 +42,35 @@ func classifyUserAgentType(value string) string {
 	}
 }
 
+// writeJSON writes the gateway-local ApiEnvelope response.
 func writeJSON(w http.ResponseWriter, status int, payload any) {
+	envelope := map[string]any{
+		"code":      status,
+		"message":   "操作成功",
+		"data":      payload,
+		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if status >= http.StatusBadRequest {
+		envelope["message"] = messageFromPayload(payload)
+		envelope["data"] = nil
+		envelope["error_code"] = http.StatusText(status)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(envelope)
+}
+
+// messageFromPayload extracts a stable error message from local response data.
+func messageFromPayload(payload any) string {
+	switch body := payload.(type) {
+	case map[string]string:
+		if message := body["message"]; message != "" {
+			return message
+		}
+	case map[string]any:
+		if message, ok := body["message"].(string); ok && message != "" {
+			return message
+		}
+	}
+	return "请求失败"
 }

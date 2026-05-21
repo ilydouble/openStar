@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends
 
 from ..dependencies import get_current_user
+from ..envelope import ApiEnvelopeRoute
 from .handlers import delete_document, list_knowledge_documents, upload_document
 from .schemas import DocumentInfo, UploadResponse
 
@@ -10,6 +11,7 @@ router = APIRouter(
     prefix="/api/v1/knowledge",
     tags=["knowledge"],
     dependencies=[Depends(get_current_user)],
+    route_class=ApiEnvelopeRoute,
 )
 
 router.post(

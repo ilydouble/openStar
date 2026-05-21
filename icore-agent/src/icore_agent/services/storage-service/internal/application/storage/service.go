@@ -55,6 +55,13 @@ func (service *Service) PresignGetObject(ctx context.Context, ref domain.ObjectR
 	return service.repository.PresignGetObject(ctx, ref, expiresIn)
 }
 
+func (service *Service) PresignPutObject(ctx context.Context, ref domain.ObjectRef, contentType string, expiresIn int) (string, error) {
+	if err := ref.Validate(); err != nil {
+		return "", err
+	}
+	return service.repository.PresignPutObject(ctx, ref, contentType, expiresIn)
+}
+
 func (service *Service) StatObject(ctx context.Context, ref domain.ObjectRef) (domain.ObjectStat, error) {
 	if err := ref.Validate(); err != nil {
 		return domain.ObjectStat{}, err

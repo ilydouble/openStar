@@ -11,6 +11,7 @@ class ChatRequest(BaseModel):
     stream: bool = True
     tenant_code: str = ""
     agent_hint: str = ""
+    file_uuids: list[str] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

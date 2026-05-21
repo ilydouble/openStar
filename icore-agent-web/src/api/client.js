@@ -26,6 +26,16 @@ export async function readJsonResponse(resp) {
   if (!resp.ok) {
     throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
   }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    Object.prototype.hasOwnProperty.call(payload, 'code') &&
+    Object.prototype.hasOwnProperty.call(payload, 'message') &&
+    Object.prototype.hasOwnProperty.call(payload, 'data') &&
+    Object.prototype.hasOwnProperty.call(payload, 'timestamp')
+  ) {
+    return payload.data
+  }
   return payload
 }
 

@@ -1,9 +1,11 @@
 package proxy
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 // ReverseProxy forwards gateway traffic to one configured upstream service.
@@ -29,7 +31,13 @@ func NewReverseProxy(backendURL string, transport http.RoundTripper) *ReversePro
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(`{"message":"upstream unavailable"}` + "\n"))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code":       http.StatusBadGateway,
+			"message":    "upstream unavailable",
+			"data":       nil,
+			"error_code": http.StatusText(http.StatusBadGateway),
+			"timestamp":  time.Now().UTC().Format(time.RFC3339Nano),
+		})
 	}
 	return &ReverseProxy{proxy: proxy}
 }

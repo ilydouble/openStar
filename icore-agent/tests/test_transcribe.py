@@ -16,6 +16,23 @@ def client():
         yield c
 
 
+def _api_data(resp) -> dict:
+    """Return the ApiEnvelope data object from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["message"]
+    assert payload["timestamp"]
+    return payload["data"]
+
+
+def _api_message(resp) -> str:
+    """Return the ApiEnvelope message from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["timestamp"]
+    return payload["message"]
+
+
 def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
     from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
@@ -38,7 +55,7 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
         json={"name": name, "email": email, "verification_code": code},
     )
     assert resp.status_code == 200, resp.json()
-    return resp.json()
+    return _api_data(resp)
 
 
 def _trial_headers(client: TestClient) -> dict[str, str]:
@@ -76,7 +93,7 @@ def test_transcribe_zai_returns_text(mock_zai, client):
         headers=headers,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"text": "hello world"}
+    assert _api_data(resp) == {"text": "hello world"}
     mock_zai.assert_awaited_once()
     call_kw = mock_zai.await_args.kwargs
     assert call_kw["language"] == "zh"
@@ -100,7 +117,7 @@ def test_zai_transcribe_requires_api_key(mock_settings, client):
         headers=headers,
     )
     assert resp.status_code == 503
-    assert "Z.AI API key" in resp.json()["detail"]
+    assert "Z.AI API key" in _api_message(resp)
 
 
 @pytest.mark.asyncio

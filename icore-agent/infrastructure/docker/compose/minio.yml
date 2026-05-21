@@ -34,9 +34,9 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
       mc mb --ignore-existing local/icore-agent-images &&
-      mc mb --ignore-existing local/icore-agent-attachments &&
+      mc mb --ignore-existing local/icore-files &&
       mc anonymous set none local/icore-agent-images &&
-      mc anonymous set none local/icore-agent-attachments
+      mc anonymous set none local/icore-files
       "
     networks:
       - icore-net

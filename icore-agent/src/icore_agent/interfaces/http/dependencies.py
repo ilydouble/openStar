@@ -19,7 +19,7 @@ from icore_agent.infrastructure.memory.chroma_store import (
     get_collection,
     list_documents,
 )
-from icore_agent.infrastructure.persistence.users import (
+from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,
     PostgresIdentityRepository,

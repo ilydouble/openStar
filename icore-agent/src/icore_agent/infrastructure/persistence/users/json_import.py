@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from icore_agent.domain.user.user_repository import UserRepository
+
 from ..sqlalchemy.sync_session import sync_session_scope
-from .repository import UserRepository
 
 
 def import_legacy_users_from_store(store: Any) -> int:

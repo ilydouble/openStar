@@ -10,9 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from icore_agent.domain.account.plans import Plan, Usage
-
-from .mappers import user_to_api_dict
-from .models import User
+from icore_agent.infrastructure.persistence.users.mappers import user_to_api_dict
+from icore_agent.infrastructure.persistence.users.models import User
 
 
 def _default_usage() -> dict[str, int]:

@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from icore_agent.domain.account.plans import Plan
+from icore_agent.domain.user.user_repository import UserRepository
 
 from ..sqlalchemy.sync_session import sync_session_scope
-from .repository import UserRepository
 
 
 class PostgresIdentityRepository:

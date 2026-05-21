@@ -20,7 +20,7 @@ from icore_agent.shared.logging.app_logger import get_logger
 
 from ....config import settings
 from ....infrastructure.control_plane.json_store import control_plane_store
-from ....infrastructure.persistence.users import PostgresIdentityRepository
+from ....infrastructure.persistence.users.postgres_repositories import PostgresIdentityRepository
 from ...auth.jwt import JWTValidationError, verify_access_token
 
 log = get_logger(__name__)

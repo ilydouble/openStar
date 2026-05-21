@@ -466,6 +466,7 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
     package_dir = AGENT_ROOT / "src" / "icore_agent"
 
     assert (package_dir / "domain" / "account" / "plans.py").is_file()
+    assert (package_dir / "domain" / "user" / "user_repository.py").is_file()
     assert (package_dir / "shared" / "runtime" / "user_context.py").is_file()
     assert (package_dir / "shared" / "auth" / "jwt.py").is_file()
     assert (package_dir / "shared" / "logging" / "app_logger.py").is_file()
@@ -473,9 +474,9 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
         package_dir / "infrastructure" /
         "persistence" / "sqlalchemy" / "sync_session.py"
     ).is_file()
-    assert (
+    assert not (
         package_dir / "infrastructure" / "persistence" / "users" / "repository.py"
-    ).is_file()
+    ).exists()
     assert (
         package_dir / "infrastructure" / "control_plane" / "json_store.py"
     ).is_file()

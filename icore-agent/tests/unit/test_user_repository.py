@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from icore_agent.domain.account.plans import Plan
+from icore_agent.domain.user.user_repository import UserRepository
 from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
     ensure_user_schema,
     sync_session_scope,
 )
-from icore_agent.infrastructure.persistence.users.repository import UserRepository
 
 
 def test_user_repository_persists_trial_account():

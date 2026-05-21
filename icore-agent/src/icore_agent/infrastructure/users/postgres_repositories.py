@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from ...control_plane.constants import PLAN_LIMITS
+from ...control_plane.constants import Plan
 from ...database.sync_session import sync_session_scope
 from ...users.repository import UserRepository
 
@@ -101,20 +101,21 @@ class PostgresBillingSummaryRepository:
             if user is None:
                 raise KeyError(user_id)
             usage = repo.ensure_usage(user)
-            limits = PLAN_LIMITS[user.plan]
+            limits = Plan(user.plan).limits
             now = datetime.now(UTC)
             if now.month == 12:
                 next_reset = datetime(now.year + 1, 1, 1, 0, 0, 0, tzinfo=UTC)
             else:
-                next_reset = datetime(now.year, now.month + 1, 1, 0, 0, 0, tzinfo=UTC)
+                next_reset = datetime(
+                    now.year, now.month + 1, 1, 0, 0, 0, tzinfo=UTC)
             return {
                 "plan": user.plan,
-                "label": limits["label"],
+                "label": limits.label,
                 "limits": {
-                    "messages": limits["message_limit"],
-                    "tokens": limits["token_limit"],
-                    "images": limits["image_limit"],
-                    "attachments": limits["attachment_limit"],
+                    "messages": limits.message_limit,
+                    "tokens": limits.token_limit,
+                    "images": limits.image_limit,
+                    "attachments": limits.attachment_limit,
                 },
                 "usage": {
                     "messages": usage["message_count"],

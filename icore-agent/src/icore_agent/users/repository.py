@@ -2,15 +2,29 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..control_plane.constants import DEFAULT_USAGE, PLAN_LIMITS
+from ..control_plane.constants import Plan, Usage
 from .mappers import user_to_api_dict
 from .models import User
+
+
+def _default_usage() -> dict[str, int]:
+    """Return a mutable copy of the default usage counters."""
+    return asdict(Usage())
+
+
+def _plan_or_free(value: str) -> Plan:
+    """Resolve a persisted plan string, defaulting unknown legacy values to free."""
+    try:
+        return Plan(value)
+    except ValueError:
+        return Plan.FREE
 
 
 class UserRepository:
@@ -43,7 +57,8 @@ class UserRepository:
 
     def list_all(self) -> list[User]:
         """Return every persisted account profile."""
-        result = self._session.execute(select(User).order_by(User.created_at.asc()))
+        result = self._session.execute(
+            select(User).order_by(User.created_at.asc()))
         return list(result.scalars().all())
 
     def upsert_from_legacy_dict(self, payload: dict[str, Any]) -> User | None:
@@ -55,11 +70,9 @@ class UserRepository:
 
         existing = self.get_by_public_id(public_id) or self.get_by_email(email)
         now = int(time.time())
-        plan = str(payload.get("plan") or "free")
-        if plan not in PLAN_LIMITS:
-            plan = "free"
-        plan_label = str(payload.get("plan_label") or PLAN_LIMITS[plan]["label"])
-        usage = dict(payload.get("usage") or DEFAULT_USAGE)
+        plan = _plan_or_free(str(payload.get("plan") or Plan.FREE.value))
+        plan_label = str(payload.get("plan_label") or plan.limits.label)
+        usage = dict(payload.get("usage") or _default_usage())
         byok = dict(
             payload.get("byok")
             or {"enabled": False, "api_key": "", "api_base": "", "model": ""}
@@ -68,13 +81,15 @@ class UserRepository:
 
         if existing is not None:
             existing.name = str(payload.get("name") or existing.name)
-            existing.plan = plan
+            existing.plan = plan.value
             existing.plan_label = plan_label
             existing.organization_id = str(
-                payload.get("organization_id") or existing.organization_id or ""
+                payload.get(
+                    "organization_id") or existing.organization_id or ""
             ) or None
             existing.organization_name = str(
-                payload.get("organization_name") or existing.organization_name or ""
+                payload.get(
+                    "organization_name") or existing.organization_name or ""
             ) or None
             existing.roles = roles
             existing.byok = byok
@@ -89,10 +104,11 @@ class UserRepository:
             password_hash="",
             email=email,
             name=str(payload.get("name") or email),
-            plan=plan,
+            plan=plan.value,
             plan_label=plan_label,
             organization_id=str(payload.get("organization_id") or "") or None,
-            organization_name=str(payload.get("organization_name") or "") or None,
+            organization_name=str(payload.get(
+                "organization_name") or "") or None,
             roles=roles,
             byok=byok,
             usage=usage,
@@ -121,13 +137,14 @@ class UserRepository:
             password_hash="",
             email=normalized_email,
             name=display_name,
-            plan="free",
-            plan_label=str(PLAN_LIMITS["free"]["label"]),
+            plan=Plan.FREE.value,
+            plan_label=Plan.FREE.limits.label,
             organization_id=organization_id,
             organization_name=organization_name,
             roles=["owner"],
-            byok={"enabled": False, "api_key": "", "api_base": "", "model": ""},
-            usage=dict(DEFAULT_USAGE),
+            byok={"enabled": False, "api_key": "",
+                  "api_base": "", "model": ""},
+            usage=_default_usage(),
             created_at=now,
             updated_at=now,
         )
@@ -172,8 +189,9 @@ class UserRepository:
         byok_model: str = "",
     ) -> User:
         """Update the billing plan and optional BYOK settings."""
-        user.plan = new_plan
-        user.plan_label = str(PLAN_LIMITS[new_plan]["label"])
+        plan = Plan(new_plan)
+        user.plan = plan.value
+        user.plan_label = plan.limits.label
         if byok_enabled:
             user.byok = {
                 "enabled": True,
@@ -187,9 +205,9 @@ class UserRepository:
 
     def ensure_usage(self, user: User) -> dict[str, Any]:
         """Return usage counters, resetting the monthly quota period when needed."""
-        usage = dict(user.usage or DEFAULT_USAGE)
+        usage = dict(user.usage or _default_usage())
         if self._should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
-            usage = dict(DEFAULT_USAGE)
+            usage = _default_usage()
             usage["quota_period_start"] = self._quota_period_start()
             user.usage = usage
             user.updated_at = int(time.time())
@@ -197,23 +215,23 @@ class UserRepository:
         elif not user.usage:
             user.usage = usage
             self._session.flush()
-        return dict(user.usage or DEFAULT_USAGE)
+        return dict(user.usage or _default_usage())
 
     def check_quota(self, user: User, kind: str, amount: int = 1) -> tuple[bool, str | None]:
         """Return whether the user can consume more of the given quota bucket."""
         usage = self.ensure_usage(user)
-        limits = PLAN_LIMITS[user.plan]
+        limits = _plan_or_free(user.plan).limits
         if kind == "messages":
-            limit = int(limits["message_limit"])
+            limit = limits.message_limit
             used = int(usage["message_count"])
         elif kind == "tokens":
-            limit = int(limits["token_limit"])
+            limit = limits.token_limit
             used = int(usage["token_count"])
         elif kind == "images":
-            limit = int(limits["image_limit"])
+            limit = limits.image_limit
             used = int(usage["image_count"])
         else:
-            limit = int(limits["attachment_limit"])
+            limit = limits.attachment_limit
             used = int(usage["attachment_count"])
         if limit and used + amount > limit:
             return False, f"{kind} quota exceeded for {user.plan}"

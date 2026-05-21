@@ -14,7 +14,6 @@ from typing import Any
 
 from ..config import settings
 from ..lib.logging.app_logger import get_logger
-from .constants import DEFAULT_USAGE, PLAN_LIMITS
 
 fallback_log = logging.getLogger(__name__)
 log = get_logger(__name__)
@@ -89,10 +88,6 @@ def _emit_verification_code_event(
         log.info("verification_code_issued", **metadata)
     except Exception as exc:  # noqa: BLE001 - logging must not block account flows.
         fallback_log.warning("verification_code_log_emit_failed: %s", exc)
-
-
-_DEFAULT_USAGE = DEFAULT_USAGE
-_PLAN_LIMITS = PLAN_LIMITS
 
 
 class ControlPlaneStore:

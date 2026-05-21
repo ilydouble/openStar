@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import icore_agent.infrastructure.control_plane.adapters as adapters_module
 from icore_agent.infrastructure.control_plane.adapters import (
     ControlPlaneBillingRepository,
     ControlPlaneBillingSummaryRepository,
@@ -11,6 +12,71 @@ from icore_agent.infrastructure.control_plane.adapters import (
     ControlPlaneUsageRepository,
     ControlPlaneVerificationRepository,
 )
+
+
+class FakePostgresRepository:
+    """PostgreSQL repository double used to verify adapter delegation."""
+
+    def __init__(self, store, *_):
+        """Bind the fake repository to the shared call recorder."""
+        self._store = store
+
+    def get_user_by_token(self, token: str):
+        """Record token lookup delegation."""
+        self._store.calls.append(("postgres_get_user_by_token", (token,), {}))
+        return {"id": "u1"} if token == "tok" else None
+
+    def get_user_by_id(self, user_id: str):
+        """Record user-id lookup delegation."""
+        self._store.calls.append(("postgres_get_user_by_id", (user_id,), {}))
+        return {"id": user_id}
+
+    def register_trial(self, name: str, email: str, client_ip: str):
+        """Record trial registration delegation."""
+        self._store.calls.append(
+            ("postgres_register_trial", (name, email, client_ip), {})
+        )
+        return {"id": "u1"}, "tok"
+
+    def get_team_profile(self, user_id: str):
+        """Record team-profile delegation."""
+        self._store.calls.append(("postgres_get_team_profile", (user_id,), {}))
+        return {"organization": {"id": "org-1"}}
+
+    def sync_project_session(self, **payload):
+        """Record project sync delegation."""
+        self._store.calls.append(
+            ("postgres_sync_project_session", (), payload))
+        return payload
+
+    def get_plan_summary(self, user_id: str):
+        """Record plan summary delegation."""
+        self._store.calls.append(("postgres_get_plan_summary", (user_id,), {}))
+        return {"plan": "free"}
+
+    def update_user_plan(self, **payload):
+        """Record billing plan update delegation."""
+        self._store.calls.append(("postgres_update_user_plan", (), payload))
+        return {"plan": payload["new_plan"], "plan_label": payload["new_plan"].title()}
+
+    def record_usage_event(self, **payload):
+        """Record usage event delegation."""
+        self._store.calls.append(("postgres_record_usage_event", (), payload))
+
+
+def _patch_postgres_repositories(monkeypatch) -> None:
+    """Replace PostgreSQL repositories with a single call-recording double."""
+    for repository_name in (
+        "PostgresBillingRepository",
+        "PostgresBillingSummaryRepository",
+        "PostgresIdentityRepository",
+        "PostgresProjectRepository",
+        "PostgresRegistrationRepository",
+        "PostgresTeamRepository",
+        "PostgresUsageRepository",
+    ):
+        monkeypatch.setattr(
+            adapters_module, repository_name, FakePostgresRepository)
 
 
 class FakeControlPlaneStore:
@@ -112,7 +178,9 @@ class FakeControlPlaneStore:
         self.calls.append(("record_usage_event", (), payload))
 
 
-def test_split_account_adapters_delegate_to_the_expected_store_methods():
+def test_split_account_adapters_delegate_to_the_expected_store_methods(monkeypatch):
+    """Verify adapters delegate to the current store/Postgres repository boundary."""
+    _patch_postgres_repositories(monkeypatch)
     store = FakeControlPlaneStore()
     identity_repo = ControlPlaneIdentityRepository(store)
     verification_repo = ControlPlaneVerificationRepository(store)
@@ -132,18 +200,20 @@ def test_split_account_adapters_delegate_to_the_expected_store_methods():
     billing_summary_repo.get_plan_summary("u1")
 
     assert [name for name, *_ in store.calls] == [
-        "get_user_by_token",
-        "get_user_by_id",
+        "postgres_get_user_by_token",
+        "postgres_get_user_by_id",
         "send_verification_code",
-        "register_trial",
+        "postgres_register_trial",
         "create_lead",
-        "get_team_profile",
-        "sync_project_session",
-        "get_plan_summary",
+        "postgres_get_team_profile",
+        "postgres_sync_project_session",
+        "postgres_get_plan_summary",
     ]
 
 
-def test_usage_and_billing_adapters_delegate_to_control_plane_store():
+def test_usage_and_billing_adapters_delegate_to_control_plane_store(monkeypatch):
+    """Verify usage and billing adapters delegate through PostgreSQL repositories."""
+    _patch_postgres_repositories(monkeypatch)
     store = FakeControlPlaneStore()
     usage_repo = ControlPlaneUsageRepository(store)
     billing_repo = ControlPlaneBillingRepository(store)
@@ -161,4 +231,4 @@ def test_usage_and_billing_adapters_delegate_to_control_plane_store():
 
     assert result["plan"] == "team"
     assert [name for name, *
-            _ in store.calls] == ["record_usage_event", "update_user_plan"]
+            _ in store.calls] == ["postgres_record_usage_event", "postgres_update_user_plan"]

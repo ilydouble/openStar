@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from icore_agent.control_plane.constants import PLAN_LIMITS
+from icore_agent.control_plane.constants import Plan
 from icore_agent.database.sync_session import ensure_user_schema, sync_session_scope
 from icore_agent.users.repository import UserRepository
 
@@ -21,7 +21,7 @@ def test_user_repository_persists_trial_account():
         payload = repo.to_api_dict(loaded)
         assert payload["email"] == "trial@example.com"
         assert payload["plan"] == "free"
-        assert payload["plan_label"] == PLAN_LIMITS["free"]["label"]
+        assert payload["plan_label"] == Plan.FREE.limits.label
         assert payload["organization_id"] == "org_test"
 
 
@@ -38,7 +38,7 @@ def test_user_repository_tracks_message_quota():
         allowed, reason = repo.check_quota(user, "messages")
         assert allowed is True
         assert reason is None
-        for _ in range(PLAN_LIMITS["free"]["message_limit"]):
+        for _ in range(Plan.FREE.limits.message_limit):
             repo.consume_quota(user, "messages")
         allowed, reason = repo.check_quota(user, "messages")
         assert allowed is False

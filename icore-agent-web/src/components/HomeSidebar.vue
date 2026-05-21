@@ -105,12 +105,75 @@
         <p class="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
           {{ t('home.recent.title') }}
         </p>
-        <div v-if="recentSessions.length" class="mt-2 space-y-1.5">
+        <div class="mt-2 px-2">
+          <label class="sr-only" for="sidebar-session-search">{{ t('home.sidebar.searchPlaceholder') }}</label>
+          <div class="relative">
+            <svg
+              class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 dark:text-zinc-500"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+            </svg>
+            <input
+              id="sidebar-session-search"
+              v-model="searchInput"
+              type="search"
+              autocomplete="off"
+              :placeholder="t('home.sidebar.searchPlaceholder')"
+              class="w-full rounded-lg border border-zinc-200/90 bg-zinc-50/90 py-1.5 pl-8 pr-7 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200/70 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-violet-400/40 dark:focus:ring-violet-500/20"
+            />
+            <button
+              v-if="searchInput"
+              type="button"
+              class="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+              :aria-label="t('home.sidebar.clearSearch')"
+              @click="clearSearch"
+            >
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="isSearching" class="mt-2 space-y-1.5">
+          <p v-if="searchLoading" class="px-2 text-xs text-zinc-400 dark:text-zinc-500">
+            {{ t('home.sidebar.searchLoading') }}
+          </p>
+          <template v-else-if="searchResults.length">
+            <RouterLink
+              v-for="item in searchResults"
+              :key="item.sessionId"
+              :to="{ name: 'workspace-session', params: { sessionId: item.sessionId } }"
+              class="block rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2 transition hover:border-zinc-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:border-white/12 dark:hover:bg-white/[0.06]"
+              @click="emitNavigate"
+            >
+              <p class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+                {{ item.title }}
+              </p>
+              <p
+                v-if="item.snippet"
+                class="search-snippet mt-1 line-clamp-3 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400"
+                v-html="item.snippet"
+              />
+            </RouterLink>
+          </template>
+          <p v-else class="px-2 text-xs text-zinc-400 dark:text-zinc-500">
+            {{ t('home.sidebar.searchEmpty') }}
+          </p>
+        </div>
+
+        <div v-else-if="recentSessions.length" class="mt-2 space-y-1.5">
           <RouterLink
-            v-for="item in recentSessions"
+            v-for="item in visibleRecentSessions"
             :key="item.sessionId"
             :to="{ name: 'workspace-session', params: { sessionId: item.sessionId } }"
             class="block rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2 transition hover:border-zinc-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:border-white/12 dark:hover:bg-white/[0.06]"
+            @click="emitNavigate"
           >
             <p class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">
               {{ item.title }}
@@ -119,6 +182,14 @@
               {{ item.subtitle }}
             </p>
           </RouterLink>
+          <button
+            v-if="canToggleSessionsList"
+            type="button"
+            class="w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-violet-600 transition hover:bg-violet-50 hover:text-violet-700 dark:text-violet-300 dark:hover:bg-violet-500/10 dark:hover:text-violet-200"
+            @click="sessionsExpanded = !sessionsExpanded"
+          >
+            {{ sessionsExpanded ? t('home.recent.showLess') : t('home.recent.showMore') }}
+          </button>
         </div>
         <p v-else class="mt-2 px-2 text-xs text-zinc-400 dark:text-zinc-500">
           {{ t('home.recent.empty') }}
@@ -226,13 +297,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../stores/preferences.js'
 import ThemeToggle from './ThemeToggle.vue'
 
-const emit = defineEmits(['new', 'navigate'])
+const emit = defineEmits(['new', 'navigate', 'search'])
 
 const props = defineProps({
   currentSessionId: {
@@ -247,9 +318,47 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  searchResults: {
+    type: Array,
+    default: () => [],
+  },
+  searchLoading: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const { t, locale } = useI18n()
+
+const SESSIONS_PREVIEW_COUNT = 3
+const searchInput = ref('')
+const sessionsExpanded = ref(false)
+const searchDebounceMs = 300
+let searchTimer = null
+
+const isSearching = computed(() => searchInput.value.trim().length > 0)
+
+const visibleRecentSessions = computed(() => {
+  if (sessionsExpanded.value) return props.recentSessions
+  return props.recentSessions.slice(0, SESSIONS_PREVIEW_COUNT)
+})
+
+const canToggleSessionsList = computed(
+  () => props.recentSessions.length > SESSIONS_PREVIEW_COUNT,
+)
+
+/** Debounce sidebar search input before requesting results from the parent. */
+watch(searchInput, (value) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    emit('search', value.trim())
+  }, searchDebounceMs)
+})
+
+function clearSearch() {
+  searchInput.value = ''
+  emit('search', '')
+}
 
 const moreOpen = ref(false)
 const moreRootRef = ref(null)
@@ -316,5 +425,21 @@ onMounted(() => {
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
+
+<style scoped>
+.search-snippet :deep(mark) {
+  border-radius: 0.2rem;
+  background-color: rgb(254 240 138 / 0.85);
+  color: rgb(24 24 27);
+  padding: 0 0.12rem;
+  font-weight: 600;
+}
+
+:global(.dark) .search-snippet :deep(mark) {
+  background-color: rgb(251 191 36 / 0.28);
+  color: rgb(254 243 199);
+}
+</style>

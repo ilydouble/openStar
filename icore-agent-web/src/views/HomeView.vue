@@ -18,8 +18,11 @@
       :current-session-id="sessionId"
       :recent-sessions="recentSessions"
       :recent-projects="recentProjects"
+      :search-results="sessionSearchResults"
+      :search-loading="sessionSearchLoading"
       @new="onSidebarNew"
       @navigate="sidebarMobileOpen = false"
+      @search="onSessionSearch"
     />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col lg:min-w-0">
@@ -593,16 +596,16 @@ import {
   attachFile,
   attachImage,
   attachData,
+  fetchAllSessions,
   imageUrl,
   listAttachments,
   removeAttachment,
+  searchSessions,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
 import {
-  getRecentSessions,
   getWorkspaceOnboardingComplete,
-  setRecentSessions,
   setWorkspaceOnboardingComplete,
 } from '../stores/workspace.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
@@ -728,7 +731,12 @@ const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
 const planSummary = ref(null)
+const QUOTA_STREAM_POLL_MS = 30_000
+let quotaPollTimer = null
 const recentSessions = ref([])
+const sessionSearchResults = ref([])
+const sessionSearchLoading = ref(false)
+let sessionSearchRequestId = 0
 const projectRecords = ref([])
 const recentProjects = computed(() => {
   return projectRecords.value.map((project) => ({
@@ -744,6 +752,29 @@ const recentProjects = computed(() => {
 const composerAttachments = computed(() =>
   attachmentList.value.filter((a) => a.mode !== 'image' && a.mode !== 'data'),
 )
+
+async function loadPlanSummary() {
+  try {
+    planSummary.value = await fetchPlan()
+  } catch {
+    planSummary.value = null
+  }
+}
+
+/** Poll plan quota while a chat stream is active so token usage stays current. */
+function startQuotaPolling() {
+  stopQuotaPolling()
+  quotaPollTimer = setInterval(() => {
+    loadPlanSummary()
+  }, QUOTA_STREAM_POLL_MS)
+}
+
+function stopQuotaPolling() {
+  if (quotaPollTimer) {
+    clearInterval(quotaPollTimer)
+    quotaPollTimer = null
+  }
+}
 
 async function refreshAttachments() {
   try {
@@ -786,7 +817,8 @@ async function handleFileSelected(file) {
       await attachFile(file, sessionId.value)
       await refreshAttachments()
     }
-    saveRecentSession()
+    await loadSessions()
+    await loadPlanSummary()
     await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
@@ -799,7 +831,8 @@ async function deleteAttachment(filename) {
   try {
     await removeAttachment(sessionId.value, filename)
     await refreshAttachments()
-    saveRecentSession()
+    await loadPlanSummary()
+    await loadSessions()
     await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || t('chat.deleteFailed')
@@ -908,17 +941,18 @@ function syncTheme() {
   dark.value = isDarkFn()
 }
 
-onMounted(() => {
+onMounted(async () => {
   syncTheme()
   window.addEventListener('icore-theme-change', syncTheme)
-  hydrateRecentSessions()
+  await loadSessions()
   loadPlanSummary()
   loadProjects()
-  hydrateCurrentSession()
+  await hydrateCurrentSession()
 })
 
 onUnmounted(() => {
   window.removeEventListener('icore-theme-change', syncTheme)
+  stopQuotaPolling()
 })
 
 watch(
@@ -933,6 +967,7 @@ watch(
     attachmentList.value = []
     uploadError.value = ''
     activeShortcutId.value = ''
+    await loadPlanSummary()
     await hydrateCurrentSession()
     await nextTick()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
@@ -954,51 +989,67 @@ const SHORTCUT_HINT = {
   data: 'data',
 }
 
-function hydrateRecentSessions() {
-  recentSessions.value = getRecentSessions()
+function mapSessionSummary(item) {
+  const count = Number(item.message_count ?? 0)
+  return {
+    sessionId: item.public_id,
+    title: (item.title || '').trim() || t('home.heroTitle'),
+    subtitle: t('home.recent.messages', { count }),
+    updatedAt: item.updated_at,
+    messageCount: count,
+  }
+}
+
+async function loadSessions() {
+  try {
+    const { sessions } = await fetchAllSessions()
+    recentSessions.value = sessions.map(mapSessionSummary)
+  } catch {
+    recentSessions.value = []
+  }
+}
+
+function mapSearchResult(item) {
+  return {
+    sessionId: item.public_id,
+    title: (item.title || '').trim() || t('home.heroTitle'),
+    snippet: item.snippet || '',
+    updatedAt: item.updated_at,
+    rank: item.rank,
+  }
+}
+
+/** Run sidebar session search against the backend full-text index. */
+async function onSessionSearch(query) {
+  const trimmed = String(query || '').trim()
+  if (!trimmed) {
+    sessionSearchResults.value = []
+    sessionSearchLoading.value = false
+    return
+  }
+  sessionSearchLoading.value = true
+  const requestId = ++sessionSearchRequestId
+  try {
+    const payload = await searchSessions(trimmed)
+    if (requestId !== sessionSearchRequestId) return
+    sessionSearchResults.value = (payload.sessions || []).map(mapSearchResult)
+  } catch {
+    if (requestId !== sessionSearchRequestId) return
+    sessionSearchResults.value = []
+  } finally {
+    if (requestId === sessionSearchRequestId) {
+      sessionSearchLoading.value = false
+    }
+  }
 }
 
 async function loadProjects() {
   try {
     const payload = await fetchProjects()
     projectRecords.value = payload.projects || []
-    if (Array.isArray(payload.recent_sessions) && payload.recent_sessions.length) {
-      recentSessions.value = payload.recent_sessions.map((item) => ({
-        sessionId: item.session_id,
-        title: item.title,
-        subtitle: item.subtitle,
-        scenarioId: item.scenario_id || '',
-        projectId: item.project_id,
-        projectTitle: item.project_title,
-        attachmentCount: item.attachment_count || 0,
-        updatedAt: item.updated_at,
-      }))
-      setRecentSessions(undefined, recentSessions.value)
-    }
   } catch {
     projectRecords.value = []
   }
-}
-
-function saveRecentSession(meta = {}) {
-  const template = activeScenarioTemplate.value
-  const title = meta.title || template?.title || t('home.heroTitle')
-  const subtitle = meta.subtitle || template?.description || t('home.subtitle')
-  const current = recentSessions.value.filter((item) => item.sessionId !== sessionId.value)
-  recentSessions.value = [
-    {
-      sessionId: sessionId.value,
-      title,
-      subtitle,
-      scenarioId: template?.id || meta.scenarioId || '',
-      projectId: meta.projectId || template?.id || 'general',
-      projectTitle: meta.projectTitle || template?.title || t('home.heroTitle'),
-      attachmentCount: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
-      updatedAt: Date.now(),
-    },
-    ...current,
-  ].slice(0, 8)
-  setRecentSessions(undefined, recentSessions.value)
 }
 
 async function syncCurrentProject(meta = {}) {
@@ -1023,14 +1074,6 @@ async function syncCurrentProject(meta = {}) {
   }
 }
 
-async function loadPlanSummary() {
-  try {
-    planSummary.value = await fetchPlan()
-  } catch {
-    planSummary.value = null
-  }
-}
-
 async function hydrateCurrentSession() {
   const hasExplicitSession = typeof route.params.sessionId === 'string'
   if (!hasExplicitSession) {
@@ -1048,19 +1091,15 @@ async function hydrateCurrentSession() {
       streaming: false,
     }))
     attachmentList.value = state.attachments || []
+    await loadSessions()
+    const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
     if (!activeShortcutId.value) {
-      const recent = recentSessions.value.find((item) => item.sessionId === sessionId.value)
-      const matched = scenarioTemplates.value.find((item) => item.title === recent?.title)
+      const matched = scenarioTemplates.value.find((item) => item.title === sessionEntry?.title)
       activeShortcutId.value = matched?.id || ''
     }
-    saveRecentSession({
-      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
-      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
-      attachmentCount: (state.attachments || []).length,
-    })
     await syncCurrentProject({
-      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
-      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
+      title: sessionEntry?.title || t('home.heroTitle'),
+      subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
   } catch {
@@ -1097,6 +1136,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
     ensureChatRoute()
   }
   loading.value = true
+  startQuotaPolling()
   await scrollBottom()
 
   const assistant = {
@@ -1163,6 +1203,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
       }
     }
   } finally {
+    stopQuotaPolling()
     streamAbortController.value = null
     commitAssistant({
       streaming: false,
@@ -1171,10 +1212,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
     streamingMsg.value = null
     loading.value = false
     await loadPlanSummary()
-    saveRecentSession({
-      title: activeScenarioTemplate.value?.title || text.slice(0, 36),
-      subtitle: text.slice(0, 80),
-    })
+    await loadSessions()
     await syncCurrentProject({
       title: activeScenarioTemplate.value?.title || text.slice(0, 36),
       subtitle: text.slice(0, 80),
@@ -1212,6 +1250,7 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
       uploadedDataMeta.push({ filename: meta.filename || df.name })
     }
     await refreshAttachments()
+    await loadPlanSummary()
 
     const hasImages = uploadedImages.length > 0
     const hasData = uploadedDataMeta.length > 0
@@ -1309,10 +1348,6 @@ function onSidebarNew() {
   uploadError.value = ''
   activeShortcutId.value = ''
   router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
-  saveRecentSession({
-    title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
-    subtitle: t('home.subtitle'),
-  })
   syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),

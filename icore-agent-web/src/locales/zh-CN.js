@@ -310,6 +310,10 @@ export default {
       closeMenu: '关闭菜单',
       flowSoon: '即将推出',
       moreMenuLabel: '更多选项',
+      searchPlaceholder: '搜索会话…',
+      searchEmpty: '没有匹配的会话。',
+      searchLoading: '搜索中…',
+      clearSearch: '清除搜索',
     },
     chatEmptyHint: '在下方输入消息开始对话。',
     shortcuts: [
@@ -409,9 +413,12 @@ export default {
       planPrefix: '当前方案',
     },
     recent: {
-      title: '最近会话',
+      title: '会话',
       empty: '还没有可回看的会话。',
       open: '继续处理',
+      messages: '{count} 条消息',
+      showMore: '显示更多',
+      showLess: '收起',
     },
     projects: {
       title: '最近项目',

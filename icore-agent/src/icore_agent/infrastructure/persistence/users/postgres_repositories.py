@@ -6,6 +6,7 @@ import uuid
 from dataclasses import replace
 from typing import Any
 
+from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.application.usage.policy import (
     current_timestamp,
     default_usage,
@@ -27,9 +28,10 @@ def _default_byok() -> dict[str, Any]:
 class PostgresIdentityRepository:
     """Load and issue account identities from PostgreSQL."""
 
-    def __init__(self, store: Any) -> None:
-        """Create an identity repository with the legacy token store."""
+    def __init__(self, store: Any, workspace: WorkspaceMetadataService) -> None:
+        """Create an identity repository with legacy token and workspace stores."""
         self._store = store
+        self._workspace = workspace
 
     def get_user_by_token(self, token: str) -> UserProfile | None:
         """Resolve a legacy bearer token to a persisted user profile."""
@@ -45,8 +47,7 @@ class PostgresIdentityRepository:
             user = repo.get_by_public_id(user_id)
             if user is None:
                 return None
-            self._store.ensure_organization_for_user(user)
-            return user
+            return self._workspace.ensure_organization_for_user(user)
 
     def get_user_by_email(self, email: str) -> UserProfile | None:
         """Load a user profile by email address."""
@@ -55,8 +56,7 @@ class PostgresIdentityRepository:
             user = repo.get_by_email(email)
             if user is None:
                 return None
-            self._store.ensure_organization_for_user(user)
-            return user
+            return self._workspace.ensure_organization_for_user(user)
 
     def issue_token_for_user(self, user_id: str) -> str:
         """Issue a legacy opaque token mapped to the user public id."""
@@ -64,11 +64,12 @@ class PostgresIdentityRepository:
 
 
 class PostgresRegistrationRepository:
-    """Register trial accounts in PostgreSQL while keeping org metadata in JSON."""
+    """Register trial accounts in PostgreSQL and provision workspace metadata."""
 
-    def __init__(self, store: Any) -> None:
-        """Create a registration repository with the control-plane store."""
+    def __init__(self, store: Any, workspace: WorkspaceMetadataService) -> None:
+        """Create a registration repository with control-plane and workspace stores."""
         self._store = store
+        self._workspace = workspace
 
     def check_ip_registration_limit(self, client_ip: str) -> bool:
         """Delegate IP throttling to the JSON-backed control-plane store."""
@@ -108,7 +109,7 @@ class PostgresRegistrationRepository:
                 )
             )
 
-        self._store.create_organization_for_user(user)
+        self._workspace.create_organization_for_user(user)
         self._store.record_ip_registration(client_ip)
         self._store.append_event("trial_registered", user_id=user.public_id)
         token = self._store.issue_legacy_token(user.public_id)
@@ -264,87 +265,40 @@ class PostgresUsageRepository:
 
 
 class PostgresTeamRepository:
-    """Team operations that combine PostgreSQL users with JSON organization data."""
+    """Team operations backed by PostgreSQL organization metadata."""
 
-    def __init__(self, store: Any, identity_repository: PostgresIdentityRepository) -> None:
-        """Create a team repository with shared identity lookup."""
-        self._store = store
-        self._identity_repository = identity_repository
+    def __init__(self, workspace: WorkspaceMetadataService) -> None:
+        """Create a team repository with the workspace metadata service."""
+        self._workspace = workspace
 
     def get_team_profile(self, user_id: str) -> dict[str, Any]:
         """Return the organization profile for the current user."""
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        return self._store.get_team_profile_for_user(user)
+        return self._workspace.get_team_profile(user_id)
 
     def rename_organization(self, user_id: str, organization_name: str) -> dict[str, Any]:
-        """Rename the user's organization in JSON storage and PostgreSQL."""
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        with sync_session_scope() as session:
-            repo = SqlAlchemyUserRepository(session)
-            db_user = repo.get_by_public_id(user_id)
-            if db_user is None:
-                raise KeyError(user_id)
-            repo.save(
-                replace(
-                    db_user,
-                    organization_name=organization_name,
-                    updated_at=current_timestamp(),
-                )
-            )
-        return self._store.rename_organization_for_user(user, organization_name)
+        """Rename the user's organization."""
+        return self._workspace.rename_organization(user_id, organization_name)
 
     def add_team_member(self, user_id: str, **payload: Any) -> dict[str, Any]:
-        """Add a team member to the JSON-backed organization roster."""
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        return self._store.add_team_member_for_user(
-            user,
-            name=str(payload.get("name") or ""),
-            email=str(payload.get("email") or ""),
-            role=str(payload.get("role") or "viewer"),
-        )
+        """Add a team member to the organization roster."""
+        return self._workspace.add_team_member(user_id, **payload)
 
     def update_knowledge_scope(self, user_id: str, scope: str) -> dict[str, Any]:
         """Update the organization knowledge scope for the current user."""
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        return self._store.update_knowledge_scope_for_user(user, scope)
+        return self._workspace.update_knowledge_scope(user_id, scope)
 
 
 class PostgresProjectRepository:
-    """Project metadata stored in JSON, keyed by PostgreSQL user profiles."""
+    """Project metadata stored in PostgreSQL with Redis caching."""
 
-    def __init__(self, store: Any, identity_repository: PostgresIdentityRepository) -> None:
-        """Create a project repository with shared identity lookup."""
-        self._store = store
-        self._identity_repository = identity_repository
+    def __init__(self, workspace: WorkspaceMetadataService) -> None:
+        """Create a project repository with the workspace metadata service."""
+        self._workspace = workspace
 
     def sync_project_session(self, **payload: Any) -> dict[str, Any]:
         """Sync one project/session record for a user."""
-        user_id = str(payload["user_id"])
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        return self._store.sync_project_for_user(
-            user,
-            project_id=str(payload["project_id"]),
-            project_title=str(payload["project_title"]),
-            scenario_id=str(payload.get("scenario_id") or ""),
-            session_id=str(payload["session_id"]),
-            session_title=str(payload["session_title"]),
-            session_subtitle=str(payload.get("session_subtitle") or ""),
-            attachment_count=int(payload.get("attachment_count") or 0),
-        )
+        return self._workspace.sync_project_session(**payload)
 
     def list_projects(self, user_id: str) -> dict[str, Any]:
         """List projects visible to the user's organization."""
-        user = self._identity_repository.get_user_by_id(user_id)
-        if user is None:
-            raise KeyError(user_id)
-        return self._store.list_projects_for_user(user)
+        return self._workspace.list_projects(user_id)

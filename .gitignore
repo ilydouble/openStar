@@ -36,13 +36,19 @@ dmypy.json
 .ruff_cache/
 cython_debug/
 instance/
+dist/
+build/
 
-# environment variables
+# ----------------------
+# Environment & secrets
+# ----------------------
 .env
 .env.local
 .env.*.local
 icore-agent/dotenv/.env.*
 !icore-agent/dotenv/.env.*.example
+icore-agent-web/.env
+!icore-agent-web/.env.example
 
 # ----------------------
 # Node.js / Frontend
@@ -69,13 +75,14 @@ out/
 .yarn/build-state.yml
 .yarn/install-state.gz
 
-# logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# ----------------------
+# Go (gateway & services)
+# ----------------------
+*.exe
+*.exe~
+*.test
+*.out
+vendor/
 
 # ----------------------
 # Docker
@@ -83,6 +90,14 @@ lerna-debug.log*
 docker-compose.override.yml
 docker-compose.override.yaml
 .docker/
+
+# ----------------------
+# Local runtime data (dev)
+# ----------------------
+icore-control-plane.json
+icore-chroma/
+icore-images/
+icore-seq-workspace/
 
 # ----------------------
 # OS & Editor
@@ -104,9 +119,18 @@ $RECYCLE.BIN/
 .Trash-*
 .nfs*
 
-# VS Code / Cursor
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# VS Code / Cursor / JetBrains
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -115,9 +139,7 @@ $RECYCLE.BIN/
 .history/
 
 # ----------------------
-# Sənin əlavə etdiklərin
+# Legacy local vendor trees (not part of this repo)
 # ----------------------
 ft-base-services-dev_v3.0.0.1/
 ft-operation-mng-services-dev_v3.0.0.1/
-.idea
-.vscode

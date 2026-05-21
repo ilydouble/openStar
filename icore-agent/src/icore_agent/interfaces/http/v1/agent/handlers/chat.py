@@ -13,13 +13,14 @@ from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from icore_agent.application.account import AccountService
+from icore_agent.application.chat import ChatHistoryService
 from icore_agent.engine.callback_ctx import reset_parent_callback, set_parent_callback
 from icore_agent.infrastructure.memory.attachment_store import attachments
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
-from ...dependencies import get_account_service, get_current_user
+from ...dependencies import get_account_service, get_chat_history_service, get_current_user
 from ..schemas.chat import ChatRequest, ChatResponse
 
 log = get_logger(__name__)
@@ -112,8 +113,11 @@ def _to_strands_messages(history: list[dict]) -> list[dict]:
 
 async def _load_context(
     session_id: str,
+    *,
+    user_id: str | None = None,
+    chat_history: ChatHistoryService | None = None,
 ) -> tuple[str | None, list[dict], str | None, bool, list[dict], list[dict]]:
-    """Fetch Redis history, inline attachments, image and data refs concurrently."""
+    """Fetch cached history, inline attachments, image and data refs concurrently."""
     try:
         (summary, history), inline_text, has_rag, image_refs, data_refs = await asyncio.gather(
             memory.get_context(session_id),
@@ -126,6 +130,13 @@ async def _load_context(
         log.warning("load_context_fallback",
                     session_id=session_id, error=str(exc))
         return (None, [], None, False, [], [])
+
+    if not history and user_id and chat_history is not None:
+        try:
+            history = chat_history.load_messages(session_id, user_id)
+        except (PermissionError, LookupError):
+            history = []
+
     return (
         summary or None,
         _to_strands_messages(history),
@@ -157,6 +168,7 @@ async def _stream_agent(
     session_id: str,
     agent_hint: str = "",
     runtime_user: dict | None = None,
+    chat_history: ChatHistoryService | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream agent tokens, tool status events, and heartbeat frames over SSE."""
     loop = asyncio.get_event_loop()
@@ -174,7 +186,9 @@ async def _stream_agent(
     )
 
     summary, strands_history, inline_text, has_rag, image_refs, data_refs = await _load_context(
-        session_id
+        session_id,
+        user_id=(runtime_user or {}).get("id"),
+        chat_history=chat_history,
     )
     if has_rag or image_refs or data_refs:
         enable_tools = True
@@ -305,17 +319,44 @@ async def _stream_agent(
     reply_text = "".join(full_reply)
     await memory.append_message(session_id, "user", message)
     await memory.append_message(session_id, "assistant", reply_text)
+    if chat_history is not None and runtime_user is not None:
+        try:
+            chat_history.save_assistant_message(
+                session_id,
+                runtime_user["id"],
+                reply_text,
+            )
+        except (PermissionError, LookupError) as exc:
+            log.warning(
+                "assistant_message_persist_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
 
 
 async def chat(
     req: ChatRequest,
     user: dict = Depends(get_current_user),
     account_service: AccountService = Depends(get_account_service),
+    chat_history: ChatHistoryService = Depends(get_chat_history_service),
 ):
     """Run a streaming or non-streaming agent chat turn."""
     allowed, reason = account_service.check_quota(user["id"], "messages")
     if not allowed:
         raise HTTPException(status_code=402, detail=reason)
+
+    try:
+        chat_history.ensure_owned_session(
+            req.session_id,
+            user["id"],
+            title=req.message.strip()[:255],
+        )
+        chat_history.save_user_message(req.session_id, user["id"], req.message)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     intent, enable_tools, effective_hint = _resolve_routing(
         req.message, req.agent_hint)
     log.info(
@@ -330,8 +371,13 @@ async def chat(
     if req.stream:
         account_service.consume_quota(user["id"], "messages")
         return StreamingResponse(
-            _stream_agent(req.message, req.session_id,
-                          req.agent_hint, runtime_user=user),
+            _stream_agent(
+                req.message,
+                req.session_id,
+                req.agent_hint,
+                runtime_user=user,
+                chat_history=chat_history,
+            ),
             media_type="text/event-stream",
             headers={
                 "X-Session-Id": req.session_id,
@@ -342,7 +388,9 @@ async def chat(
         )
 
     summary, strands_history, inline_text, has_rag, image_refs, data_refs = await _load_context(
-        req.session_id
+        req.session_id,
+        user_id=user["id"],
+        chat_history=chat_history,
     )
     if has_rag or image_refs or data_refs:
         enable_tools = True
@@ -375,4 +423,12 @@ async def chat(
 
     await memory.append_message(req.session_id, "user", req.message)
     await memory.append_message(req.session_id, "assistant", reply)
+    try:
+        chat_history.save_assistant_message(req.session_id, user["id"], reply)
+    except (PermissionError, LookupError) as exc:
+        log.warning(
+            "assistant_message_persist_failed",
+            session_id=req.session_id,
+            error=str(exc),
+        )
     return ChatResponse(session_id=req.session_id, reply=reply)

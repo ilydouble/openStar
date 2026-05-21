@@ -58,6 +58,9 @@ def get_sync_sessionmaker() -> sessionmaker[Session]:
 def ensure_user_schema() -> None:
     """Create account tables when running against ephemeral test databases."""
     if os.getenv("ICORE_TEST_SYNC_DATABASE_URL", "").strip():
+        from ..organizations.models import Organization  # noqa: F401
+        from ..projects.models import Project  # noqa: F401
+        from ..sessions.models import ChatMessage, ChatSession  # noqa: F401
         from ..users.models import User  # noqa: F401
 
         Base.metadata.create_all(get_sync_engine())

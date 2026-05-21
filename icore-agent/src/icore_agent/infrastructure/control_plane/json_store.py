@@ -360,28 +360,22 @@ class ControlPlaneStore:
             self._save(data)
 
     def create_organization_for_user(self, user: UserPayload) -> None:
-        """Persist organization metadata for a newly registered user."""
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            self._save(data)
+        """Deprecated: organization metadata is stored in PostgreSQL."""
+        _ = user
+        raise RuntimeError(
+            "create_organization_for_user is handled by WorkspaceMetadataService")
 
     def ensure_organization_for_user(self, user: UserPayload) -> None:
-        """Ensure organization metadata exists for an existing user profile."""
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            self._save(data)
+        """Deprecated: organization metadata is stored in PostgreSQL."""
+        _ = user
+        raise RuntimeError(
+            "ensure_organization_for_user is handled by WorkspaceMetadataService")
 
     def get_team_profile_for_user(self, user: UserPayload) -> dict[str, Any]:
-        """Return the organization profile for one user dict."""
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            return self._team_profile_from_data(data, payload)
+        """Deprecated: team profiles are loaded from PostgreSQL."""
+        _ = user
+        raise RuntimeError(
+            "get_team_profile_for_user is handled by WorkspaceMetadataService")
 
     def _team_profile_from_data(
         self,
@@ -411,20 +405,10 @@ class ControlPlaneStore:
         user: UserPayload,
         organization_name: str,
     ) -> dict[str, Any]:
-        """Rename the organization associated with one user."""
-        now = int(time.time())
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            org_id = payload["organization_id"]
-            organization = data["organizations"][org_id]
-            organization["name"] = organization_name.strip()
-            organization["updated_at"] = now
-            self._save(data)
-            updated = {**payload,
-                       "organization_name": organization_name.strip()}
-            return self._team_profile_from_data(data, updated)
+        """Deprecated: organization renames are stored in PostgreSQL."""
+        _ = (user, organization_name)
+        raise RuntimeError(
+            "rename_organization_for_user is handled by WorkspaceMetadataService")
 
     def add_team_member_for_user(
         self,
@@ -434,40 +418,16 @@ class ControlPlaneStore:
         email: str,
         role: str,
     ) -> dict[str, Any]:
-        """Add one invited member to the user's organization."""
-        now = int(time.time())
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            org_id = payload["organization_id"]
-            organization = data["organizations"][org_id]
-            member = {
-                "user_id": f"member_{uuid.uuid4().hex[:12]}",
-                "name": name.strip(),
-                "email": email.strip().lower(),
-                "role": role.strip() or "viewer",
-                "status": "invited",
-                "created_at": now,
-            }
-            organization.setdefault("members", []).append(member)
-            organization["updated_at"] = now
-            self._save(data)
-            return member
+        """Deprecated: team members are stored in PostgreSQL."""
+        _ = (user, name, email, role)
+        raise RuntimeError(
+            "add_team_member_for_user is handled by WorkspaceMetadataService")
 
     def update_knowledge_scope_for_user(self, user: UserPayload, scope: str) -> dict[str, Any]:
-        """Update the knowledge scope for the user's organization."""
-        now = int(time.time())
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            org_id = payload["organization_id"]
-            organization = data["organizations"][org_id]
-            organization["knowledge_scope"] = scope
-            organization["updated_at"] = now
-            self._save(data)
-            return self._team_profile_from_data(data, payload)
+        """Deprecated: knowledge scope is stored in PostgreSQL."""
+        _ = (user, scope)
+        raise RuntimeError(
+            "update_knowledge_scope_for_user is handled by WorkspaceMetadataService")
 
     def sync_project_for_user(
         self,
@@ -481,74 +441,25 @@ class ControlPlaneStore:
         session_subtitle: str,
         attachment_count: int,
     ) -> dict[str, Any]:
-        """Persist project/session metadata for one user profile."""
-        now = int(time.time())
-        payload = _user_payload(user)
-        user_id = payload["id"]
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            projects_by_user = data.setdefault(
-                "projects", {}).setdefault(user_id, {})
-            project = projects_by_user.setdefault(
-                project_id,
-                {
-                    "id": project_id,
-                    "title": project_title,
-                    "scenario_id": scenario_id,
-                    "organization_id": payload.get("organization_id", ""),
-                    "updated_at": now,
-                    "sessions": {},
-                },
-            )
-            project["title"] = project_title or project["title"]
-            project["scenario_id"] = scenario_id or project.get(
-                "scenario_id", "")
-            project["organization_id"] = payload.get("organization_id", "")
-            project["updated_at"] = now
-            project["sessions"][session_id] = {
-                "session_id": session_id,
-                "title": session_title,
-                "subtitle": session_subtitle,
-                "attachment_count": max(int(attachment_count or 0), 0),
-                "updated_at": now,
-            }
-            self._save(data)
-            return self._serialize_project(project)
+        """Deprecated: project metadata is stored in PostgreSQL."""
+        _ = (
+            user,
+            project_id,
+            project_title,
+            scenario_id,
+            session_id,
+            session_title,
+            session_subtitle,
+            attachment_count,
+        )
+        raise RuntimeError(
+            "sync_project_for_user is handled by WorkspaceMetadataService")
 
     def list_projects_for_user(self, user: UserPayload) -> dict[str, Any]:
-        """List projects visible to the user's organization."""
-        payload = _user_payload(user)
-        with self._lock:
-            data = self._load()
-            self._ensure_org_for_user(data, payload)
-            org_id = payload.get("organization_id", "")
-            all_projects = []
-            for owner_user_id, projects_by_user in data.get("projects", {}).items():
-                for project in projects_by_user.values():
-                    if project.get("organization_id") == org_id:
-                        serialized = self._serialize_project(project)
-                        serialized["owner_user_id"] = owner_user_id
-                        all_projects.append(serialized)
-            all_projects.sort(
-                key=lambda item: item["updated_at"], reverse=True)
-            recent_sessions: list[dict[str, Any]] = []
-            for project in all_projects:
-                for session in project["sessions"]:
-                    recent_sessions.append(
-                        {
-                            **session,
-                            "project_id": project["id"],
-                            "project_title": project["title"],
-                            "scenario_id": project.get("scenario_id", ""),
-                        }
-                    )
-            recent_sessions.sort(
-                key=lambda item: item["updated_at"], reverse=True)
-            return {
-                "projects": all_projects[:10],
-                "recent_sessions": recent_sessions[:12],
-            }
+        """Deprecated: project lists are loaded from PostgreSQL."""
+        _ = user
+        raise RuntimeError(
+            "list_projects_for_user is handled by WorkspaceMetadataService")
 
     def list_legacy_json_users(self) -> list[dict[str, Any]]:
         """Return user profiles still stored in the JSON file before PostgreSQL migration."""

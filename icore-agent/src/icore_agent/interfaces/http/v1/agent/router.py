@@ -11,7 +11,9 @@ from .handlers import (
     get_image,
     get_session_state,
     list_attachments,
+    list_sessions,
     remove_attachment,
+    search_sessions,
     run_sequential,
     transcribe_audio,
 )
@@ -21,6 +23,8 @@ from .schemas import (
     DataAttachResponse,
     ImageAttachResponse,
     SequentialResponse,
+    SessionListResponse,
+    SessionSearchResponse,
     SessionStateResponse,
     TranscribeResponse,
 )
@@ -72,6 +76,16 @@ router.delete(
     "/session/{session_id}",
     summary="Clear conversation memory for a session",
 )(clear_session)
+router.get(
+    "/sessions/search",
+    response_model=SessionSearchResponse,
+    summary="Search chat sessions by title and message content",
+)(search_sessions)
+router.get(
+    "/sessions",
+    response_model=SessionListResponse,
+    summary="List chat sessions for the current user",
+)(list_sessions)
 router.get(
     "/session/{session_id}",
     response_model=SessionStateResponse,

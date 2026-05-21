@@ -237,7 +237,15 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
 def test_can_fetch_session_state(mock_memory, client: TestClient):
-    headers = _trial_headers(client)
+    user_payload = _register_trial_direct(client)
+    headers = {"Authorization": f"Bearer {user_payload['access_token']}"}
+    from icore_agent.application.chat import ChatHistoryService
+
+    ChatHistoryService().ensure_owned_session(
+        "demo-session",
+        user_payload["user"]["id"],
+        title="Demo session",
+    )
     mock_memory.get_context = AsyncMock(
         return_value=(
             "Summary text",

@@ -310,6 +310,10 @@ export default {
       closeMenu: 'Close menu',
       flowSoon: 'Coming soon',
       moreMenuLabel: 'More options',
+      searchPlaceholder: 'Search sessions…',
+      searchEmpty: 'No matching sessions.',
+      searchLoading: 'Searching…',
+      clearSearch: 'Clear search',
     },
     chatEmptyHint: 'Type a message below to start.',
     shortcuts: [
@@ -409,9 +413,12 @@ export default {
       planPrefix: 'Plan',
     },
     recent: {
-      title: 'Recent sessions',
+      title: 'Sessions',
       empty: 'No session history yet.',
       open: 'Resume',
+      messages: '{count} messages',
+      showMore: 'Show more',
+      showLess: 'Show less',
     },
     projects: {
       title: 'Recent projects',

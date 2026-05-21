@@ -5,42 +5,56 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
 .eggs/
 *.egg
+dist/
+build/
 
-# ── 虚拟环境 ──────────────────────────────────
+# ── Virtual environments ─────────────────────
 .venv/
 venv/
 env/
-.env.local
 
-# ── 敏感配置 ─────────────────────────────────
+# ── Sensitive configuration ──────────────────
 .env
+.env.local
+.env.*.local
 dotenv/.env.*
 !dotenv/.env.*.example
 
-# ── 测试 & 覆盖率 ──────────────────────────────
+# ── Tests & coverage ─────────────────────────
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 coverage.xml
+.hypothesis/
 
-# ── 类型检查 ───────────────────────────────────
+# ── Type check & lint caches ─────────────────
 .mypy_cache/
 .ruff_cache/
+.pyre/
+.pytype/
 
-# ── Sequential Agent 工作区 ────────────────────
+# ── Runtime data (local dev paths) ───────────
+logs/
+icore-control-plane.json
+icore-chroma/
+icore-images/
 /tmp/icore-seq-workspace/
 hello.txt
+
+# ── Go services (gateway, logging, storage) ──
+*.exe
+*.exe~
+*.test
+*.out
+vendor/
 
 # ── IDE ───────────────────────────────────────
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
-*.json
-
-# ── 部署日志 ──────────────────────────────────
-logs/
+*~

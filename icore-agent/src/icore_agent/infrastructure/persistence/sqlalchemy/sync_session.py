@@ -59,6 +59,9 @@ def ensure_user_schema() -> None:
     """Create account and file tables when running against ephemeral test databases."""
     if os.getenv("ICORE_TEST_SYNC_DATABASE_URL", "").strip():
         from ..files.models import FileAssetRecord  # noqa: F401
+        from ..organizations.models import Organization, OrgMember  # noqa: F401
+        from ..projects.models import Project, ProjectSession  # noqa: F401
+        from ..sessions.models import ChatMessage, ChatSession  # noqa: F401
         from ..users.models import User  # noqa: F401
 
         Base.metadata.create_all(get_sync_engine())

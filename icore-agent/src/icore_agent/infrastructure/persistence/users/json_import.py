@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.application.user_import import LegacyUserImportService
+from icore_agent.application.workspace import WorkspaceMetadataService
 
 from ..sqlalchemy.sync_session import sync_session_scope
 from .sqlalchemy_repository import SqlAlchemyUserRepository
@@ -16,6 +17,7 @@ def import_legacy_users_from_store(store: Any) -> int:
     if not legacy_users:
         return 0
 
+    workspace = WorkspaceMetadataService()
     imported = 0
     with sync_session_scope() as session:
         service = LegacyUserImportService(SqlAlchemyUserRepository(session))
@@ -23,6 +25,6 @@ def import_legacy_users_from_store(store: Any) -> int:
             user = service.import_profile(profile)
             if user is None:
                 continue
-            store.ensure_organization_for_user(user)
+            workspace.ensure_organization_for_user(user)
             imported += 1
     return imported

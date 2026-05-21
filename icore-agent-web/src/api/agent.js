@@ -193,6 +193,63 @@ export async function getSessionState(sessionId) {
   return readJsonResponse(resp)
 }
 
+/**
+ * Fetch one page of the user's chat sessions from PostgreSQL.
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<{ sessions: Array, total: number, limit: number, offset: number }>}
+ */
+export async function fetchSessions(opts = {}) {
+  const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
+  const offset = Math.max(Number(opts.offset) || 0, 0)
+  const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const resp = await fetch(`${BASE}/sessions?${qs}`, {
+    headers: mergeAgentAuthHeaders(),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Load every session page until all rows are retrieved (ordered by updated_at desc).
+ * @returns {Promise<{ sessions: Array, total: number }>}
+ */
+export async function fetchAllSessions() {
+  const pageSize = 100
+  let offset = 0
+  let total = 0
+  const sessions = []
+  while (true) {
+    const payload = await fetchSessions({ limit: pageSize, offset })
+    const page = Array.isArray(payload.sessions) ? payload.sessions : []
+    total = Number(payload.total ?? 0)
+    sessions.push(...page)
+    offset += page.length
+    if (page.length === 0 || offset >= total) break
+  }
+  return { sessions, total }
+}
+
+/**
+ * Search owned chat sessions by title and message content.
+ * @param {string} query
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<{ query: string, sessions: Array, total: number, limit: number, offset: number }>}
+ */
+export async function searchSessions(query, opts = {}) {
+  const q = String(query || '').trim()
+  if (!q) {
+    return { query: '', sessions: [], total: 0, limit: 20, offset: 0 }
+  }
+  const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
+  const offset = Math.max(Number(opts.offset) || 0, 0)
+  const qs = new URLSearchParams({ q, limit: String(limit), offset: String(offset) })
+  const resp = await fetch(`${BASE}/sessions/search?${qs}`, {
+    headers: mergeAgentAuthHeaders(),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
 /** 生成随机 session id */
 export function newSessionId() {
   return crypto.randomUUID()

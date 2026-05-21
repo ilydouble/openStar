@@ -64,8 +64,11 @@ class FakePostgresRepository:
         self._store.calls.append(("postgres_record_usage_event", (), payload))
 
 
-def _patch_postgres_repositories(monkeypatch) -> None:
+def _patch_postgres_repositories(monkeypatch, workspace=None) -> None:
     """Replace PostgreSQL repositories with a single call-recording double."""
+    if workspace is not None:
+        monkeypatch.setattr(
+            adapters_module, "_workspace_service", lambda: workspace)
     for repository_name in (
         "PostgresBillingRepository",
         "PostgresBillingSummaryRepository",
@@ -180,8 +183,8 @@ class FakeControlPlaneStore:
 
 def test_split_account_adapters_delegate_to_the_expected_store_methods(monkeypatch):
     """Verify adapters delegate to the current store/Postgres repository boundary."""
-    _patch_postgres_repositories(monkeypatch)
     store = FakeControlPlaneStore()
+    _patch_postgres_repositories(monkeypatch, store)
     identity_repo = ControlPlaneIdentityRepository(store)
     verification_repo = ControlPlaneVerificationRepository(store)
     registration_repo = ControlPlaneRegistrationRepository(store)

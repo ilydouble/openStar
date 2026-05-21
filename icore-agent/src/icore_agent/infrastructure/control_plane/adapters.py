@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.application.usage import UsageService
+from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.domain.user import UserProfile
 
 from ..persistence.users.postgres_repositories import (
@@ -18,12 +19,17 @@ from ..persistence.users.postgres_repositories import (
 )
 
 
+def _workspace_service() -> WorkspaceMetadataService:
+    """Return a stateless workspace metadata service for adapter wiring."""
+    return WorkspaceMetadataService()
+
+
 class ControlPlaneIdentityRepository:
     """Adapter exposing identity lookup backed by PostgreSQL user profiles."""
 
     def __init__(self, store: Any) -> None:
         """Create an identity repository adapter bound to one control-plane store."""
-        self._postgres = PostgresIdentityRepository(store)
+        self._postgres = PostgresIdentityRepository(store, _workspace_service())
 
     def get_user_by_token(self, token: str) -> UserProfile | None:
         """Load a user by bearer token."""
@@ -63,7 +69,7 @@ class ControlPlaneRegistrationRepository:
 
     def __init__(self, store: Any) -> None:
         """Create a registration repository adapter bound to one control-plane store."""
-        self._postgres = PostgresRegistrationRepository(store)
+        self._postgres = PostgresRegistrationRepository(store, _workspace_service())
 
     def check_ip_registration_limit(self, client_ip: str) -> bool:
         """Check whether the IP-based registration limit still allows one more signup."""
@@ -91,8 +97,7 @@ class ControlPlaneTeamRepository:
 
     def __init__(self, store: Any) -> None:
         """Create a team repository adapter bound to one control-plane store."""
-        identity = PostgresIdentityRepository(store)
-        self._postgres = PostgresTeamRepository(store, identity)
+        self._postgres = PostgresTeamRepository(_workspace_service())
 
     def get_team_profile(self, user_id: str) -> dict[str, Any]:
         """Return the organization profile for one user."""
@@ -116,8 +121,7 @@ class ControlPlaneProjectRepository:
 
     def __init__(self, store: Any) -> None:
         """Create a project repository adapter bound to one control-plane store."""
-        identity = PostgresIdentityRepository(store)
-        self._postgres = PostgresProjectRepository(store, identity)
+        self._postgres = PostgresProjectRepository(_workspace_service())
 
     def sync_project_session(self, **payload: Any) -> dict[str, Any]:
         """Sync project and session metadata."""

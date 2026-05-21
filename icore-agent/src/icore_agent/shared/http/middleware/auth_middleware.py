@@ -21,12 +21,14 @@ from starlette.responses import JSONResponse, Response
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ....config import settings
+from ....application.workspace import WorkspaceMetadataService
 from ....infrastructure.control_plane.json_store import control_plane_store
 from ....infrastructure.persistence.users.postgres_repositories import PostgresIdentityRepository
 from ...auth.jwt import JWTValidationError, verify_access_token
 
 log = get_logger(__name__)
-account_repository = PostgresIdentityRepository(control_plane_store)
+account_repository = PostgresIdentityRepository(
+    control_plane_store, WorkspaceMetadataService())
 
 # Paths that skip auth entirely
 _PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json"}

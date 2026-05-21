@@ -98,12 +98,10 @@
       @dragleave.self="isDraggingFile = false"
       @drop.prevent="handleDrop"
     >
-      <!-- 拖拽提示 -->
       <div v-if="isDraggingFile" class="mx-auto mb-2 max-w-3xl flex items-center justify-center gap-2 rounded-xl border border-dashed border-violet-400 py-2 text-sm font-medium text-violet-600 dark:border-violet-400/60 dark:text-violet-300">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
         {{ t('chat.dropUploadRelease') }}
       </div>
-      <!-- 附件列表 -->
       <div v-if="attachmentList.length" class="mx-auto mb-2 max-w-3xl flex flex-wrap gap-2">
         <div
           v-for="att in attachmentList"
@@ -133,7 +131,6 @@
         </div>
       </div>
 
-      <!-- 上传错误提示 -->
       <div v-if="uploadError" class="mx-auto mb-2 max-w-3xl rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400 flex items-center gap-2">
         <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
         {{ uploadError }}
@@ -150,7 +147,6 @@
       <div
         class="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-lg ring-1 ring-zinc-200/40 transition-colors duration-300 dark:border-white/[0.1] dark:bg-white/[0.05] dark:shadow-[0_20px_40px_-16px_rgba(0,0,0,0.55)] dark:ring-white/10 dark:backdrop-blur-md"
       >
-        <!-- 文件上传按钮 -->
         <label
           :class="[
             'flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-all duration-200',
@@ -228,7 +224,6 @@ const fileInputEl = ref(null)
 const sessionId = ref(props.sessionId || newSessionId())
 const dark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
 
-// ── 附件状态 ──────────────────────────────────────────────────────────────
 const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
@@ -262,12 +257,12 @@ async function doUpload(file) {
 }
 
 async function refreshAttachments() {
-  // 文件资产由当前会话前端状态持有，历史会话不再从旧附件 API 拉取。
+  // File references are persisted with chat message metadata, not a legacy attach API.
 }
 
 async function handleFileUpload(e) {
   const file = e.target.files?.[0]
-  if (e.target) e.target.value = '' // 允许重复上传同名文件
+  if (e.target) e.target.value = ''
   if (!file) return
   await doUpload(file)
 }
@@ -319,9 +314,6 @@ async function sendMessage(msg) {
     stepsCollapsed: false,
   }
   messages.value.push(assistant)
-  // push sonrası index sabit: iç nesneyi mutasyona değil replace ile güncelliyoruz
-  // (push sonrası elde tutulan referans / proxy farkı yüzünden ekrana tek seferde yansıma
-  // sorununu giderir).
   const replyIndex = messages.value.length - 1
   streamingMsg.value = messages.value[replyIndex]
 

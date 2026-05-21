@@ -19,13 +19,14 @@ import json
 import re
 from typing import Any
 
-from icore_agent.lib.logging.app_logger import get_logger
 from strands import Agent, tool
 from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
+from icore_agent.shared.logging.app_logger import get_logger
+
 from ...config import settings
-from ...memory.chroma_store import search as _chroma_search_raw
+from ...infrastructure.memory.chroma_store import search as _chroma_search_raw
 from ..callback_ctx import sub_agent_callback
 
 log = get_logger(__name__)

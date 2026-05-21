@@ -13,8 +13,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from icore_agent.lib.logging.app_logger import get_logger
 from litellm import completion
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ...config import settings
 from .environment import BaseEnvironment, LocalEnvironment

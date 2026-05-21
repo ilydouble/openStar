@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...config import settings
-from ...lib.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
+from ...shared.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
 from .contracts import (
     BillingSummaryRepository,
     IdentityRepository,

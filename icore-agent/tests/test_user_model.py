@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from icore_agent.database.models import Base
-from icore_agent.users.models import User
+from icore_agent.infrastructure.persistence.sqlalchemy.models import Base
+from icore_agent.infrastructure.persistence.users.models import User
 
 
 def test_user_model_declares_account_columns():

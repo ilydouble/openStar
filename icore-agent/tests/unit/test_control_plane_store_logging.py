@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from icore_agent.lib.http.request.request_context import clear_request_id, set_request_id
-from icore_agent.lib.logging.app_logger import get_logger
-from icore_agent.lib.logging.contracts.v1 import LogEvent, LogLevel
-from icore_agent.lib.logging.logging_service_client import LoggingServiceClient
+from icore_agent.shared.http.request.request_context import clear_request_id, set_request_id
+from icore_agent.shared.logging.app_logger import get_logger
+from icore_agent.shared.logging.contracts.v1 import LogEvent, LogLevel
+from icore_agent.shared.logging.logging_service_client import LoggingServiceClient
 
 
 class CapturingLoggingClient(LoggingServiceClient):
@@ -28,7 +28,7 @@ class CapturingLoggingClient(LoggingServiceClient):
 
 def _build_store(tmp_path, monkeypatch, *, debug: bool):
     """Build a store instance with deterministic code generation and captured logs."""
-    import icore_agent.control_plane.store as store_module
+    import icore_agent.infrastructure.control_plane.json_store as store_module
 
     logging_client = CapturingLoggingClient()
     monkeypatch.setattr(
@@ -44,7 +44,8 @@ def _build_store(tmp_path, monkeypatch, *, debug: bool):
     monkeypatch.setattr(
         store_module,
         "log",
-        get_logger("icore_agent.control_plane.store", client=logging_client),
+        get_logger(
+            "icore_agent.infrastructure.control_plane.json_store", client=logging_client),
     )
 
     return store_module.ControlPlaneStore(), logging_client

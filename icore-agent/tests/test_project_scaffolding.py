@@ -332,7 +332,7 @@ def test_dockerfile_keeps_dependency_layer_before_source_copy():
 
 
 def test_copied_logging_client_does_not_reference_old_project_packages():
-    client = (AGENT_ROOT / "src" / "icore_agent" / "lib" /
+    client = (AGENT_ROOT / "src" / "icore_agent" / "shared" /
               "logging" / "logging_service_client.py").read_text(
         encoding="utf-8"
     )
@@ -343,7 +343,7 @@ def test_copied_logging_client_does_not_reference_old_project_packages():
 
 
 def test_logging_facade_uses_clear_layered_names():
-    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "lib" / "logging"
+    logging_dir = AGENT_ROOT / "src" / "icore_agent" / "shared" / "logging"
 
     assert (logging_dir / "logging_service_client.py").exists()
     assert (logging_dir / "app_logger.py").exists()
@@ -381,12 +381,43 @@ def test_email_validator_dependency_is_declared_for_emailstr_models():
     assert "email-validator==" in requirements
 
 
-def test_api_layer_is_split_by_business_domain():
-    """Keep FastAPI adapters grouped by domain with fine-grained schemas and handlers."""
-    api_dir = AGENT_ROOT / "src" / "icore_agent" / "api"
+def test_python_backend_uses_clean_architecture_layers():
+    """Keep Python backend code grouped by abstraction layer, not mixed top-level folders."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
 
-    assert (api_dir / "router.py").is_file()
-    assert not (api_dir / "routers").exists()
+    expected_layers = {
+        "application",
+        "config",
+        "domain",
+        "engine",
+        "infrastructure",
+        "interfaces",
+        "services",
+        "shared",
+        "tools",
+    }
+    assert expected_layers <= {
+        path.name for path in package_dir.iterdir() if path.is_dir()
+    }
+
+    mixed_top_level_dirs = {
+        "api",
+        "control_plane",
+        "database",
+        "lib",
+        "memory",
+        "users",
+    }
+    assert not (mixed_top_level_dirs & {
+        path.name for path in package_dir.iterdir() if path.is_dir()
+    })
+
+
+def test_http_interface_layer_is_split_by_business_domain():
+    """Keep HTTP adapters grouped by domain with fine-grained schemas and handlers."""
+    http_dir = AGENT_ROOT / "src" / "icore_agent" / "interfaces" / "http"
+
+    assert (http_dir / "router.py").is_file()
 
     expected_domains = {
         "account": {
@@ -411,7 +442,7 @@ def test_api_layer_is_split_by_business_domain():
         },
     }
     for domain, expected in expected_domains.items():
-        domain_dir = api_dir / domain
+        domain_dir = http_dir / domain
         assert (domain_dir / "router.py").is_file()
         for layer, filenames in expected.items():
             layer_dir = domain_dir / layer
@@ -419,15 +450,38 @@ def test_api_layer_is_split_by_business_domain():
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
 
 
-def test_fastapi_app_uses_api_router_composition_entrypoint():
+def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
     """Keep application startup decoupled from individual business-domain routers."""
     main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(
         encoding="utf-8"
     )
 
-    assert "from .api.router import include_api_routers" in main
+    assert "from .interfaces.http.router import include_api_routers" in main
     assert "include_api_routers(app)" in main
-    assert "from .api.routers" not in main
+    assert "from .api" not in main
+
+
+def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
+    """Keep domain rules, infrastructure adapters, and shared helpers separated."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+
+    assert (package_dir / "domain" / "account" / "plans.py").is_file()
+    assert (package_dir / "shared" / "runtime" / "user_context.py").is_file()
+    assert (package_dir / "shared" / "auth" / "jwt.py").is_file()
+    assert (package_dir / "shared" / "logging" / "app_logger.py").is_file()
+    assert (
+        package_dir / "infrastructure" /
+        "persistence" / "sqlalchemy" / "sync_session.py"
+    ).is_file()
+    assert (
+        package_dir / "infrastructure" / "persistence" / "users" / "repository.py"
+    ).is_file()
+    assert (
+        package_dir / "infrastructure" / "control_plane" / "json_store.py"
+    ).is_file()
+    assert (
+        package_dir / "infrastructure" / "memory" / "conversation.py"
+    ).is_file()
 
 
 def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():

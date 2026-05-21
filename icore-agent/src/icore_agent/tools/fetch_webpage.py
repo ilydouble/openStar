@@ -10,9 +10,11 @@ returns a promising URL.
 from __future__ import annotations
 
 import re
-from icore_agent.lib.logging.app_logger import get_logger
+
 import httpx
 from strands import tool
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 

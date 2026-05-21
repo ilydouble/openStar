@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from icore_agent.lib.logging.app_logger import get_logger
+from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 

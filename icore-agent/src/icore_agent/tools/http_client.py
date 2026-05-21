@@ -6,9 +6,11 @@ Strands @tool wrapper around httpx.
 from __future__ import annotations
 
 import json
-from icore_agent.lib.logging.app_logger import get_logger
+
 import httpx
 from strands import tool
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 

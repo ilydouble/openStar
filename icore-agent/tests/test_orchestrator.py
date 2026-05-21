@@ -47,9 +47,9 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.api.agent.handlers.chat.create_orchestrator")
-@patch("icore_agent.api.agent.handlers.chat.attachments")
-@patch("icore_agent.api.agent.handlers.chat.memory")
+@patch("icore_agent.interfaces.http.agent.handlers.chat.create_orchestrator")
+@patch("icore_agent.interfaces.http.agent.handlers.chat.attachments")
+@patch("icore_agent.interfaces.http.agent.handlers.chat.memory")
 def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
@@ -75,7 +75,7 @@ def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, cli
 
 # ── Sequential endpoint ────────────────────────────────────────────────────
 
-@patch("icore_agent.api.agent.handlers.sequential.SequentialAgent")
+@patch("icore_agent.interfaces.http.agent.handlers.sequential.SequentialAgent")
 def test_sequential_endpoint_success(mock_seq_cls, client):
     from icore_agent.engine.sequential.agent import SequentialResult
     mock_instance = MagicMock()
@@ -97,8 +97,8 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
-@patch("icore_agent.api.agent.handlers.session.attachments")
-@patch("icore_agent.api.agent.handlers.session.memory")
+@patch("icore_agent.interfaces.http.agent.handlers.session.attachments")
+@patch("icore_agent.interfaces.http.agent.handlers.session.memory")
 def test_clear_session(mock_memory, mock_attachments, client):
     mock_memory.clear = AsyncMock()
     mock_attachments.clear = AsyncMock()

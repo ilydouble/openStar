@@ -11,8 +11,10 @@ from .adapters import (
     ControlPlaneUsageRepository,
     ControlPlaneVerificationRepository,
 )
+from .json_store import ControlPlaneStore, control_plane_store
 
 __all__ = [
+    "ControlPlaneStore",
     "ControlPlaneBillingRepository",
     "ControlPlaneBillingSummaryRepository",
     "ControlPlaneIdentityRepository",
@@ -22,4 +24,5 @@ __all__ = [
     "ControlPlaneTeamRepository",
     "ControlPlaneUsageRepository",
     "ControlPlaneVerificationRepository",
+    "control_plane_store",
 ]

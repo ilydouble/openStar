@@ -9,7 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from icore_agent.config import settings
-from icore_agent.database.models import Base
+from icore_agent.infrastructure.persistence.sqlalchemy.models import Base
 
 config = context.config
 

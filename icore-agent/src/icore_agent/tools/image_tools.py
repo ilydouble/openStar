@@ -15,9 +15,10 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
-from icore_agent.lib.logging.app_logger import get_logger
 from litellm import completion as litellm_completion
 from strands import tool
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ..config import settings
 

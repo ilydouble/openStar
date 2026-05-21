@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from icore_agent.lib.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
+from icore_agent.shared.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
 
 
 def test_sign_access_token_returns_hs256_claims():

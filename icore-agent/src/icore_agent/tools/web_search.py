@@ -10,9 +10,10 @@ Exposed as a Strands @tool for use by the orchestrator and sub-agents.
 
 from __future__ import annotations
 
-from icore_agent.lib.logging.app_logger import get_logger
 import httpx
 from strands import tool
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ..config import settings
 

@@ -9,8 +9,10 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-from icore_agent.lib.logging.app_logger import get_logger
+
 from strands import tool
+
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ..config import settings
 

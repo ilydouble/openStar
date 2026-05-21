@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..users.postgres_repositories import (
+from ..persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,
     PostgresIdentityRepository,

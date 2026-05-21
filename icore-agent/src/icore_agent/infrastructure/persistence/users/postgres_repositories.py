@@ -3,47 +3,60 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from dataclasses import replace
 from typing import Any
 
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user.user_repository import UserRepository
+from icore_agent.application.usage.policy import (
+    current_timestamp,
+    default_usage,
+    ensure_current_usage,
+    next_quota_reset,
+    plan_or_free,
+)
+from icore_agent.domain.user import UserProfile
 
 from ..sqlalchemy.sync_session import sync_session_scope
+from .sqlalchemy_repository import SqlAlchemyUserRepository
+
+
+def _default_byok() -> dict[str, Any]:
+    """Return the default BYOK settings payload."""
+    return {"enabled": False, "api_key": "", "api_base": "", "model": ""}
 
 
 class PostgresIdentityRepository:
     """Load and issue account identities from PostgreSQL."""
 
     def __init__(self, store: Any) -> None:
+        """Create an identity repository with the legacy token store."""
         self._store = store
 
-    def get_user_by_token(self, token: str) -> dict[str, Any] | None:
+    def get_user_by_token(self, token: str) -> UserProfile | None:
         """Resolve a legacy bearer token to a persisted user profile."""
         user_id = self._store.get_user_id_for_token(token)
         if not user_id:
             return None
         return self.get_user_by_id(user_id)
 
-    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+    def get_user_by_id(self, user_id: str) -> UserProfile | None:
         """Load a user profile by public id."""
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 return None
-            self._store.ensure_organization_for_user(repo.to_api_dict(user))
-            return repo.to_api_dict(user)
+            self._store.ensure_organization_for_user(user)
+            return user
 
-    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+    def get_user_by_email(self, email: str) -> UserProfile | None:
         """Load a user profile by email address."""
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_email(email)
             if user is None:
                 return None
-            self._store.ensure_organization_for_user(repo.to_api_dict(user))
-            return repo.to_api_dict(user)
+            self._store.ensure_organization_for_user(user)
+            return user
 
     def issue_token_for_user(self, user_id: str) -> str:
         """Issue a legacy opaque token mapped to the user public id."""
@@ -54,62 +67,75 @@ class PostgresRegistrationRepository:
     """Register trial accounts in PostgreSQL while keeping org metadata in JSON."""
 
     def __init__(self, store: Any) -> None:
+        """Create a registration repository with the control-plane store."""
         self._store = store
 
     def check_ip_registration_limit(self, client_ip: str) -> bool:
         """Delegate IP throttling to the JSON-backed control-plane store."""
         return self._store.check_ip_registration_limit(client_ip)
 
-    def register_trial(self, name: str, email: str, client_ip: str) -> tuple[dict[str, Any], str]:
+    def register_trial(
+        self,
+        name: str,
+        email: str,
+        client_ip: str,
+    ) -> tuple[UserProfile, str]:
         """Create a trial account in PostgreSQL and persist org metadata."""
+        normalized_email = email.strip().lower()
         with sync_session_scope() as session:
-            repo = UserRepository(session)
-            existing = repo.get_by_email(email)
+            repo = SqlAlchemyUserRepository(session)
+            existing = repo.get_by_email(normalized_email)
             if existing is not None:
-                user_dict = repo.to_api_dict(existing)
-                token = self._store.issue_legacy_token(user_dict["id"])
-                return user_dict, token
+                token = self._store.issue_legacy_token(existing.public_id)
+                return existing, token
 
-            org_id = f"org_{uuid.uuid4().hex[:12]}"
-            org_name = f"{name.strip() or 'Free'} Team"
-            user = repo.create_trial_user(
-                name=name,
-                email=email,
-                organization_id=org_id,
-                organization_name=org_name,
+            now = current_timestamp()
+            plan = plan_or_free("free")
+            user = repo.save(
+                UserProfile(
+                    public_id=str(uuid.uuid4()),
+                    name=name.strip() or normalized_email.split("@")[0],
+                    email=normalized_email,
+                    plan=plan.value,
+                    plan_label=plan.limits.label,
+                    organization_id=f"org_{uuid.uuid4().hex[:12]}",
+                    organization_name=f"{name.strip() or 'Free'} Team",
+                    roles=["owner"],
+                    byok=_default_byok(),
+                    usage=default_usage(),
+                    created_at=now,
+                    updated_at=now,
+                )
             )
-            user_dict = repo.to_api_dict(user)
 
-        self._store.create_organization_for_user(user_dict)
+        self._store.create_organization_for_user(user)
         self._store.record_ip_registration(client_ip)
-        self._store.append_event("trial_registered", user_id=user_dict["id"])
-        token = self._store.issue_legacy_token(user_dict["id"])
-        return user_dict, token
+        self._store.append_event("trial_registered", user_id=user.public_id)
+        token = self._store.issue_legacy_token(user.public_id)
+        return user, token
 
 
 class PostgresBillingSummaryRepository:
     """Read and update billing fields stored on the user profile."""
 
     def __init__(self, store: Any) -> None:
+        """Create a billing summary repository with the control-plane store."""
         self._store = store
 
     def get_plan_summary(self, user_id: str) -> dict[str, Any]:
         """Return plan limits and usage counters for one user."""
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 raise KeyError(user_id)
-            usage = repo.ensure_usage(user)
-            limits = Plan(user.plan).limits
-            now = datetime.now(UTC)
-            if now.month == 12:
-                next_reset = datetime(now.year + 1, 1, 1, 0, 0, 0, tzinfo=UTC)
-            else:
-                next_reset = datetime(
-                    now.year, now.month + 1, 1, 0, 0, 0, tzinfo=UTC)
+            user, usage, should_save = ensure_current_usage(user)
+            if should_save:
+                user = repo.save(user)
+            plan = plan_or_free(user.plan)
+            limits = plan.limits
             return {
-                "plan": user.plan,
+                "plan": plan.value,
                 "label": limits.label,
                 "limits": {
                     "messages": limits.message_limit,
@@ -125,27 +151,31 @@ class PostgresBillingSummaryRepository:
                 },
                 "quota_period": {
                     "start": usage.get("quota_period_start", 0),
-                    "next_reset": int(next_reset.timestamp()),
+                    "next_reset": next_quota_reset(),
                 },
-                "byok": dict(
-                    user.byok
-                    or {"enabled": False, "api_key": "", "api_base": "", "model": ""}
-                ),
+                "byok": dict(user.byok or _default_byok()),
             }
 
-    def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict[str, Any]:
+    def update_byok(
+        self,
+        user_id: str,
+        api_key: str,
+        api_base: str,
+        model: str,
+    ) -> dict[str, Any]:
         """Persist BYOK settings for one user."""
+        byok = {
+            "enabled": bool(api_key),
+            "api_key": api_key.strip(),
+            "api_base": api_base.strip(),
+            "model": model.strip(),
+        }
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 raise KeyError(user_id)
-            byok = repo.update_byok(
-                user,
-                api_key=api_key,
-                api_base=api_base,
-                model=model,
-            )
+            repo.save(replace(user, byok=byok, updated_at=current_timestamp()))
         self._store.append_event("byok_updated", user_id=user_id)
         return byok
 
@@ -154,90 +184,90 @@ class PostgresBillingRepository:
     """Apply billing plan changes to PostgreSQL user profiles."""
 
     def __init__(self, store: Any) -> None:
+        """Create a billing repository with the control-plane store."""
         self._store = store
 
     def update_user_plan(self, **payload: Any) -> dict[str, Any]:
         """Update one user's billing plan."""
         user_id = str(payload["user_id"])
-        new_plan = str(payload["new_plan"])
+        plan = plan_or_free(str(payload["new_plan"]))
+        byok = {
+            "enabled": bool(payload.get("byok_enabled")),
+            "api_key": str(payload.get("byok_api_key") or "").strip(),
+            "api_base": str(payload.get("byok_api_base") or "").strip(),
+            "model": str(payload.get("byok_model") or "").strip(),
+        }
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 raise KeyError(user_id)
             old_plan = user.plan
-            user = repo.update_plan(
-                user,
-                new_plan=new_plan,
-                byok_enabled=bool(payload.get("byok_enabled")),
-                byok_api_key=str(payload.get("byok_api_key") or ""),
-                byok_api_base=str(payload.get("byok_api_base") or ""),
-                byok_model=str(payload.get("byok_model") or ""),
+            saved = repo.save(
+                replace(
+                    user,
+                    plan=plan.value,
+                    plan_label=plan.limits.label,
+                    byok=byok,
+                    updated_at=current_timestamp(),
+                )
             )
-            user_dict = repo.to_api_dict(user)
         self._store.append_event(
             "plan_updated",
             user_id=user_id,
             old_plan=old_plan,
-            new_plan=new_plan,
+            new_plan=plan.value,
         )
-        return user_dict
+        return {
+            "id": saved.public_id,
+            "plan": saved.plan,
+            "plan_label": saved.plan_label,
+        }
 
 
 class PostgresUsageRepository:
-    """Quota and admin usage reporting backed by PostgreSQL user profiles."""
+    """Usage persistence store backed by PostgreSQL users and JSON usage events."""
 
     def __init__(self, store: Any) -> None:
+        """Create a usage store with the control-plane event store."""
         self._store = store
 
-    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str | None]:
-        """Return whether one more unit of quota can be consumed."""
+    def get_user_by_id(self, user_id: str) -> UserProfile | None:
+        """Load one user profile by public id."""
         with sync_session_scope() as session:
-            repo = UserRepository(session)
-            user = repo.get_by_public_id(user_id)
-            if user is None:
-                return False, "user not found"
-            return repo.check_quota(user, resource)
+            repo = SqlAlchemyUserRepository(session)
+            return repo.get_by_public_id(user_id)
 
-    def consume_quota(self, user_id: str, resource: str) -> None:
-        """Consume one quota unit for the given resource."""
+    def save_user(self, user: UserProfile) -> UserProfile:
+        """Persist one changed user profile."""
         with sync_session_scope() as session:
-            repo = UserRepository(session)
-            user = repo.get_by_public_id(user_id)
-            if user is None:
-                raise KeyError(user_id)
-            repo.consume_quota(user, resource)
+            repo = SqlAlchemyUserRepository(session)
+            return repo.save(user)
+
+    def list_users(self) -> list[UserProfile]:
+        """Return all user profiles for admin usage reporting."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyUserRepository(session)
+            return repo.list_all()
+
+    def record_usage_event(self, **payload: Any) -> None:
+        """Persist one LLM usage event in the control-plane event store."""
+        self._store.record_usage_event(**payload)
 
     def usage_summary(self, user_id: str) -> dict[str, Any]:
         """Return token usage events aggregated from the JSON store."""
         return self._store.usage_summary(user_id)
 
-    def admin_overview(self) -> dict[str, Any]:
+    def admin_overview(self, users: list[UserProfile]) -> dict[str, Any]:
         """Return admin metrics combining PostgreSQL users and JSON usage events."""
-        with sync_session_scope() as session:
-            repo = UserRepository(session)
-            users = [repo.to_api_dict(user) for user in repo.list_all()]
         return self._store.admin_overview(users)
-
-    def record_usage_event(self, **payload: Any) -> None:
-        """Persist one LLM usage event and update token counters on the user row."""
-        self._store.record_usage_event(**payload)
-        user_id = str(payload.get("user_id") or "")
-        total_tokens = int(payload.get("total_tokens") or 0)
-        if not user_id or total_tokens <= 0:
-            return
-        with sync_session_scope() as session:
-            repo = UserRepository(session)
-            user = repo.get_by_public_id(user_id)
-            if user is None:
-                return
-            repo.add_token_usage(user, total_tokens)
 
 
 class PostgresTeamRepository:
     """Team operations that combine PostgreSQL users with JSON organization data."""
 
     def __init__(self, store: Any, identity_repository: PostgresIdentityRepository) -> None:
+        """Create a team repository with shared identity lookup."""
         self._store = store
         self._identity_repository = identity_repository
 
@@ -254,11 +284,17 @@ class PostgresTeamRepository:
         if user is None:
             raise KeyError(user_id)
         with sync_session_scope() as session:
-            repo = UserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             db_user = repo.get_by_public_id(user_id)
             if db_user is None:
                 raise KeyError(user_id)
-            repo.update_organization_name(db_user, organization_name)
+            repo.save(
+                replace(
+                    db_user,
+                    organization_name=organization_name,
+                    updated_at=current_timestamp(),
+                )
+            )
         return self._store.rename_organization_for_user(user, organization_name)
 
     def add_team_member(self, user_id: str, **payload: Any) -> dict[str, Any]:
@@ -285,6 +321,7 @@ class PostgresProjectRepository:
     """Project metadata stored in JSON, keyed by PostgreSQL user profiles."""
 
     def __init__(self, store: Any, identity_repository: PostgresIdentityRepository) -> None:
+        """Create a project repository with shared identity lookup."""
         self._store = store
         self._identity_repository = identity_repository
 

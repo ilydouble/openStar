@@ -1,14 +1,14 @@
-"""Map SQLAlchemy user rows to the account API payload shape."""
+"""Serialize user domain models for the HTTP v1 API."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .models import User
+from icore_agent.domain.user import UserProfile
 
 
-def user_to_api_dict(user: User) -> dict[str, Any]:
-    """Convert a persisted user row into the control-plane account payload."""
+def serialize_user_profile(user: UserProfile) -> dict[str, Any]:
+    """Convert a user profile into the stable account API payload."""
     return {
         "id": user.public_id,
         "name": user.name,

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.domain.user.user_repository import UserRepository
+from icore_agent.application.user_import import LegacyUserImportService
 
 from ..sqlalchemy.sync_session import sync_session_scope
+from .sqlalchemy_repository import SqlAlchemyUserRepository
 
 
 def import_legacy_users_from_store(store: Any) -> int:
@@ -17,11 +18,11 @@ def import_legacy_users_from_store(store: Any) -> int:
 
     imported = 0
     with sync_session_scope() as session:
-        repo = UserRepository(session)
+        service = LegacyUserImportService(SqlAlchemyUserRepository(session))
         for profile in legacy_users:
-            user = repo.upsert_from_legacy_dict(profile)
+            user = service.import_profile(profile)
             if user is None:
                 continue
-            store.ensure_organization_for_user(repo.to_api_dict(user))
+            store.ensure_organization_for_user(user)
             imported += 1
     return imported

@@ -416,8 +416,9 @@ def test_python_backend_uses_clean_architecture_layers():
 def test_http_interface_layer_is_split_by_business_domain():
     """Keep HTTP adapters grouped by domain with fine-grained schemas and handlers."""
     http_dir = AGENT_ROOT / "src" / "icore_agent" / "interfaces" / "http"
+    v1_dir = http_dir / "v1"
 
-    assert (http_dir / "router.py").is_file()
+    assert (v1_dir / "router.py").is_file()
 
     expected_domains = {
         "account": {
@@ -442,12 +443,14 @@ def test_http_interface_layer_is_split_by_business_domain():
         },
     }
     for domain, expected in expected_domains.items():
-        domain_dir = http_dir / domain
+        assert not (http_dir / domain).exists()
+        domain_dir = v1_dir / domain
         assert (domain_dir / "router.py").is_file()
         for layer, filenames in expected.items():
             layer_dir = domain_dir / layer
             assert (layer_dir / "__init__.py").is_file()
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
+    assert (v1_dir / "users" / "serializers.py").is_file()
 
 
 def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
@@ -456,7 +459,7 @@ def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
         encoding="utf-8"
     )
 
-    assert "from .interfaces.http.router import include_api_routers" in main
+    assert "from .interfaces.http.v1.router import include_api_routers" in main
     assert "include_api_routers(app)" in main
     assert "from .api" not in main
 
@@ -467,6 +470,11 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
 
     assert (package_dir / "domain" / "account" / "plans.py").is_file()
     assert (package_dir / "domain" / "user" / "user_repository.py").is_file()
+    assert (package_dir / "domain" / "user" / "models.py").is_file()
+    assert (
+        package_dir / "infrastructure" / "persistence" / "users" /
+        "sqlalchemy_repository.py"
+    ).is_file()
     assert (package_dir / "shared" / "runtime" / "user_context.py").is_file()
     assert (package_dir / "shared" / "auth" / "jwt.py").is_file()
     assert (package_dir / "shared" / "logging" / "app_logger.py").is_file()
@@ -483,6 +491,57 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
     assert (
         package_dir / "infrastructure" / "memory" / "conversation.py"
     ).is_file()
+
+
+def test_domain_user_repository_is_abstract_not_sqlalchemy_bound():
+    """Keep the domain repository free of concrete persistence and API serialization."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    repository = (
+        package_dir / "domain" / "user" / "user_repository.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Protocol" in repository
+    assert "sqlalchemy" not in repository.lower()
+    assert "Session" not in repository
+    assert "select(" not in repository
+    assert "infrastructure.persistence.users.models" not in repository
+    assert "user_to_api_dict" not in repository
+
+
+def test_http_v1_owns_user_serialization():
+    """Keep user HTTP payload formatting out of domain and persistence layers."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    serializer = (
+        package_dir / "interfaces" / "http" / "v1" /
+        "users" / "serializers.py"
+    ).read_text(encoding="utf-8")
+    persistence_dir = package_dir / "infrastructure" / "persistence" / "users"
+
+    assert "serialize_user_profile" in serializer
+    assert "UserProfile" in serializer
+    assert not (persistence_dir / "mappers.py").exists()
+
+
+def test_usage_policy_and_user_import_live_in_application_layer():
+    """Keep quota rules and legacy import mapping out of repositories."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    usage_policy = package_dir / "application" / "usage" / "policy.py"
+    user_import = package_dir / "application" / "user_import" / "service.py"
+    postgres_repositories = (
+        package_dir / "infrastructure" / "persistence" /
+        "users" / "postgres_repositories.py"
+    ).read_text(encoding="utf-8")
+    json_import = (
+        package_dir / "infrastructure" / "persistence" /
+        "users" / "json_import.py"
+    ).read_text(encoding="utf-8")
+
+    assert usage_policy.is_file()
+    assert user_import.is_file()
+    assert "def check_quota" not in postgres_repositories
+    assert "def consume_quota" not in postgres_repositories
+    assert "LegacyUserImportService" in json_import
+    assert "upsert_from_legacy_dict" not in json_import
 
 
 def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():

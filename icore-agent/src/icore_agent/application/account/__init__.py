@@ -7,7 +7,6 @@ from .contracts import (
     ProjectRepository,
     RegistrationRepository,
     TeamRepository,
-    UsageRepository,
     VerificationRepository,
 )
 from .service import AccountService
@@ -20,6 +19,5 @@ __all__ = [
     "ProjectRepository",
     "RegistrationRepository",
     "TeamRepository",
-    "UsageRepository",
     "VerificationRepository",
 ]

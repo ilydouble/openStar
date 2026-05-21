@@ -172,8 +172,8 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
     assert "Verification code sent to" in resp.json()["message"]
 
 
-@patch("icore_agent.interfaces.http.agent.handlers.chat.create_orchestrator")
-@patch("icore_agent.interfaces.http.agent.handlers.chat.memory")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.memory")
 def test_chat_requires_account_token(mock_memory, mock_create_orch, client: TestClient):
     mock_memory.get_context = AsyncMock(
         return_value=(None, [], None, False, [], []))
@@ -217,8 +217,8 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     assert payload["byok"]["enabled"] is True
 
 
-@patch("icore_agent.interfaces.http.agent.handlers.session.attachments")
-@patch("icore_agent.interfaces.http.agent.handlers.session.memory")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.session.attachments")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
 def test_can_fetch_session_state(mock_memory, mock_attachments, client: TestClient):
     headers = _trial_headers(client)
     mock_memory.get_context = AsyncMock(
@@ -304,8 +304,8 @@ def test_can_read_and_update_team_profile(client: TestClient):
     assert member.json()["member"]["email"] == "ops@example.com"
 
 
-@patch("icore_agent.interfaces.http.dependencies.knowledge_service._add_documents")
-@patch("icore_agent.interfaces.http.dependencies.knowledge_service.parse_document")
+@patch("icore_agent.interfaces.http.v1.dependencies.knowledge_service._add_documents")
+@patch("icore_agent.interfaces.http.v1.dependencies.knowledge_service.parse_document")
 def test_knowledge_upload_can_use_organization_scope(mock_parse, mock_add_documents, client: TestClient):
     headers = _trial_headers(client)
     mock_parse.return_value = "Knowledge base content"

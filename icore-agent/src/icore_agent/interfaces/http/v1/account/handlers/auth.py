@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, Request
 from icore_agent.application.account import AccountService
 
 from ...dependencies import get_account_service
+from ...users import serialize_user_profile
 from ..schemas.auth import (
     EmailLoginRequest,
     EmailLoginResponse,
@@ -42,7 +43,7 @@ async def email_login(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return EmailLoginResponse(access_token=token, user=user)
+    return EmailLoginResponse(access_token=token, user=serialize_user_profile(user))
 
 
 async def register_trial(
@@ -64,4 +65,4 @@ async def register_trial(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
-    return TrialRegistrationResponse(access_token=token, user=user)
+    return TrialRegistrationResponse(access_token=token, user=serialize_user_profile(user))

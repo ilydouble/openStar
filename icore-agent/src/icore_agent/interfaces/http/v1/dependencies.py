@@ -29,6 +29,8 @@ from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresUsageRepository,
 )
 
+from .users import serialize_user_profile
+
 identity_repository = PostgresIdentityRepository(control_plane_store)
 verification_repository = ControlPlaneVerificationRepository(
     control_plane_store)
@@ -40,7 +42,8 @@ project_repository = PostgresProjectRepository(
     control_plane_store, identity_repository)
 billing_summary_repository = PostgresBillingSummaryRepository(
     control_plane_store)
-usage_repository = PostgresUsageRepository(control_plane_store)
+usage_store = PostgresUsageRepository(control_plane_store)
+usage_service = UsageService(usage_store)
 billing_repository = PostgresBillingRepository(control_plane_store)
 
 account_service = AccountService(
@@ -51,13 +54,12 @@ account_service = AccountService(
     team_repository=team_repository,
     project_repository=project_repository,
     billing_summary_repository=billing_summary_repository,
-    usage_repository=usage_repository,
+    usage_service=usage_service,
 )
 billing_service = BillingService(
     billing_repository,
     settings.icore_base_url or "http://localhost:11000",
 )
-usage_service = UsageService(usage_repository)
 knowledge_service = KnowledgeService(
     add_documents=add_documents,
     list_documents=list_documents,
@@ -94,7 +96,7 @@ def get_current_user(
 ) -> dict:
     """Resolve the authenticated user from the bearer token header."""
     try:
-        return service.get_current_user(authorization)
+        return serialize_user_profile(service.get_current_user(authorization))
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except LookupError as exc:

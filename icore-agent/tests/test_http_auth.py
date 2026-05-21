@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from icore_agent.interfaces.http.http_auth import extract_bearer_token
+from icore_agent.interfaces.http.v1.http_auth import extract_bearer_token
 
 
 def test_extract_bearer_token_accepts_lowercase_scheme():

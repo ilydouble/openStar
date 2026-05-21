@@ -17,8 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .infrastructure.control_plane.json_store import control_plane_store
-from .interfaces.http.dependencies import usage_service
-from .interfaces.http.router import include_api_routers
+from .interfaces.http.v1.dependencies import usage_service
+from .interfaces.http.v1.router import include_api_routers
 from .shared.http.middleware import (
     AuthMiddleware,
     BackendRequestLoggingMiddleware,

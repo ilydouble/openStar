@@ -8,15 +8,40 @@ import secrets
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from datetime import UTC
 from pathlib import Path
 from typing import Any
+
+from icore_agent.domain.user import UserProfile
 
 from ...config import settings
 from ...shared.logging.app_logger import get_logger
 
 fallback_log = logging.getLogger(__name__)
 log = get_logger(__name__)
+
+UserPayload = UserProfile | Mapping[str, Any]
+
+
+def _user_payload(user: UserPayload) -> dict[str, Any]:
+    """Normalize a domain user profile or mapping into the JSON store shape."""
+    if isinstance(user, UserProfile):
+        return {
+            "id": user.public_id,
+            "name": user.name,
+            "email": user.email,
+            "plan": user.plan,
+            "plan_label": user.plan_label,
+            "organization_id": user.organization_id or "",
+            "organization_name": user.organization_name or "",
+            "roles": list(user.roles or ["owner"]),
+            "byok": dict(user.byok or {}),
+            "usage": dict(user.usage or {}),
+            "created_at": int(user.created_at),
+            "updated_at": int(user.updated_at),
+        }
+    return dict(user)
 
 
 def _print_dev_verification_email(to_email: str, code: str) -> None:
@@ -168,6 +193,7 @@ class ControlPlaneStore:
         return int(period_start.timestamp())
 
     def _ensure_org_for_user(self, data: dict[str, Any], user: dict[str, Any]) -> None:
+        """Ensure organization metadata exists for one normalized user payload."""
         org_id = user.get("organization_id", "")
         if org_id and org_id in data.get("organizations", {}):
             return
@@ -333,64 +359,76 @@ class ControlPlaneStore:
             ip_regs.setdefault(client_ip, []).append(now)
             self._save(data)
 
-    def create_organization_for_user(self, user: dict[str, Any]) -> None:
+    def create_organization_for_user(self, user: UserPayload) -> None:
         """Persist organization metadata for a newly registered user."""
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
+            self._ensure_org_for_user(data, payload)
             self._save(data)
 
-    def ensure_organization_for_user(self, user: dict[str, Any]) -> None:
+    def ensure_organization_for_user(self, user: UserPayload) -> None:
         """Ensure organization metadata exists for an existing user profile."""
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
+            self._ensure_org_for_user(data, payload)
             self._save(data)
 
-    def get_team_profile_for_user(self, user: dict[str, Any]) -> dict[str, Any]:
+    def get_team_profile_for_user(self, user: UserPayload) -> dict[str, Any]:
         """Return the organization profile for one user dict."""
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
-            org_id = user.get("organization_id", "")
-            organization = data.get("organizations", {}).get(org_id) or {
-                "id": org_id,
-                "name": user.get("organization_name", ""),
-                "knowledge_scope": "organization",
-                "members": [],
-            }
-            return {
-                "organization": {
-                    "id": organization["id"],
-                    "name": organization.get("name", ""),
-                    "knowledge_scope": organization.get("knowledge_scope", "organization"),
-                },
-                "members": organization.get("members", []),
-                "current_user_id": user["id"],
-            }
+            self._ensure_org_for_user(data, payload)
+            return self._team_profile_from_data(data, payload)
+
+    def _team_profile_from_data(
+        self,
+        data: dict[str, Any],
+        user: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build a team profile response from already loaded store data."""
+        org_id = user.get("organization_id", "")
+        organization = data.get("organizations", {}).get(org_id) or {
+            "id": org_id,
+            "name": user.get("organization_name", ""),
+            "knowledge_scope": "organization",
+            "members": [],
+        }
+        return {
+            "organization": {
+                "id": organization["id"],
+                "name": organization.get("name", ""),
+                "knowledge_scope": organization.get("knowledge_scope", "organization"),
+            },
+            "members": organization.get("members", []),
+            "current_user_id": user["id"],
+        }
 
     def rename_organization_for_user(
         self,
-        user: dict[str, Any],
+        user: UserPayload,
         organization_name: str,
     ) -> dict[str, Any]:
         """Rename the organization associated with one user."""
         now = int(time.time())
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
-            org_id = user["organization_id"]
+            self._ensure_org_for_user(data, payload)
+            org_id = payload["organization_id"]
             organization = data["organizations"][org_id]
             organization["name"] = organization_name.strip()
             organization["updated_at"] = now
             self._save(data)
-            return self.get_team_profile_for_user(
-                {**user, "organization_name": organization_name.strip()}
-            )
+            updated = {**payload,
+                       "organization_name": organization_name.strip()}
+            return self._team_profile_from_data(data, updated)
 
     def add_team_member_for_user(
         self,
-        user: dict[str, Any],
+        user: UserPayload,
         *,
         name: str,
         email: str,
@@ -398,10 +436,11 @@ class ControlPlaneStore:
     ) -> dict[str, Any]:
         """Add one invited member to the user's organization."""
         now = int(time.time())
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
-            org_id = user["organization_id"]
+            self._ensure_org_for_user(data, payload)
+            org_id = payload["organization_id"]
             organization = data["organizations"][org_id]
             member = {
                 "user_id": f"member_{uuid.uuid4().hex[:12]}",
@@ -416,22 +455,23 @@ class ControlPlaneStore:
             self._save(data)
             return member
 
-    def update_knowledge_scope_for_user(self, user: dict[str, Any], scope: str) -> dict[str, Any]:
+    def update_knowledge_scope_for_user(self, user: UserPayload, scope: str) -> dict[str, Any]:
         """Update the knowledge scope for the user's organization."""
         now = int(time.time())
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
-            org_id = user["organization_id"]
+            self._ensure_org_for_user(data, payload)
+            org_id = payload["organization_id"]
             organization = data["organizations"][org_id]
             organization["knowledge_scope"] = scope
             organization["updated_at"] = now
             self._save(data)
-            return self.get_team_profile_for_user(user)
+            return self._team_profile_from_data(data, payload)
 
     def sync_project_for_user(
         self,
-        user: dict[str, Any],
+        user: UserPayload,
         *,
         project_id: str,
         project_title: str,
@@ -443,10 +483,11 @@ class ControlPlaneStore:
     ) -> dict[str, Any]:
         """Persist project/session metadata for one user profile."""
         now = int(time.time())
-        user_id = user["id"]
+        payload = _user_payload(user)
+        user_id = payload["id"]
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
+            self._ensure_org_for_user(data, payload)
             projects_by_user = data.setdefault(
                 "projects", {}).setdefault(user_id, {})
             project = projects_by_user.setdefault(
@@ -455,7 +496,7 @@ class ControlPlaneStore:
                     "id": project_id,
                     "title": project_title,
                     "scenario_id": scenario_id,
-                    "organization_id": user.get("organization_id", ""),
+                    "organization_id": payload.get("organization_id", ""),
                     "updated_at": now,
                     "sessions": {},
                 },
@@ -463,7 +504,7 @@ class ControlPlaneStore:
             project["title"] = project_title or project["title"]
             project["scenario_id"] = scenario_id or project.get(
                 "scenario_id", "")
-            project["organization_id"] = user.get("organization_id", "")
+            project["organization_id"] = payload.get("organization_id", "")
             project["updated_at"] = now
             project["sessions"][session_id] = {
                 "session_id": session_id,
@@ -475,12 +516,13 @@ class ControlPlaneStore:
             self._save(data)
             return self._serialize_project(project)
 
-    def list_projects_for_user(self, user: dict[str, Any]) -> dict[str, Any]:
+    def list_projects_for_user(self, user: UserPayload) -> dict[str, Any]:
         """List projects visible to the user's organization."""
+        payload = _user_payload(user)
         with self._lock:
             data = self._load()
-            self._ensure_org_for_user(data, user)
-            org_id = user.get("organization_id", "")
+            self._ensure_org_for_user(data, payload)
+            org_id = payload.get("organization_id", "")
             all_projects = []
             for owner_user_id, projects_by_user in data.get("projects", {}).items():
                 for project in projects_by_user.values():
@@ -600,13 +642,13 @@ class ControlPlaneStore:
     def check_quota(self, user_id: str, kind: str, amount: int = 1) -> tuple[bool, str | None]:
         """Deprecated: quota checks are handled by PostgreSQL user profiles."""
         _ = (user_id, kind, amount)
-        raise RuntimeError("check_quota is handled by PostgresUsageRepository")
+        raise RuntimeError("check_quota is handled by UsageService")
 
     def consume_quota(self, user_id: str, kind: str, amount: int = 1) -> None:
         """Deprecated: quota consumption is handled by PostgreSQL user profiles."""
         _ = (user_id, kind, amount)
         raise RuntimeError(
-            "consume_quota is handled by PostgresUsageRepository")
+            "consume_quota is handled by UsageService")
 
     def record_usage_event(
         self,
@@ -654,7 +696,9 @@ class ControlPlaneStore:
                 entry["cost"] = round(entry["cost"], 6)
             return {"total_tokens": total_tokens, "total_cost": total_cost, "by_model": by_model, "events": events[-20:]}
 
-    def admin_overview(self, users: list[dict[str, Any]]) -> dict[str, Any]:
+    def admin_overview(self, users: list[UserPayload]) -> dict[str, Any]:
+        """Return admin usage and account metrics for a user set."""
+        user_payloads = [_user_payload(user) for user in users]
         with self._lock:
             data = self._load()
             usage_events = data["usage_events"]
@@ -685,19 +729,29 @@ class ControlPlaneStore:
                         "messages": int((user.get("usage") or {}).get("message_count", 0)),
                         "plan": user.get("plan", "trial"),
                     }
-                    for user in users
+                    for user in user_payloads
                 ),
                 key=lambda item: (item["tokens"], item["messages"]),
                 reverse=True,
             )[:5]
             return {
                 "users": {
-                    "total": len(users),
-                    "active_7d": sum(1 for user in users if int(user.get("updated_at", 0) or 0) >= active_window),
-                    "trial": sum(
-                        1 for user in users if user.get("plan") in ("trial", "free")
+                    "total": len(user_payloads),
+                    "active_7d": sum(
+                        1
+                        for user in user_payloads
+                        if int(user.get("updated_at", 0) or 0) >= active_window
                     ),
-                    "byok_enabled": sum(1 for user in users if (user.get("byok") or {}).get("enabled")),
+                    "trial": sum(
+                        1
+                        for user in user_payloads
+                        if user.get("plan") in ("trial", "free")
+                    ),
+                    "byok_enabled": sum(
+                        1
+                        for user in user_payloads
+                        if (user.get("byok") or {}).get("enabled")
+                    ),
                     "new_trials_7d": recent_trials,
                 },
                 "leads": {

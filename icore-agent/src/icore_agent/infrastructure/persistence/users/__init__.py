@@ -1,7 +1,7 @@
-from .mappers import user_to_api_dict
 from .models import User
+from .sqlalchemy_repository import SqlAlchemyUserRepository
 
 __all__ = [
+    "SqlAlchemyUserRepository",
     "User",
-    "user_to_api_dict",
 ]

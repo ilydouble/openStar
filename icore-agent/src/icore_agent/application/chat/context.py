@@ -12,7 +12,7 @@ from icore_agent.application.files import FileAssetNotFoundError, FileAssetServi
 from icore_agent.application.knowledge.parsers import parse_file
 from icore_agent.shared.logging.app_logger import get_logger
 
-from .history_service import ChatHistoryService
+from application.chat.services.history_service import ChatHistoryService
 
 log = get_logger(__name__)
 

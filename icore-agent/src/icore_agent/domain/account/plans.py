@@ -17,7 +17,7 @@ class Usage:
 
 @dataclass(frozen=True, slots=True)
 class PlanLimits:
-    message_limit: int
+    message_limit: int | None
     token_limit: int | None
     image_limit: int
     attachment_limit: int
@@ -30,7 +30,7 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     TRIAL = (
         "trial",
         PlanLimits(
-            message_limit=0,
+            message_limit=None,
             token_limit=0,
             image_limit=0,
             attachment_limit=0,
@@ -41,7 +41,7 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     FREE = (
         "free",
         PlanLimits(
-            message_limit=5,
+            message_limit=None,
             token_limit=3_000,
             image_limit=1,
             attachment_limit=1,
@@ -52,7 +52,7 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     TEAM = (
         "team",
         PlanLimits(
-            message_limit=800,
+            message_limit=None,
             token_limit=2_000_000,
             image_limit=200,
             attachment_limit=400,
@@ -63,7 +63,7 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     ENTERPRISE = (
         "enterprise",
         PlanLimits(
-            message_limit=10_000,
+            message_limit=None,
             token_limit=20_000_000,
             image_limit=2_000,
             attachment_limit=10_000,
@@ -74,7 +74,7 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     BYOK = (
         "byok",
         PlanLimits(
-            message_limit=800,
+            message_limit=None,
             token_limit=None,
             image_limit=200,
             attachment_limit=400,

@@ -5,9 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+from fastapi.responses import StreamingResponse
+
 from icore_agent.application.chat.service import ChatHistoryService
 from icore_agent.domain.files import FileAsset
+from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
+from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest
 
 
 def test_search_user_sessions_empty_query_returns_no_results() -> None:
@@ -108,6 +113,61 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
             "download_url": f"https://files.example.com/{image_uuid}",
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_starts_without_message_quota_service() -> None:
+    """Chat streaming should not depend on message quota checks."""
+    history = FakeChatHistory()
+    request = ChatRequest(
+        message="Hello",
+        session_id="session-1",
+        stream=True,
+    )
+
+    response = await chat(
+        request,
+        user={"id": "user-public-id"},
+        file_service=FakeFileService({}),
+        chat_history=history,
+    )
+
+    assert isinstance(response, StreamingResponse)
+    assert history.calls == [
+        ("ensure_owned_session", "session-1", "user-public-id", "Hello"),
+        ("save_user_message", "session-1", "user-public-id", "Hello", None),
+    ]
+
+
+class FakeChatHistory:
+    """Minimal chat history fake for streaming handler tests."""
+
+    def __init__(self) -> None:
+        """Create an empty call recorder."""
+        self.calls: list[tuple] = []
+
+    def ensure_owned_session(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        title: str = "",
+    ) -> None:
+        """Record session ownership setup."""
+        self.calls.append(("ensure_owned_session", session_id, user_id, title))
+
+    def save_user_message(
+        self,
+        session_id: str,
+        user_id: str,
+        content: str,
+        *,
+        metadata: dict | None = None,
+    ) -> None:
+        """Record user message persistence."""
+        self.calls.append(
+            ("save_user_message", session_id, user_id, content, metadata)
+        )
 
 
 class FakeFileService:

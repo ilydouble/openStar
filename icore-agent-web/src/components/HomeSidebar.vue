@@ -97,7 +97,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 19.5a7.5 7.5 0 0115 0" />
             </svg>
           </span>
-          <span class="min-w-0 truncate">{{ t('home.signIn') }}</span>
+          <span class="min-w-0 truncate">{{ t('home.accountCenter') }}</span>
         </a>
       </RouterLink>
 
@@ -289,6 +289,20 @@
               <span class="shrink-0 text-zinc-600 dark:text-zinc-400">{{ t('home.sidebar.themeLabel') }}</span>
               <ThemeToggle variant="icon" />
             </div>
+            <!-- 分隔线 -->
+            <div class="mx-2.5 my-1 h-px bg-zinc-200/80 dark:bg-white/[0.08]" role="separator" />
+            <!-- 退出登录 -->
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              @click="handleSignOut"
+            >
+              <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M18 15l3-3m0 0l-3-3m3 3H9" />
+              </svg>
+              <span class="min-w-0 flex-1 truncate">{{ t('home.signOut') }}</span>
+            </button>
           </div>
         </Transition>
       </div>
@@ -298,9 +312,10 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../stores/preferences.js'
+import { clearSession } from '../auth/session.js'
 import ThemeToggle from './ThemeToggle.vue'
 
 const emit = defineEmits(['new', 'navigate', 'search'])
@@ -329,6 +344,7 @@ const props = defineProps({
 })
 
 const { t, locale } = useI18n()
+const router = useRouter()
 
 const SESSIONS_PREVIEW_COUNT = 3
 const searchInput = ref('')
@@ -412,6 +428,13 @@ function toggleLocale() {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
   setLocalePreference(locale.value)
   closeMore()
+}
+
+/** 清除 session 并跳转到登录页 */
+function handleSignOut() {
+  clearSession()
+  closeMore()
+  router.push({ name: 'auth' })
 }
 
 function onDocClick(e) {

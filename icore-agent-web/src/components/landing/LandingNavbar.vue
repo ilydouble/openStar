@@ -31,18 +31,28 @@
           {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
         </button>
         <ThemeToggle variant="navbar" />
-        <RouterLink
-          to="/#plans"
-          class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
-        >
-          {{ t('landing.nav.signIn') }}
-        </RouterLink>
-        <RouterLink
-          to="/auth"
-          class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
-        >
-          {{ t('landing.nav.startFree') }}
-        </RouterLink>
+        <template v-if="loggedIn">
+          <RouterLink
+            to="/app"
+            class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
+          >
+            {{ t('landing.nav.goToApp') }}
+          </RouterLink>
+        </template>
+        <template v-else>
+          <RouterLink
+            to="/#plans"
+            class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-200/70 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            {{ t('landing.nav.signIn') }}
+          </RouterLink>
+          <RouterLink
+            to="/auth"
+            class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
+          >
+            {{ t('landing.nav.startFree') }}
+          </RouterLink>
+        </template>
       </div>
 
       <div class="flex items-center gap-2 lg:hidden">
@@ -56,10 +66,10 @@
         </button>
         <ThemeToggle variant="navbar" />
         <RouterLink
-          to="/auth"
+          :to="loggedIn ? '/app' : '/auth'"
           class="inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-3.5 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 dark:bg-white dark:text-zinc-950"
         >
-          {{ t('landing.nav.mobileCta') }}
+          {{ loggedIn ? t('landing.nav.goToApp') : t('landing.nav.mobileCta') }}
         </RouterLink>
         <button
           type="button"
@@ -118,7 +128,15 @@
             </button>
             <ThemeToggle variant="navbar" />
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <RouterLink
+            v-if="loggedIn"
+            to="/app"
+            class="rounded-full bg-zinc-950 px-4 py-2.5 text-center text-sm font-semibold text-white dark:bg-white dark:text-zinc-950"
+            @click="menuOpen = false"
+          >
+            {{ t('landing.nav.goToApp') }}
+          </RouterLink>
+          <div v-else class="grid grid-cols-2 gap-2">
             <RouterLink
               to="/#plans"
               class="rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-center text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
@@ -145,12 +163,14 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
+import { isAuthenticated } from '../../auth/session.js'
 import ThemeToggle from '../ThemeToggle.vue'
 
 const { t, tm, locale } = useI18n()
 
 const menuOpen = ref(false)
 const currentLocale = computed(() => locale.value)
+const loggedIn = computed(() => isAuthenticated())
 const navLinks = computed(() => {
   const items = tm('landing.nav.links')
   return Array.isArray(items) ? items : []

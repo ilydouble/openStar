@@ -26,6 +26,6 @@ def test_plan_limits_are_available_as_enum_attributes():
     """Verify plan limits can be referenced without dictionary key lookups."""
     assert Plan.FREE.value == "free"
     assert isinstance(Plan.FREE.limits, PlanLimits)
-    assert Plan.FREE.limits.message_limit == 5
+    assert Plan.FREE.limits.message_limit is None
     assert Plan.FREE.limits.token_limit == 3_000
     assert Plan.BYOK.limits.token_limit is None

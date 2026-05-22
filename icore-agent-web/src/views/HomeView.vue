@@ -924,11 +924,14 @@ const activeShortcutPill = computed(() => {
 const quotaItems = computed(() => {
   const usage = planSummary.value?.usage || {}
   const limits = planSummary.value?.limits || {}
-  return [
-    { label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` },
+  const items = [
     { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
     { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
   ]
+  if (limits.messages !== null && limits.messages !== undefined) {
+    items.unshift({ label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` })
+  }
+  return items
 })
 
 function syncTheme() {
@@ -1188,9 +1191,6 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
       if (errorMsg.includes('401')) {
         signOut()
         router.push({ name: 'auth' })
-      } else if (errorMsg.includes('402') || errorMsg.toLowerCase().includes('quota exceeded')) {
-        // 额度超限：跳转到账户页面查看配额
-        router.push({ name: 'account' })
       } else {
         commitAssistant({
           content: t('chat.requestFailed', { msg: errorMsg }),

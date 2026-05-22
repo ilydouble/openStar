@@ -24,7 +24,7 @@ def test_gateway_and_backend_public_route_policies_do_not_drift():
         AGENT_ROOT
         / "src"
         / "icore_agent"
-        / "lib"
+        / "shared"
         / "http"
         / "middleware"
         / "auth_middleware.py"

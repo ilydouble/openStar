@@ -84,17 +84,17 @@ def test_usage_service_records_token_metrics_with_cost():
     assert store.users["u1"].usage["token_count"] == 150
 
 
-def test_usage_service_owns_message_quota_policy():
-    """Verify message quota decisions live in the usage application service."""
+def test_usage_service_does_not_cap_messages():
+    """Verify message counts are not treated as a hard chat quota."""
     store = FakeUsageStore(_user_profile())
     service = UsageService(store)
 
     allowed, reason = service.check_quota("u1", "messages")
     assert (allowed, reason) == (True, None)
 
-    for _ in range(Plan.FREE.limits.message_limit):
+    for _ in range(10):
         service.consume_quota("u1", "messages")
 
     allowed, reason = service.check_quota("u1", "messages")
-    assert allowed is False
-    assert reason == "messages quota exceeded for free"
+    assert (allowed, reason) == (True, None)
+    assert store.users["u1"].usage["message_count"] == 10

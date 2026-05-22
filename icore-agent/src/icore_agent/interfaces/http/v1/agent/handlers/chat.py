@@ -14,7 +14,6 @@ import pandas as pd
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from icore_agent.application.account import AccountService
 from icore_agent.application.chat import ChatHistoryService
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
 from icore_agent.application.knowledge.parsers import parse_file
@@ -24,7 +23,6 @@ from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
 from ...dependencies import (
-    get_account_service,
     get_chat_history_service,
     get_current_user,
     get_file_asset_service,
@@ -462,15 +460,10 @@ async def _stream_agent(
 async def chat(
     req: ChatRequest,
     user: dict = Depends(get_current_user),
-    account_service: AccountService = Depends(get_account_service),
     file_service: FileAssetService = Depends(get_file_asset_service),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
 ):
     """Run a streaming or non-streaming agent chat turn."""
-    allowed, reason = account_service.check_quota(user["id"], "messages")
-    if not allowed:
-        raise HTTPException(status_code=402, detail=reason)
-
     try:
         chat_history.ensure_owned_session(
             req.session_id,
@@ -504,7 +497,6 @@ async def chat(
     )
 
     if req.stream:
-        account_service.consume_quota(user["id"], "messages")
         return StreamingResponse(
             _stream_agent(
                 req.message,
@@ -535,8 +527,6 @@ async def chat(
         enable_tools = True
     loop = asyncio.get_event_loop()
     try:
-        account_service.consume_quota(user["id"], "messages")
-
         def _invoke() -> str:
             """Invoke the blocking orchestrator for non-streaming chat."""
             runtime_token = set_runtime_user(user)

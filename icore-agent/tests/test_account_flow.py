@@ -190,11 +190,10 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
     assert "Verification code sent to" in body["message"]
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
-@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.memory")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_requires_account_token(mock_memory, mock_create_orch, client: TestClient):
-    mock_memory.get_context = AsyncMock(
-        return_value=(None, [], None, False, [], []))
+    mock_memory.get_context = AsyncMock(return_value=(None, []))
     mock_memory.append_message = AsyncMock()
     mock_create_orch.return_value = MagicMock(return_value="secured reply")
 

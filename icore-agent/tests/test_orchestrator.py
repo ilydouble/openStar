@@ -56,8 +56,8 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.create_orchestrator")
-@patch("icore_agent.interfaces.http.v1.agent.handlers.chat.memory")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()

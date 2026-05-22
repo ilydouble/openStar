@@ -8,11 +8,12 @@ from uuid import uuid4
 import pytest
 from fastapi.responses import StreamingResponse
 
+from icore_agent.application.chat import ChatStreamEvent, ChatTurnResult
 from icore_agent.application.chat.service import ChatHistoryService
 from icore_agent.domain.files import FileAsset
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
-from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest
+from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
 
 
 def test_search_user_sessions_empty_query_returns_no_results() -> None:
@@ -118,56 +119,71 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
 @pytest.mark.asyncio
 async def test_chat_stream_starts_without_message_quota_service() -> None:
     """Chat streaming should not depend on message quota checks."""
-    history = FakeChatHistory()
+    service = FakeChatTurnService()
     request = ChatRequest(
         message="Hello",
         session_id="session-1",
         stream=True,
+        file_uuids=["file-1", "file-1"],
     )
 
     response = await chat(
         request,
         user={"id": "user-public-id"},
-        file_service=FakeFileService({}),
-        chat_history=history,
+        chat_turn_service=service,
     )
 
     assert isinstance(response, StreamingResponse)
-    assert history.calls == [
-        ("ensure_owned_session", "session-1", "user-public-id", "Hello"),
-        ("save_user_message", "session-1", "user-public-id", "Hello", None),
-    ]
+    assert len(service.commands) == 1
+    command = service.commands[0]
+    assert command.message == "Hello"
+    assert command.session_id == "session-1"
+    assert command.stream is True
+    assert command.user_id == "user-public-id"
+    assert command.file_uuids == ("file-1", "file-1")
 
 
-class FakeChatHistory:
-    """Minimal chat history fake for streaming handler tests."""
+@pytest.mark.asyncio
+async def test_chat_non_streaming_returns_service_result() -> None:
+    """Non-streaming chat should translate the application result to HTTP schema."""
+    service = FakeChatTurnService(reply="plain reply")
+    request = ChatRequest(
+        message="Hello",
+        session_id="session-2",
+        stream=False,
+    )
 
-    def __init__(self) -> None:
+    response = await chat(
+        request,
+        user={"id": "user-public-id"},
+        chat_turn_service=service,
+    )
+
+    assert response == ChatResponse(
+        session_id="session-2", reply="plain reply")
+
+
+class FakeChatTurnService:
+    """Application service fake for chat handler tests."""
+
+    def __init__(self, reply: str = "ok") -> None:
         """Create an empty call recorder."""
-        self.calls: list[tuple] = []
+        self.reply = reply
+        self.commands = []
 
-    def ensure_owned_session(
-        self,
-        session_id: str,
-        user_id: str,
-        *,
-        title: str = "",
-    ) -> None:
-        """Record session ownership setup."""
-        self.calls.append(("ensure_owned_session", session_id, user_id, title))
+    async def stream(self, command):
+        """Record one stream command and return a done-only event stream."""
+        self.commands.append(command)
+        return self._events()
 
-    def save_user_message(
-        self,
-        session_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict | None = None,
-    ) -> None:
-        """Record user message persistence."""
-        self.calls.append(
-            ("save_user_message", session_id, user_id, content, metadata)
-        )
+    async def run(self, command):
+        """Record one non-stream command and return a deterministic result."""
+        self.commands.append(command)
+        return ChatTurnResult(session_id=command.session_id, reply=self.reply)
+
+    async def _events(self):
+        """Yield a minimal terminal stream."""
+        yield ChatStreamEvent.done()
 
 
 class FakeFileService:

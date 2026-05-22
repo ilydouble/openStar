@@ -457,6 +457,35 @@ def test_http_interface_layer_is_split_by_business_domain():
     assert (v1_dir / "users" / "serializers.py").is_file()
 
 
+def test_agent_chat_handler_stays_http_adapter_only():
+    """Keep chat application orchestration and SSE framing out of the handler."""
+    handler = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "interfaces"
+        / "http"
+        / "v1"
+        / "agent"
+        / "handlers"
+        / "chat.py"
+    ).read_text(encoding="utf-8")
+
+    forbidden_fragments = {
+        "import pandas",
+        "import threading",
+        "import json",
+        "create_orchestrator",
+        "infrastructure.memory",
+        "set_runtime_user",
+        "set_parent_callback",
+        "data: [DONE]",
+        "text/event-stream",
+    }
+    for fragment in forbidden_fragments:
+        assert fragment not in handler
+
+
 def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
     """Keep application startup decoupled from individual business-domain routers."""
     main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(

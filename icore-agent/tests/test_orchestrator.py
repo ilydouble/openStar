@@ -10,7 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from icore_agent.engine.orchestrator import create_orchestrator
+from icore_agent.application.chat.orchestrator import create_orchestrator
+from icore_agent.application.chat.prompts import build_orchestrator_system_prompt
+from icore_agent.application.chat.routing import AgentHint
 from icore_agent.main import app
 
 # ── TestClient (sync) ──────────────────────────────────────────────────────
@@ -81,7 +83,7 @@ def test_chat_non_streaming(mock_memory, mock_create_orch, client):
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.sequential.SequentialAgent")
 def test_sequential_endpoint_success(mock_seq_cls, client):
-    from icore_agent.engine.sequential.agent import SequentialResult
+    from icore_agent.application.chat.sequential.agent import SequentialResult
     mock_instance = MagicMock()
     mock_instance.run.return_value = SequentialResult(
         status="complete", output="Files listed.", steps=2
@@ -113,8 +115,8 @@ def test_clear_session(mock_memory, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.engine.orchestrator.LiteLLMModel")
-@patch("icore_agent.engine.orchestrator.Agent")
+@patch("icore_agent.application.chat.orchestrator.LiteLLMModel")
+@patch("icore_agent.application.chat.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
 
@@ -127,3 +129,31 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     # Verify 5 tools are registered
     _, kwargs = mock_agent_cls.call_args
     assert len(kwargs.get("tools", [])) == 5
+
+
+def test_orchestrator_prompt_builder_includes_chat_context():
+    """Application prompt policy should assemble all prepared chat context."""
+    prompt = build_orchestrator_system_prompt(
+        summary="Earlier summary",
+        attachments_text="Inline doc text",
+        image_attachments=[{"filename": "photo.png", "ref": "file-ref"}],
+        data_attachments=[
+            {
+                "filename": "data.csv",
+                "abs_path": "/tmp/data.csv",
+                "columns": [{"name": "amount", "dtype": "int64"}],
+                "row_count": 2,
+                "preview_md": "| amount |\n| --- |\n| 10 |",
+            }
+        ],
+        agent_hint=AgentHint.DATA,
+    )
+
+    assert "data_agent_tool" in prompt
+    assert "The user clicked the Data shortcut" in prompt
+    assert "Inline doc text" in prompt
+    assert "photo.png" in prompt
+    assert "file-ref" in prompt
+    assert "data.csv" in prompt
+    assert "amount(int64)" in prompt
+    assert "Earlier summary" in prompt

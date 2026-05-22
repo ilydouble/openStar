@@ -25,8 +25,8 @@ from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ...config import settings
-from ...infrastructure.memory.chroma_store import search as _chroma_search_raw
+from icore_agent.config import settings
+from icore_agent.infrastructure.memory.chroma_store import search as _chroma_search_raw
 from ..callback_ctx import sub_agent_callback
 
 log = get_logger(__name__)

@@ -17,7 +17,7 @@ from litellm import completion
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ...config import settings
+from icore_agent.config import settings
 from .environment import BaseEnvironment, LocalEnvironment
 
 log = get_logger(__name__)

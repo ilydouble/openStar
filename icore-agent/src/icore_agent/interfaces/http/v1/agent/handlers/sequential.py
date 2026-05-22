@@ -5,7 +5,7 @@ import asyncio
 from fastapi import Depends, HTTPException
 
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.engine.sequential import SequentialAgent
+from icore_agent.application.chat.sequential import SequentialAgent
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import get_current_user
@@ -23,11 +23,11 @@ async def run_sequential(
     log.info("sequential_request", task_preview=req.task[:100])
 
     if req.use_docker:
-        from icore_agent.engine.sequential.environment import DockerEnvironment
+        from icore_agent.application.chat.sequential.environment import DockerEnvironment
 
         env = DockerEnvironment()
     else:
-        from icore_agent.engine.sequential.environment import LocalEnvironment
+        from icore_agent.application.chat.sequential.environment import LocalEnvironment
 
         env = LocalEnvironment()
 

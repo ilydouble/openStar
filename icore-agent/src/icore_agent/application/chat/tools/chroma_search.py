@@ -1,9 +1,4 @@
-"""chroma_search — Strands tool for querying the ChromaDB knowledge base.
-
-Registered directly on the Orchestrator. For complex questions the Orchestrator
-calls this tool multiple times with refined sub-queries and synthesises the
-results itself, avoiding an extra LLM round-trip from a sub-agent.
-"""
+"""chroma_search — Strands tool for querying the ChromaDB knowledge base."""
 
 from __future__ import annotations
 
@@ -11,7 +6,7 @@ from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ..infrastructure.memory.chroma_store import search as chroma_search_raw
+from icore_agent.infrastructure.memory.chroma_store import search as chroma_search_raw
 
 log = get_logger(__name__)
 

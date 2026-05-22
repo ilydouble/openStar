@@ -13,7 +13,7 @@ from icore_agent.application.usage import UsageService
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.engine.orchestrator import create_orchestrator
+from icore_agent.application.chat.orchestrator import create_orchestrator
 from icore_agent.infrastructure.control_plane import (
     ControlPlaneLeadRepository,
     ControlPlaneVerificationRepository,

@@ -389,12 +389,10 @@ def test_python_backend_uses_clean_architecture_layers():
         "application",
         "config",
         "domain",
-        "engine",
         "infrastructure",
         "interfaces",
         "services",
         "shared",
-        "tools",
     }
     assert expected_layers <= {
         path.name for path in package_dir.iterdir() if path.is_dir()
@@ -406,6 +404,8 @@ def test_python_backend_uses_clean_architecture_layers():
         "database",
         "lib",
         "memory",
+        "engine",
+        "tools",
         "users",
     }
     assert not (mixed_top_level_dirs & {
@@ -519,6 +519,26 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
     assert "class AgentHint(str, Enum)" in routing
     assert "intent: ChatIntent" in routing
     assert "class ChatStreamEventKind(str, Enum)" in events
+
+
+def test_chat_orchestration_lives_in_application_layer():
+    """Keep chat agent runtime and tools under the chat application boundary."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    chat_dir = package_dir / "application" / "chat"
+    orchestrator = (chat_dir / "orchestrator.py").read_text(encoding="utf-8")
+    prompts = (chat_dir / "prompts.py").read_text(encoding="utf-8")
+
+    assert not (package_dir / "engine").exists()
+    assert not (package_dir / "tools").exists()
+    assert (chat_dir / "agents" / "research.py").is_file()
+    assert (chat_dir / "tools" / "web_search.py").is_file()
+    assert (chat_dir / "sequential" / "agent.py").is_file()
+    assert "ModuleNotFoundError" not in orchestrator
+    assert "_Fallback" not in orchestrator
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in orchestrator
+    assert "build_orchestrator_system_prompt" in orchestrator
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in prompts
+    assert "def build_orchestrator_system_prompt" in prompts
 
 
 def test_agent_session_schema_uses_explicit_payload_models():

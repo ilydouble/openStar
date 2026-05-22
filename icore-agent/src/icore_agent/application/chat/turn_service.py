@@ -9,7 +9,7 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
-from icore_agent.engine.callback_ctx import reset_parent_callback, set_parent_callback
+from .callback_ctx import reset_parent_callback, set_parent_callback
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 

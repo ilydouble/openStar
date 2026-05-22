@@ -14,10 +14,10 @@ from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ...config import settings
-from ...tools.fetch_webpage import fetch_webpage
-from ...tools.http_client import http_request
-from ...tools.web_search import web_search
+from icore_agent.config import settings
+from ..tools.fetch_webpage import fetch_webpage
+from ..tools.http_client import http_request
+from ..tools.web_search import web_search
 from ..callback_ctx import sub_agent_callback
 
 log = get_logger(__name__)

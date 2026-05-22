@@ -15,7 +15,7 @@ from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ..config import settings
+from icore_agent.config import settings
 
 log = get_logger(__name__)
 

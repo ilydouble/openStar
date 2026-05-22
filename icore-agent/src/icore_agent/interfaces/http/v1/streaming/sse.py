@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 
 from fastapi.responses import StreamingResponse
 
-from icore_agent.application.chat import ChatStreamEvent
+from icore_agent.application.chat import ChatStreamEvent, ChatStreamEventKind
 
 SSE_HEARTBEAT_SEC = 15
 
@@ -40,7 +40,7 @@ async def sse_frames(
             except StopAsyncIteration:
                 break
             yield encode_sse_event(event)
-            if event.kind == "done":
+            if event.kind is ChatStreamEventKind.DONE:
                 break
             pending = asyncio.create_task(iterator.__anext__())
     finally:

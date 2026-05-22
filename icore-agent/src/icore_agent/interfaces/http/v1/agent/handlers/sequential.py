@@ -4,6 +4,7 @@ import asyncio
 
 from fastapi import Depends, HTTPException
 
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.engine.sequential import SequentialAgent
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -15,7 +16,7 @@ log = get_logger(__name__)
 
 async def run_sequential(
     req: SequentialRequest,
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
 ) -> SequentialResponse:
     """Run a sequential bash task using the mini-SWE-agent environment."""
     _ = user

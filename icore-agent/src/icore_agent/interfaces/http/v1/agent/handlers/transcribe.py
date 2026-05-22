@@ -6,6 +6,7 @@ import httpx
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 
 from icore_agent.config import settings
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.shared.audio_convert import AudioConversionError, prepare_audio_for_zai_asr
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -143,7 +144,7 @@ async def transcribe_audio(
     file: UploadFile = File(
         description="Audio file (webm, mp3, wav, m4a, ...)"),
     language: str = Form(""),
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
 ) -> TranscribeResponse:
     """Accept multipart audio from the browser and return ASR text."""
     _ = user

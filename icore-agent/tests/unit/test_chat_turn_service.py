@@ -7,18 +7,23 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.chat import ChatTurnCommand, ChatTurnService
+from icore_agent.application.chat import (
+    ChatStreamEventKind,
+    ChatTurnCommand,
+    ChatTurnService,
+)
 from icore_agent.application.chat.context import dedupe_file_uuids
-from icore_agent.application.chat.routing import resolve_routing
+from icore_agent.application.chat.routing import AgentHint, ChatIntent, resolve_routing
+from icore_agent.domain.user import AuthenticatedUser
 
 
 def test_resolve_routing_honors_agent_hint() -> None:
     """Explicit agent hints should select tool-enabled routing."""
     decision = resolve_routing("hello", "research")
 
-    assert decision.intent == "task"
+    assert decision.intent is ChatIntent.TASK
     assert decision.enable_tools is True
-    assert decision.agent_hint == "research"
+    assert decision.agent_hint is AgentHint.RESEARCH
 
 
 def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
@@ -73,20 +78,20 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
     events = []
     async for event in event_stream:
         events.append(event)
-        if event.kind == "done":
+        if event.kind is ChatStreamEventKind.DONE:
             break
 
     assert [event.kind for event in events] == [
-        "status",
-        "status",
-        "token",
-        "token",
-        "done",
+        ChatStreamEventKind.STATUS,
+        ChatStreamEventKind.STATUS,
+        ChatStreamEventKind.TOKEN,
+        ChatStreamEventKind.TOKEN,
+        ChatStreamEventKind.DONE,
     ]
     assert events[0].tool == "research_agent"
     assert events[1].tool == "web_search"
     assert "".join(
-        event.text for event in events if event.kind == "token") == "Hi"
+        event.text for event in events if event.kind is ChatStreamEventKind.TOKEN) == "Hi"
     assert history.calls[-1] == ("assistant", "session-1", "user-1", "Hi")
 
 
@@ -102,9 +107,19 @@ def _command(
         session_id="session-1",
         stream=stream,
         tenant_code="",
-        agent_hint=agent_hint,
+        agent_hint=AgentHint(agent_hint) if agent_hint else None,
         file_uuids=file_uuids,
-        user={"id": "user-1"},
+        user=_auth_user(),
+    )
+
+
+def _auth_user() -> AuthenticatedUser:
+    """Build the authenticated domain user used by chat command tests."""
+    return AuthenticatedUser(
+        public_id="user-1",
+        email="user@example.com",
+        name="User One",
+        roles=("owner",),
     )
 
 

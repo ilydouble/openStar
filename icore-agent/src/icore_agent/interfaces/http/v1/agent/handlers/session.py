@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
 from fastapi import Depends, HTTPException, Query
 
 from icore_agent.application.chat import ChatHistoryService
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.memory.conversation import memory
 
 from ...dependencies import (
@@ -14,10 +17,20 @@ from ...dependencies import (
     get_file_asset_service,
 )
 from ..schemas.session import (
+    SessionAttachmentItem,
     SessionListResponse,
+    SessionMessageItem,
     SessionSearchResponse,
     SessionStateResponse,
 )
+
+
+class SessionMessagePayload(TypedDict, total=False):
+    """Persisted or cached chat message payload used by session handlers."""
+
+    role: str
+    content: str
+    metadata: dict[str, Any]
 
 
 def _history_http_error(exc: Exception) -> HTTPException:
@@ -30,14 +43,14 @@ def _history_http_error(exc: Exception) -> HTTPException:
 
 
 async def list_sessions(
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> SessionListResponse:
     """List chat sessions owned by the current user from PostgreSQL."""
     payload = chat_history.list_user_sessions(
-        user["id"],
+        user.public_id,
         limit=limit,
         offset=offset,
     )
@@ -45,7 +58,7 @@ async def list_sessions(
 
 
 async def search_sessions(
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
     q: str = Query(default="", max_length=500),
     limit: int = Query(default=20, ge=1, le=100),
@@ -53,7 +66,7 @@ async def search_sessions(
 ) -> SessionSearchResponse:
     """Search owned chat sessions by title and message content."""
     payload = chat_history.search_user_sessions(
-        user["id"],
+        user.public_id,
         query=q,
         limit=limit,
         offset=offset,
@@ -63,12 +76,12 @@ async def search_sessions(
 
 async def clear_session(
     session_id: str,
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
 ) -> dict:
     """Soft-delete an owned session and clear its cached conversation memory."""
     try:
-        chat_history.soft_delete_session(session_id, user["id"])
+        chat_history.soft_delete_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
     await memory.clear(session_id)
@@ -77,14 +90,15 @@ async def clear_session(
 
 async def get_session_state(
     session_id: str,
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
     file_service: FileAssetService = Depends(get_file_asset_service),
 ) -> SessionStateResponse:
     """Read recent messages and file UUID attachments for an owned session."""
     try:
-        chat_history.assert_owned_session(session_id, user["id"])
-        persisted_messages = chat_history.load_messages(session_id, user["id"])
+        chat_history.assert_owned_session(session_id, user.public_id)
+        persisted_messages = chat_history.load_messages(
+            session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
@@ -94,23 +108,26 @@ async def get_session_state(
     return SessionStateResponse(
         session_id=session_id,
         summary=summary or None,
-        messages=messages,
+        messages=[
+            SessionMessageItem(**message)
+            for message in messages
+        ],
         attachments=_session_attachment_refs(
             persisted_messages,
-            user_id=user["id"],
+            user_id=user.public_id,
             file_service=file_service,
         ),
     )
 
 
 def _session_attachment_refs(
-    messages: list[dict],
+    messages: list[SessionMessagePayload],
     *,
     user_id: str,
     file_service: FileAssetService,
-) -> list[dict]:
+) -> list[SessionAttachmentItem]:
     """Resolve file UUIDs stored in message metadata into file asset references."""
-    refs: list[dict] = []
+    refs: list[SessionAttachmentItem] = []
     seen: set[str] = set()
     for message in messages:
         metadata = message.get("metadata")
@@ -130,19 +147,20 @@ def _session_attachment_refs(
                 )
             except FileAssetNotFoundError:
                 continue
-            item = {
-                "file_uuid": asset.file_uuid,
-                "original_filename": asset.original_filename,
-                "filename": asset.original_filename,
-                "content_type": asset.content_type,
-                "mode": _asset_mode(asset.original_filename, asset.content_type),
-            }
+            download_url = None
             if asset.content_type.startswith("image/"):
-                item["download_url"] = file_service.create_download_url(
+                download_url = file_service.create_download_url(
                     uploader_public_id=user_id,
                     file_uuid=asset.file_uuid,
                 )
-            refs.append(item)
+            refs.append(SessionAttachmentItem(
+                file_uuid=asset.file_uuid,
+                original_filename=asset.original_filename,
+                filename=asset.original_filename,
+                content_type=asset.content_type,
+                mode=_asset_mode(asset.original_filename, asset.content_type),
+                download_url=download_url,
+            ))
     return refs
 
 

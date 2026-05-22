@@ -12,15 +12,20 @@ from icore_agent.application.files import FileAssetNotFoundError, FileAssetServi
 from icore_agent.application.knowledge.parsers import parse_file
 from icore_agent.shared.logging.app_logger import get_logger
 
-from .service import ChatHistoryService
+from .history_service import ChatHistoryService
 
 log = get_logger(__name__)
+
+ChatHistoryMessage = dict[str, Any]
 
 
 class ConversationMemory(Protocol):
     """Conversation cache operations used by chat turn workflows."""
 
-    async def get_context(self, session_id: str) -> tuple[str | None, list[dict]]:
+    async def get_context(
+        self,
+        session_id: str,
+    ) -> tuple[str | None, list[ChatHistoryMessage]]:
         """Return a cached summary and recent messages."""
         ...
 
@@ -35,6 +40,63 @@ class ConversationMemory(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class ChatImageAttachment:
+    """Image attachment reference passed from file assets into chat context."""
+
+    filename: str
+    ref: str
+    file_uuid: str
+
+    def to_orchestrator_payload(self) -> dict[str, Any]:
+        """Return the dict shape consumed by the engine orchestrator."""
+        return {
+            "filename": self.filename,
+            "ref": self.ref,
+            "file_uuid": self.file_uuid,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ChatDataColumn:
+    """Column preview metadata for one uploaded data file."""
+
+    name: str
+    dtype: str
+
+    def to_orchestrator_payload(self) -> dict[str, str]:
+        """Return the dict shape consumed by the engine orchestrator."""
+        return {"name": self.name, "dtype": self.dtype}
+
+
+@dataclass(frozen=True, slots=True)
+class ChatDataAttachment:
+    """Structured data attachment reference passed into chat context."""
+
+    filename: str
+    file_uuid: str
+    abs_path: str
+    columns: tuple[ChatDataColumn, ...] = ()
+    row_count: int | None = None
+    preview_md: str = ""
+    preview_error: str = ""
+
+    def to_orchestrator_payload(self) -> dict[str, Any]:
+        """Return the dict shape consumed by the engine orchestrator."""
+        return {
+            "filename": self.filename,
+            "file_uuid": self.file_uuid,
+            "abs_path": self.abs_path,
+            "columns": [
+                column.to_orchestrator_payload()
+                for column in self.columns
+            ],
+            "row_count": self.row_count,
+            "preview_md": self.preview_md,
+            "preview_error": self.preview_error,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ChatContext:
     """Loaded prompt context for one chat turn."""
 
@@ -42,8 +104,8 @@ class ChatContext:
     strands_history: list[dict[str, Any]]
     attachments_text: str | None
     has_rag: bool
-    image_attachments: list[dict[str, Any]]
-    data_attachments: list[dict[str, Any]]
+    image_attachments: list[ChatImageAttachment]
+    data_attachments: list[ChatDataAttachment]
 
     @property
     def has_attachments(self) -> bool:
@@ -53,6 +115,22 @@ class ChatContext:
             or self.image_attachments
             or self.data_attachments
         )
+
+    @property
+    def image_attachment_payloads(self) -> list[dict[str, Any]]:
+        """Return image attachments in the engine orchestrator dict shape."""
+        return [
+            attachment.to_orchestrator_payload()
+            for attachment in self.image_attachments
+        ]
+
+    @property
+    def data_attachment_payloads(self) -> list[dict[str, Any]]:
+        """Return data attachments in the engine orchestrator dict shape."""
+        return [
+            attachment.to_orchestrator_payload()
+            for attachment in self.data_attachments
+        ]
 
 
 async def load_chat_context(
@@ -98,14 +176,14 @@ def load_file_context(
     file_uuids: tuple[str, ...],
     user_id: str,
     file_service: FileAssetService,
-) -> tuple[str | None, list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[str | None, list[ChatImageAttachment], list[ChatDataAttachment]]:
     """Load file UUIDs into text, image, and data-agent context buckets."""
     if not file_uuids or not user_id:
         return None, [], []
 
     inline_parts: list[str] = []
-    image_refs: list[dict[str, Any]] = []
-    data_refs: list[dict[str, Any]] = []
+    image_refs: list[ChatImageAttachment] = []
+    data_refs: list[ChatDataAttachment] = []
     for file_uuid in dedupe_file_uuids(file_uuids):
         try:
             asset = file_service.get_owned_asset(
@@ -113,14 +191,14 @@ def load_file_context(
                 file_uuid=file_uuid,
             )
             if asset.content_type.startswith("image/"):
-                image_refs.append({
-                    "filename": asset.original_filename,
-                    "ref": file_service.create_download_url(
+                image_refs.append(ChatImageAttachment(
+                    filename=asset.original_filename,
+                    ref=file_service.create_download_url(
                         uploader_public_id=user_id,
                         file_uuid=file_uuid,
                     ),
-                    "file_uuid": asset.file_uuid,
-                })
+                    file_uuid=asset.file_uuid,
+                ))
                 continue
             if is_data_file(asset.original_filename, asset.content_type):
                 data_refs.append(materialize_data_ref(
@@ -161,7 +239,7 @@ def dedupe_file_uuids(file_uuids: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(ordered)
 
 
-def to_strands_messages(history: list[dict]) -> list[dict[str, Any]]:
+def to_strands_messages(history: list[ChatHistoryMessage]) -> list[dict[str, Any]]:
     """Convert cached or persisted messages to Strands message format."""
     return [
         {
@@ -191,33 +269,36 @@ def materialize_data_ref(
     file_service: FileAssetService,
     user_id: str,
     file_uuid: str,
-) -> dict[str, Any]:
+) -> ChatDataAttachment:
     """Create a local temp copy for data-agent tools and collect preview metadata."""
     asset, path = file_service.materialize_temp_file(
         uploader_public_id=user_id,
         file_uuid=file_uuid,
     )
-    record: dict[str, Any] = {
-        "filename": asset.original_filename,
-        "file_uuid": asset.file_uuid,
-        "abs_path": str(path),
-        "columns": [],
-        "row_count": None,
-        "preview_md": "",
-        "preview_error": "",
-    }
+    columns: tuple[ChatDataColumn, ...] = ()
+    row_count: int | None = None
+    preview_md = ""
+    preview_error = ""
     try:
         frame = pd.read_csv(path) if path.suffix.lower(
         ) == ".csv" else pd.read_excel(path)
-        record["row_count"] = int(len(frame))
-        record["columns"] = [
-            {"name": str(name), "dtype": str(dtype)}
+        row_count = int(len(frame))
+        columns = tuple(
+            ChatDataColumn(name=str(name), dtype=str(dtype))
             for name, dtype in frame.dtypes.items()
-        ]
-        record["preview_md"] = frame.head(10).to_markdown(index=False)
+        )
+        preview_md = frame.head(10).to_markdown(index=False)
     except Exception as exc:
-        record["preview_error"] = str(exc)
-    return record
+        preview_error = str(exc)
+    return ChatDataAttachment(
+        filename=asset.original_filename,
+        file_uuid=asset.file_uuid,
+        abs_path=str(path),
+        columns=columns,
+        row_count=row_count,
+        preview_md=preview_md,
+        preview_error=preview_error,
+    )
 
 
 def _empty_context() -> ChatContext:

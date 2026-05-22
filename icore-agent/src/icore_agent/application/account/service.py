@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.application.usage import UsageService
-from icore_agent.domain.user import UserProfile
+from icore_agent.domain.user import AuthenticatedUser, UserProfile
 
 from ...config import settings
 from ...shared.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
@@ -129,9 +129,9 @@ class AccountService:
         """Load the usage summary for one user."""
         return self._usage_service.get_usage_summary(user_id)
 
-    def get_admin_overview(self, user: dict[str, Any]) -> dict[str, Any]:
+    def get_admin_overview(self, user: AuthenticatedUser) -> dict[str, Any]:
         """Return admin-only usage metrics after a role check."""
-        roles = user.get("roles") or []
+        roles = user.roles
         if "owner" not in roles and "admin" not in roles:
             raise PermissionError(
                 "Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."

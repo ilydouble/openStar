@@ -16,8 +16,8 @@ from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runt
 from .commands import ChatTurnCommand
 from .context import ConversationMemory, dedupe_file_uuids, load_chat_context
 from .events import ChatStreamEvent, ChatTurnResult
-from .routing import ChatRoutingDecision, resolve_routing
-from .service import ChatHistoryService
+from .history_service import ChatHistoryService
+from .routing import AgentHint, ChatIntent, ChatRoutingDecision, resolve_routing
 
 log = get_logger(__name__)
 
@@ -119,9 +119,9 @@ class ChatTurnService:
             "chat_request",
             session_id=command.session_id,
             stream=command.stream,
-            intent=route.intent,
+            intent=route.intent.value,
             enable_tools=route.enable_tools,
-            agent_hint=route.agent_hint,
+            agent_hint=route.agent_hint.value if route.agent_hint else None,
         )
         return route
 
@@ -152,10 +152,10 @@ class ChatTurnService:
                 callback_handler=callback_handler,
                 summary=context.summary,
                 attachments_text=context.attachments_text,
-                image_attachments=context.image_attachments,
-                data_attachments=context.data_attachments,
+                image_attachments=context.image_attachment_payloads,
+                data_attachments=context.data_attachment_payloads,
                 enable_tools=enable_tools,
-                agent_hint=route.agent_hint,
+                agent_hint=route.agent_hint.value if route.agent_hint else None,
                 session_id=command.session_id,
             )
             runner = cast(AgentRunner, orchestrator)
@@ -299,12 +299,14 @@ class ChatTurnService:
     ) -> ChatStreamEvent:
         """Return the first stream status event for a routed chat turn."""
         route_label_map = {
-            "research": "research_agent",
-            "knowledge": "knowledge_agent",
-            "image": "image_agent",
-            "data": "data_agent",
-            "code": "code_agent",
-            "chat": "chat",
+            AgentHint.RESEARCH: "research_agent",
+            AgentHint.KNOWLEDGE: "knowledge_agent",
+            AgentHint.IMAGE: "image_agent",
+            AgentHint.DATA: "data_agent",
+            AgentHint.CODE: "code_agent",
+            AgentHint.CHAT: "chat",
+            ChatIntent.CHAT: "chat",
+            ChatIntent.TASK: "orchestrator",
         }
         label = route_label_map.get(
             route.agent_hint or route.intent, "orchestrator")

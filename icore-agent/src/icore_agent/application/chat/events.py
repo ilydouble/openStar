@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from enum import Enum
+from typing import Any
 
-ChatStreamEventKind = Literal["token", "status", "error", "done"]
+
+class ChatStreamEventKind(str, Enum):
+    """Event kinds emitted by chat turn streaming."""
+
+    TOKEN = "token"
+    STATUS = "status"
+    ERROR = "error"
+    DONE = "done"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +38,7 @@ class ChatStreamEvent:
     @classmethod
     def token(cls, text: str) -> "ChatStreamEvent":
         """Create a token delta event."""
-        return cls(kind="token", text=text)
+        return cls(kind=ChatStreamEventKind.TOKEN, text=text)
 
     @classmethod
     def status(
@@ -42,7 +50,7 @@ class ChatStreamEvent:
     ) -> "ChatStreamEvent":
         """Create a tool/status progress event."""
         return cls(
-            kind="status",
+            kind=ChatStreamEventKind.STATUS,
             step=step,
             tool=tool,
             input_preview=input_preview,
@@ -51,22 +59,22 @@ class ChatStreamEvent:
     @classmethod
     def error(cls, message: str) -> "ChatStreamEvent":
         """Create an error event."""
-        return cls(kind="error", message=message)
+        return cls(kind=ChatStreamEventKind.ERROR, message=message)
 
     @classmethod
     def done(cls) -> "ChatStreamEvent":
         """Create a terminal done event."""
-        return cls(kind="done")
+        return cls(kind=ChatStreamEventKind.DONE)
 
     def to_payload(self) -> dict[str, Any]:
         """Return the JSON payload exposed by the HTTP streaming adapter."""
-        payload: dict[str, Any] = {"type": self.kind}
-        if self.kind == "token":
+        payload: dict[str, Any] = {"type": self.kind.value}
+        if self.kind is ChatStreamEventKind.TOKEN:
             payload["text"] = self.text
-        elif self.kind == "status":
+        elif self.kind is ChatStreamEventKind.STATUS:
             payload["step"] = int(self.step or 0)
             payload["tool"] = self.tool
             payload["input_preview"] = self.input_preview
-        elif self.kind == "error":
+        elif self.kind is ChatStreamEventKind.ERROR:
             payload["message"] = self.message
         return payload

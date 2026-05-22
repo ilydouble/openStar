@@ -1,5 +1,7 @@
 """Authentication and trial registration schemas."""
 
+from typing import Any
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -18,10 +20,25 @@ class TrialRegistrationRequest(BaseModel):
     verification_code: str = Field(..., min_length=6, max_length=6)
 
 
+class UserProfilePayload(BaseModel):
+    id: str
+    name: str
+    email: EmailStr
+    plan: str
+    plan_label: str
+    organization_id: str
+    organization_name: str
+    roles: list[str]
+    byok: dict[str, Any]
+    usage: dict[str, Any]
+    created_at: int
+    updated_at: int
+
+
 class TrialRegistrationResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: dict
+    user: UserProfilePayload
 
 
 class EmailLoginRequest(BaseModel):
@@ -34,4 +51,4 @@ class EmailLoginRequest(BaseModel):
 class EmailLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: dict
+    user: UserProfilePayload

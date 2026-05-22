@@ -3,6 +3,7 @@
 from fastapi import Depends
 
 from icore_agent.application.account import AccountService
+from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_account_service, get_current_user
 from ..schemas.project import ProjectSyncRequest
@@ -10,12 +11,12 @@ from ..schemas.project import ProjectSyncRequest
 
 async def sync_project(
     req: ProjectSyncRequest,
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     service: AccountService = Depends(get_account_service),
 ) -> dict:
     """Synchronize a client project/session summary into the account domain."""
     project = service.sync_project(
-        user_id=user["id"],
+        user_id=user.public_id,
         project_id=req.project_id,
         project_title=req.project_title,
         scenario_id=req.scenario_id,
@@ -28,8 +29,8 @@ async def sync_project(
 
 
 async def list_projects(
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     service: AccountService = Depends(get_account_service),
 ) -> dict:
     """List projects visible to the current user."""
-    return service.list_projects(user["id"])
+    return service.list_projects(user.public_id)

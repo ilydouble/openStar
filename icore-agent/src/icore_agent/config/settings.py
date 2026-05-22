@@ -50,7 +50,7 @@ class Settings(
             user = current_runtime_user()
         except Exception:
             user = None
-        byok = (user or {}).get("byok") or {}
+        byok = user.byok if user is not None else {}
         return byok.get("model") or self.model_id
 
 

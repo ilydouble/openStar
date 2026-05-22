@@ -486,6 +486,62 @@ def test_agent_chat_handler_stays_http_adapter_only():
         assert fragment not in handler
 
 
+def test_agent_chat_handler_uses_domain_authenticated_user():
+    """Keep authenticated user payload dicts out of chat commands."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    handler = (
+        package_dir / "interfaces" / "http" / "v1" /
+        "agent" / "handlers" / "chat.py"
+    ).read_text(encoding="utf-8")
+    command = (
+        package_dir / "application" / "chat" / "commands.py"
+    ).read_text(encoding="utf-8")
+    dependencies = (
+        package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
+    ).read_text(encoding="utf-8")
+
+    assert "AuthenticatedUser" in handler
+    assert "user=dict(user)" not in handler
+    assert "user: AuthenticatedUser" in command
+    assert "serialize_user_profile(service.get_current_user" not in dependencies
+
+
+def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
+    """Make chat routing categories explicit and keep history service naming stable."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    chat_dir = package_dir / "application" / "chat"
+    routing = (chat_dir / "routing.py").read_text(encoding="utf-8")
+    events = (chat_dir / "events.py").read_text(encoding="utf-8")
+
+    assert (chat_dir / "history_service.py").is_file()
+    assert not (chat_dir / "service.py").exists()
+    assert "class ChatIntent(str, Enum)" in routing
+    assert "class AgentHint(str, Enum)" in routing
+    assert "intent: ChatIntent" in routing
+    assert "class ChatStreamEventKind(str, Enum)" in events
+
+
+def test_agent_session_schema_uses_explicit_payload_models():
+    """Keep session response schemas from exposing untyped list[dict] fields."""
+    schema = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "interfaces"
+        / "http"
+        / "v1"
+        / "agent"
+        / "schemas"
+        / "session.py"
+    ).read_text(encoding="utf-8")
+
+    assert "class SessionMessageItem" in schema
+    assert "class SessionAttachmentItem" in schema
+    assert "messages: list[SessionMessageItem]" in schema
+    assert "attachments: list[SessionAttachmentItem]" in schema
+    assert "list[dict]" not in schema
+
+
 def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
     """Keep application startup decoupled from individual business-domain routers."""
     main = (AGENT_ROOT / "src" / "icore_agent" / "main.py").read_text(
@@ -548,10 +604,16 @@ def test_http_v1_owns_user_serialization():
         package_dir / "interfaces" / "http" / "v1" /
         "users" / "serializers.py"
     ).read_text(encoding="utf-8")
+    auth_schema = (
+        package_dir / "interfaces" / "http" / "v1" /
+        "account" / "schemas" / "auth.py"
+    ).read_text(encoding="utf-8")
     persistence_dir = package_dir / "infrastructure" / "persistence" / "users"
 
     assert "serialize_user_profile" in serializer
     assert "UserProfile" in serializer
+    assert "class UserProfilePayload" in auth_schema
+    assert "user: dict" not in auth_schema
     assert not (persistence_dir / "mappers.py").exists()
 
 

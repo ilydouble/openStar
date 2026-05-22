@@ -1,13 +1,30 @@
 """Agent session state schemas."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+
+class SessionMessageItem(BaseModel):
+    role: str
+    content: str
+    metadata: dict[str, Any] | None = None
+
+
+class SessionAttachmentItem(BaseModel):
+    file_uuid: str
+    original_filename: str
+    filename: str
+    content_type: str
+    mode: str
+    download_url: str | None = None
 
 
 class SessionStateResponse(BaseModel):
     session_id: str
     summary: str | None = None
-    messages: list[dict]
-    attachments: list[dict]
+    messages: list[SessionMessageItem]
+    attachments: list[SessionAttachmentItem]
 
 
 class SessionSummaryItem(BaseModel):

@@ -10,20 +10,22 @@ from icore_agent.application.chat import ChatHistoryService, ChatTurnService
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.usage import UsageService
+from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.engine.orchestrator import create_orchestrator
 from icore_agent.infrastructure.control_plane import (
     ControlPlaneLeadRepository,
     ControlPlaneVerificationRepository,
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
     add_documents,
     get_collection,
     list_documents,
 )
-from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,
@@ -33,10 +35,7 @@ from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresTeamRepository,
     PostgresUsageRepository,
 )
-from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.storage import StorageServiceClient
-
-from .users import serialize_user_profile
 
 workspace_metadata_service = WorkspaceMetadataService()
 identity_repository = PostgresIdentityRepository(
@@ -132,10 +131,12 @@ def get_chat_turn_service() -> ChatTurnService:
 def get_current_user(
     authorization: str = Header(default=""),
     service: AccountService = Depends(get_account_service),
-) -> dict:
+) -> AuthenticatedUser:
     """Resolve the authenticated user from the bearer token header."""
     try:
-        return serialize_user_profile(service.get_current_user(authorization))
+        return AuthenticatedUser.from_profile(
+            service.get_current_user(authorization)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except LookupError as exc:

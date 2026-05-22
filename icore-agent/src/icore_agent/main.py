@@ -52,7 +52,7 @@ def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
     user = current_runtime_user()
     if user:
         usage_service.record_llm_usage(
-            user_id=user["id"],
+            user_id=user.public_id,
             session_id=str(kwargs.get("metadata", {}).get("session_id", "")),
             model=kwargs.get("model", "unknown"),
             prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.domain.user import UserProfile
+from icore_agent.domain.user import AuthenticatedUser, UserProfile
 
 
-def serialize_user_profile(user: UserProfile) -> dict[str, Any]:
+def serialize_user_profile(user: UserProfile | AuthenticatedUser) -> dict[str, Any]:
     """Convert a user profile into the stable account API payload."""
     return {
         "id": user.public_id,

@@ -9,8 +9,9 @@ import pytest
 from fastapi.responses import StreamingResponse
 
 from icore_agent.application.chat import ChatStreamEvent, ChatTurnResult
-from icore_agent.application.chat.service import ChatHistoryService
+from icore_agent.application.chat.history_service import ChatHistoryService
 from icore_agent.domain.files import FileAsset
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
 from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
@@ -97,7 +98,7 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
         file_service=service,
     )
 
-    assert refs == [
+    assert [ref.model_dump(exclude_none=True) for ref in refs] == [
         {
             "file_uuid": file_uuid,
             "original_filename": "brief.txt",
@@ -129,7 +130,7 @@ async def test_chat_stream_starts_without_message_quota_service() -> None:
 
     response = await chat(
         request,
-        user={"id": "user-public-id"},
+        user=_auth_user(),
         chat_turn_service=service,
     )
 
@@ -140,6 +141,7 @@ async def test_chat_stream_starts_without_message_quota_service() -> None:
     assert command.session_id == "session-1"
     assert command.stream is True
     assert command.user_id == "user-public-id"
+    assert command.user.public_id == "user-public-id"
     assert command.file_uuids == ("file-1", "file-1")
 
 
@@ -155,7 +157,7 @@ async def test_chat_non_streaming_returns_service_result() -> None:
 
     response = await chat(
         request,
-        user={"id": "user-public-id"},
+        user=_auth_user(),
         chat_turn_service=service,
     )
 
@@ -215,4 +217,14 @@ def _asset(file_uuid: str, filename: str, content_type: str) -> FileAsset:
         storage_etag="etag-123",
         content_type=content_type,
         checksum_sha256="a" * 64,
+    )
+
+
+def _auth_user() -> AuthenticatedUser:
+    """Build a domain authenticated user for handler tests."""
+    return AuthenticatedUser(
+        public_id="user-public-id",
+        email="user@example.com",
+        name="User One",
+        roles=("owner",),
     )

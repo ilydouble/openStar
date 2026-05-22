@@ -11,9 +11,9 @@ from icore_agent.application.files import (
     FileAssetService,
 )
 from icore_agent.domain.files import FileAsset
+from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import account_service, file_asset_service
-from ...users import serialize_user_profile
 from ..schemas import (
     CompleteUploadRequest,
     DeleteFileResponse,
@@ -24,11 +24,15 @@ from ..schemas import (
 )
 
 
-async def get_files_current_user(authorization: str = Header(default="")) -> dict:
+async def get_files_current_user(
+    authorization: str = Header(default=""),
+) -> AuthenticatedUser:
     """Resolve the current user for files routes without sync dependency dispatch."""
     try:
         service: AccountService = account_service
-        return serialize_user_profile(service.get_current_user(authorization))
+        return AuthenticatedUser.from_profile(
+            service.get_current_user(authorization)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except LookupError as exc:
@@ -42,13 +46,13 @@ async def get_files_file_asset_service() -> FileAssetService:
 
 async def create_upload_url(
     payload: UploadURLRequest,
-    user: dict = Depends(get_files_current_user),
+    user: AuthenticatedUser = Depends(get_files_current_user),
     service: FileAssetService = Depends(get_files_file_asset_service),
 ) -> UploadURLResponse:
     """Create a direct upload URL and pending file asset record."""
     try:
         result = service.create_upload_url(
-            uploader_public_id=user["id"],
+            uploader_public_id=user.public_id,
             original_filename=payload.original_filename,
             content_type=payload.content_type,
             checksum_sha256=payload.checksum_sha256,
@@ -66,13 +70,13 @@ async def create_upload_url(
 async def complete_upload(
     file_uuid: str,
     payload: CompleteUploadRequest,
-    user: dict = Depends(get_files_current_user),
+    user: AuthenticatedUser = Depends(get_files_current_user),
     service: FileAssetService = Depends(get_files_file_asset_service),
 ) -> FileAssetResponse:
     """Verify a direct upload and mark the file asset completed."""
     try:
         asset = service.complete_upload(
-            uploader_public_id=user["id"],
+            uploader_public_id=user.public_id,
             file_uuid=file_uuid,
             checksum_sha256=payload.checksum_sha256,
         )
@@ -87,14 +91,14 @@ async def complete_upload(
 
 async def create_download_url(
     file_uuid: str,
-    user: dict = Depends(get_files_current_user),
+    user: AuthenticatedUser = Depends(get_files_current_user),
     service: FileAssetService = Depends(get_files_file_asset_service),
 ) -> DownloadURLResponse:
     """Create a direct download URL for an owned file asset."""
     expires_in = service.default_expires_in
     try:
         download_url = service.create_download_url(
-            uploader_public_id=user["id"],
+            uploader_public_id=user.public_id,
             file_uuid=file_uuid,
             expires_in=expires_in,
         )
@@ -109,13 +113,13 @@ async def create_download_url(
 
 async def delete_file(
     file_uuid: str,
-    user: dict = Depends(get_files_current_user),
+    user: AuthenticatedUser = Depends(get_files_current_user),
     service: FileAssetService = Depends(get_files_file_asset_service),
 ) -> DeleteFileResponse:
     """Soft-delete an owned file asset."""
     try:
         asset = service.delete_file(
-            uploader_public_id=user["id"],
+            uploader_public_id=user.public_id,
             file_uuid=file_uuid,
         )
     except FileAssetNotFoundError as exc:

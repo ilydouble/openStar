@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from icore_agent.domain.user import AuthenticatedUser
+
 from .parsers import parse_file
 from .text import chunk_text
 
@@ -30,14 +32,20 @@ class KnowledgeService:
         self._rag_chunk_overlap = rag_chunk_overlap
         self._file_size_limit_mb = file_size_limit_mb
 
-    def resolve_tenant_code(self, user: dict[str, Any], *, tenant_code: str, scope: str) -> str:
+    def resolve_tenant_code(
+        self,
+        user: AuthenticatedUser,
+        *,
+        tenant_code: str,
+        scope: str,
+    ) -> str:
         """Resolve the tenant code from explicit input or the user/session scope."""
         if tenant_code.strip():
             return tenant_code.strip()
         if scope == "private":
-            return user["id"]
+            return user.public_id
         if scope == "organization":
-            return f"org:{user.get('organization_id', '')}"
+            return f"org:{user.organization_id or ''}"
         return ""
 
     def parse_document(self, filename: str, data: bytes) -> str:

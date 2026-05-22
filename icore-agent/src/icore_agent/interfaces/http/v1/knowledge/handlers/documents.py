@@ -6,6 +6,7 @@ from fastapi import Depends, File, Form, HTTPException, Query, UploadFile
 
 from icore_agent.application.knowledge import SUPPORTED_EXTENSIONS
 from icore_agent.application.knowledge.service import KnowledgeService
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import get_current_user, get_knowledge_service
@@ -22,7 +23,7 @@ async def upload_document(
     scope: Annotated[
         str, Form(description="private | organization | shared")
     ] = "organization",
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> UploadResponse:
     """Upload a supported document into the tenant knowledge base."""
@@ -84,7 +85,7 @@ async def list_knowledge_documents(
     scope: Annotated[
         str, Query(description="private | organization | shared")
     ] = "organization",
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> list[DocumentInfo]:
     """List documents uploaded to the selected knowledge scope."""
@@ -101,7 +102,7 @@ async def delete_document(
     scope: Annotated[
         str, Query(description="private | organization | shared")
     ] = "organization",
-    user: dict = Depends(get_current_user),
+    user: AuthenticatedUser = Depends(get_current_user),
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> dict:
     """Remove a document from the selected knowledge scope."""

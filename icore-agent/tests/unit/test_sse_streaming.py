@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.application.chat import ChatStreamEvent
+from icore_agent.application.chat import ChatStreamEvent, ChatStreamEventKind
 from icore_agent.interfaces.http.v1.streaming import encode_sse_event, sse_frames
 
 
 def test_encode_sse_event_serializes_json_data_frame() -> None:
     """Typed chat events should be encoded as JSON SSE data frames."""
-    frame = encode_sse_event(ChatStreamEvent.token("你"))
+    event = ChatStreamEvent.token("你")
+    frame = encode_sse_event(event)
 
+    assert event.kind is ChatStreamEventKind.TOKEN
     assert frame == 'data: {"type": "token", "text": "你"}\n\n'
 
 

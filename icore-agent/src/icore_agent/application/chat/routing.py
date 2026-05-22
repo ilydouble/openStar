@@ -4,8 +4,28 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 
-VALID_AGENT_HINTS = {"research", "code", "knowledge", "image", "data", "chat"}
+
+class ChatIntent(str, Enum):
+    """High-level intent classes for chat routing."""
+
+    CHAT = "chat"
+    TASK = "task"
+
+
+class AgentHint(str, Enum):
+    """Explicit agent shortcuts accepted from the HTTP API."""
+
+    RESEARCH = "research"
+    CODE = "code"
+    KNOWLEDGE = "knowledge"
+    IMAGE = "image"
+    DATA = "data"
+    CHAT = "chat"
+
+
+VALID_AGENT_HINTS = {hint.value for hint in AgentHint}
 
 _CHAT_PATTERNS = re.compile(
     r"^("
@@ -51,43 +71,47 @@ _CHAT_LIKE_PATTERNS = re.compile(
 class ChatRoutingDecision:
     """Resolved routing decision for one chat turn."""
 
-    intent: str
+    intent: ChatIntent
     enable_tools: bool
-    agent_hint: str | None
+    agent_hint: AgentHint | None
 
 
-def resolve_routing(message: str, agent_hint: str) -> ChatRoutingDecision:
+def resolve_routing(
+    message: str,
+    agent_hint: AgentHint | str | None,
+) -> ChatRoutingDecision:
     """Apply an explicit agent hint or classify the message heuristically."""
     hint = (agent_hint or "").strip().lower()
     if hint in VALID_AGENT_HINTS:
-        if hint == "chat":
+        resolved_hint = AgentHint(hint)
+        if resolved_hint is AgentHint.CHAT:
             return ChatRoutingDecision(
-                intent="chat",
+                intent=ChatIntent.CHAT,
                 enable_tools=False,
-                agent_hint=hint,
+                agent_hint=resolved_hint,
             )
         return ChatRoutingDecision(
-            intent="task",
+            intent=ChatIntent.TASK,
             enable_tools=True,
-            agent_hint=hint,
+            agent_hint=resolved_hint,
         )
     intent = classify_intent(message)
     return ChatRoutingDecision(
         intent=intent,
-        enable_tools=intent == "task",
+        enable_tools=intent is ChatIntent.TASK,
         agent_hint=None,
     )
 
 
-def classify_intent(message: str) -> str:
+def classify_intent(message: str) -> ChatIntent:
     """Classify a user message as conversational chat or task execution."""
     stripped = message.strip()
     if _CHAT_PATTERNS.fullmatch(stripped):
-        return "chat"
+        return ChatIntent.CHAT
     if _TASK_KEYWORDS.search(stripped):
-        return "task"
+        return ChatIntent.TASK
     if len(stripped) <= 6:
-        return "chat"
+        return ChatIntent.CHAT
     if _CHAT_LIKE_PATTERNS.search(stripped):
-        return "chat"
-    return "chat"
+        return ChatIntent.CHAT
+    return ChatIntent.CHAT

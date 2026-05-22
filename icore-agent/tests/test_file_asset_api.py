@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 
 from icore_agent.domain.files import FileAsset
+from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.files.handlers.files import (
     get_files_current_user,
     get_files_file_asset_service,
@@ -120,9 +121,14 @@ async def test_files_upload_complete_download_and_delete_flow() -> None:
     test_app = _build_app()
     fake_service = FakeFileAssetService()
 
-    async def fake_current_user() -> dict:
+    async def fake_current_user() -> AuthenticatedUser:
         """Return the current test user."""
-        return {"id": "user-public-id"}
+        return AuthenticatedUser(
+            public_id="user-public-id",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
 
     async def fake_file_asset_service() -> FakeFileAssetService:
         """Return the fake file asset service."""

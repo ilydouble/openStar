@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import time
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, LlmToolCall
 
 _HEADLINE_OPTS = "MaxFragments=1, MaxWords=20, MinWords=6, StartSel=<mark>, StopSel=</mark>"
 
@@ -88,6 +89,16 @@ class SqlAlchemyChatHistoryRepository:
         self._session.flush()
         return message
 
+    def get_message(self, row: ChatSession, message_id: int) -> ChatMessage | None:
+        """Load one message row that belongs to a chat session."""
+        result = self._session.execute(
+            select(ChatMessage).where(
+                ChatMessage.id == message_id,
+                ChatMessage.session_id == row.id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     def list_messages(self, row: ChatSession) -> list[ChatMessage]:
         """Return all messages for one session ordered by sequence."""
         result = self._session.execute(
@@ -96,6 +107,139 @@ class SqlAlchemyChatHistoryRepository:
             .order_by(ChatMessage.sequence.asc())
         )
         return list(result.scalars().all())
+
+    def start_tool_call(
+        self,
+        row: ChatSession,
+        *,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_type: str = "function",
+        started_at: datetime | None = None,
+    ) -> LlmToolCall:
+        """Persist the start of one LLM tool invocation."""
+        existing = self.get_tool_call(row, tool_call_id)
+        now = datetime.now(UTC)
+        if existing is not None:
+            existing.tool_name = tool_name
+            existing.tool_type = tool_type
+            existing.arguments = dict(arguments)
+            existing.started_at = started_at or existing.started_at or now
+            self._session.flush()
+            return existing
+
+        tool_call = LlmToolCall(
+            session_id=row.id,
+            assistant_message_id=None,
+            tool_message_id=None,
+            tool_call_id=tool_call_id,
+            tool_type=tool_type,
+            tool_name=tool_name,
+            arguments=dict(arguments),
+            result=None,
+            status="running",
+            error_code=None,
+            error_message=None,
+            elapsed_ms=None,
+            created_at=now,
+            started_at=started_at or now,
+            finished_at=None,
+        )
+        self._session.add(tool_call)
+        self._session.flush()
+        return tool_call
+
+    def get_tool_call(
+        self,
+        row: ChatSession,
+        tool_call_id: str,
+    ) -> LlmToolCall | None:
+        """Load one tool call by Strands tool-use id within a session."""
+        result = self._session.execute(
+            select(LlmToolCall).where(
+                LlmToolCall.session_id == row.id,
+                LlmToolCall.tool_call_id == tool_call_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    def finish_tool_call(
+        self,
+        tool_call: LlmToolCall,
+        *,
+        status: str,
+        result: dict[str, Any] | None,
+        error_code: str | None,
+        error_message: str | None,
+        elapsed_ms: int | None,
+        finished_at: datetime | None = None,
+        tool_message: ChatMessage | None = None,
+        tool_message_id: int | None = None,
+    ) -> LlmToolCall:
+        """Persist the completed result for one tool invocation."""
+        tool_call.status = status
+        tool_call.result = result
+        tool_call.error_code = error_code
+        tool_call.error_message = error_message
+        tool_call.elapsed_ms = elapsed_ms
+        tool_call.finished_at = finished_at or datetime.now(UTC)
+        if tool_message is not None:
+            tool_call.tool_message_id = tool_message.id
+        elif tool_message_id is not None:
+            tool_call.tool_message_id = tool_message_id
+        self._session.flush()
+        return tool_call
+
+    def link_tool_calls_to_assistant(
+        self,
+        row: ChatSession,
+        *,
+        tool_call_ids: tuple[str, ...],
+        assistant_message: ChatMessage,
+    ) -> None:
+        """Attach completed tool-call records to the final assistant message."""
+        if not tool_call_ids:
+            return
+        self._session.execute(
+            update(LlmToolCall)
+            .where(
+                LlmToolCall.session_id == row.id,
+                LlmToolCall.tool_call_id.in_(tool_call_ids),
+            )
+            .values(assistant_message_id=assistant_message.id)
+        )
+        self._session.flush()
+
+    def list_tool_call_summaries_by_assistant_message(
+        self,
+        row: ChatSession,
+        *,
+        assistant_message_ids: tuple[int, ...],
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Return frontend-safe tool-call summaries keyed by assistant message id."""
+        if not assistant_message_ids:
+            return {}
+        result = self._session.execute(
+            select(LlmToolCall)
+            .where(
+                LlmToolCall.session_id == row.id,
+                LlmToolCall.assistant_message_id.in_(assistant_message_ids),
+            )
+            .order_by(LlmToolCall.created_at.asc(), LlmToolCall.id.asc())
+        )
+        summaries: dict[int, list[dict[str, Any]]] = {}
+        for tool_call in result.scalars().all():
+            if tool_call.assistant_message_id is None:
+                continue
+            summaries.setdefault(tool_call.assistant_message_id, []).append({
+                "tool_call_id": tool_call.tool_call_id,
+                "tool_name": tool_call.tool_name,
+                "status": tool_call.status,
+                "elapsed_ms": tool_call.elapsed_ms,
+                "created_at": tool_call.created_at.isoformat(),
+            })
+        return summaries
 
     def list_sessions_for_user(
         self,

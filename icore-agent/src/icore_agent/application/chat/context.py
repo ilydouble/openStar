@@ -10,6 +10,7 @@ import pandas as pd
 
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
 from icore_agent.application.knowledge.parsers import parse_file
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .services.history_service import ChatHistoryService
@@ -249,7 +250,10 @@ def to_strands_messages(history: list[ChatHistoryMessage]) -> list[dict[str, Any
             ],
         }
         for message in history
-        if message.get("role") in ("user", "assistant")
+        if message.get("role") in (
+            ChatCompletionRole.USER.value,
+            ChatCompletionRole.ASSISTANT.value,
+        )
         and message.get("content")
     ]
 

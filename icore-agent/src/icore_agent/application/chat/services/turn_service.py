@@ -9,6 +9,7 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -17,6 +18,7 @@ from ..commands import ChatTurnCommand
 from ..context import ConversationMemory, dedupe_file_uuids, load_chat_context
 from ..events import ChatStreamEvent, ChatTurnResult
 from ..routing import AgentHint, ChatIntent, ChatRoutingDecision, resolve_routing
+from ..tool_calls import ChatToolCallRecorder
 from .history_service import ChatHistoryService
 
 log = get_logger(__name__)
@@ -61,6 +63,7 @@ class ChatTurnService:
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments
+        tool_call_recorder = self._tool_call_recorder(command)
         loop = asyncio.get_running_loop()
         try:
             with ThreadPoolExecutor(max_workers=1) as executor:
@@ -71,6 +74,7 @@ class ChatTurnService:
                         route=route,
                         context=context,
                         enable_tools=enable_tools,
+                        tool_call_recorder=tool_call_recorder,
                     ),
                 )
         except Exception:
@@ -79,7 +83,12 @@ class ChatTurnService:
 
         reply = str(result)
         await self._append_memory_pair(command, reply)
-        self._save_assistant_message(command, reply)
+        assistant_message_id = self._save_assistant_message(command, reply)
+        self._attach_tool_calls_to_assistant(
+            command,
+            tool_call_recorder,
+            assistant_message_id,
+        )
         return ChatTurnResult(session_id=command.session_id, reply=reply)
 
     async def stream(
@@ -90,11 +99,13 @@ class ChatTurnService:
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments
+        tool_call_recorder = self._tool_call_recorder(command)
         return self._stream_prepared_turn(
             command=command,
             route=route,
             context=context,
             enable_tools=enable_tools,
+            tool_call_recorder=tool_call_recorder,
         )
 
     async def _prepare_turn(
@@ -143,6 +154,7 @@ class ChatTurnService:
         route: ChatRoutingDecision,
         context,
         enable_tools: bool,
+        tool_call_recorder: ChatToolCallRecorder,
         callback_handler: Callable[..., None] | None = None,
     ) -> Any:
         """Invoke the blocking orchestrator for one chat turn."""
@@ -157,6 +169,7 @@ class ChatTurnService:
                 enable_tools=enable_tools,
                 agent_hint=route.agent_hint.value if route.agent_hint else None,
                 session_id=command.session_id,
+                hooks=[tool_call_recorder],
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history
@@ -171,6 +184,7 @@ class ChatTurnService:
         route: ChatRoutingDecision,
         context,
         enable_tools: bool,
+        tool_call_recorder: ChatToolCallRecorder,
     ) -> AsyncIterator[ChatStreamEvent]:
         """Stream typed application events for a prepared chat turn."""
         yield self._initial_status_event(route, context)
@@ -221,6 +235,7 @@ class ChatTurnService:
                     route=route,
                     context=context,
                     enable_tools=enable_tools,
+                    tool_call_recorder=tool_call_recorder,
                     callback_handler=on_stream_event,
                 )
             except Exception as exc:
@@ -289,7 +304,12 @@ class ChatTurnService:
 
         reply = "".join(full_reply)
         await self._append_memory_pair(command, reply)
-        self._save_assistant_message(command, reply)
+        assistant_message_id = self._save_assistant_message(command, reply)
+        self._attach_tool_calls_to_assistant(
+            command,
+            tool_call_recorder,
+            assistant_message_id,
+        )
         yield ChatStreamEvent.done()
 
     def _initial_status_event(
@@ -332,12 +352,12 @@ class ChatTurnService:
         """Append completed turn messages to the conversation cache."""
         await self._conversation_memory.append_message(
             command.session_id,
-            "user",
+            ChatCompletionRole.USER.value,
             command.message,
         )
         await self._conversation_memory.append_message(
             command.session_id,
-            "assistant",
+            ChatCompletionRole.ASSISTANT.value,
             reply,
         )
 
@@ -345,10 +365,10 @@ class ChatTurnService:
         self,
         command: ChatTurnCommand,
         reply: str,
-    ) -> None:
+    ) -> int | None:
         """Persist assistant output without failing an already completed turn."""
         try:
-            self._chat_history.save_assistant_message(
+            return self._chat_history.save_assistant_message(
                 command.session_id,
                 command.user_id,
                 reply,
@@ -356,6 +376,40 @@ class ChatTurnService:
         except (PermissionError, LookupError) as exc:
             log.warning(
                 "assistant_message_persist_failed",
+                session_id=command.session_id,
+                error=str(exc),
+            )
+            return None
+
+    def _tool_call_recorder(
+        self,
+        command: ChatTurnCommand,
+    ) -> ChatToolCallRecorder:
+        """Create a tool-call recorder scoped to one chat turn."""
+        return ChatToolCallRecorder(
+            chat_history=self._chat_history,
+            session_id=command.session_id,
+            user_id=command.user_id,
+        )
+
+    def _attach_tool_calls_to_assistant(
+        self,
+        command: ChatTurnCommand,
+        tool_call_recorder: ChatToolCallRecorder,
+        assistant_message_id: int | None,
+    ) -> None:
+        """Link observed tool calls to the final assistant message."""
+        if assistant_message_id is None or not tool_call_recorder.tool_call_ids:
+            return
+        try:
+            self._chat_history.attach_tool_calls_to_assistant(
+                command.session_id,
+                tool_call_ids=tool_call_recorder.tool_call_ids,
+                assistant_message_id=assistant_message_id,
+            )
+        except (PermissionError, LookupError) as exc:
+            log.warning(
+                "assistant_tool_call_link_failed",
                 session_id=command.session_id,
                 error=str(exc),
             )

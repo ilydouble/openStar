@@ -2,7 +2,12 @@
 
 from .chat import ChatRequest, ChatResponse
 from .sequential import SequentialRequest, SequentialResponse
-from .session import SessionListResponse, SessionSearchResponse, SessionStateResponse
+from .session import (
+    SessionListResponse,
+    SessionSearchResponse,
+    SessionStateResponse,
+    SessionToolCallItem,
+)
 from .transcribe import TranscribeResponse
 
 __all__ = [
@@ -13,5 +18,6 @@ __all__ = [
     "SessionListResponse",
     "SessionSearchResponse",
     "SessionStateResponse",
+    "SessionToolCallItem",
     "TranscribeResponse",
 ]

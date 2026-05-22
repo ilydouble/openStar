@@ -23,6 +23,7 @@ import litellm
 import redis.asyncio as aioredis
 
 from icore_agent.config import settings
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
@@ -97,8 +98,14 @@ class ConversationMemory:
             resp = cast(Any, await litellm.acompletion(
                 model=settings.model_id,
                 messages=[
-                    {"role": "system", "content": _SUMMARY_SYSTEM},
-                    {"role": "user", "content": user_content},
+                    {
+                        "role": ChatCompletionRole.SYSTEM.value,
+                        "content": _SUMMARY_SYSTEM,
+                    },
+                    {
+                        "role": ChatCompletionRole.USER.value,
+                        "content": user_content,
+                    },
                 ],
                 max_tokens=512,
                 temperature=0.1,

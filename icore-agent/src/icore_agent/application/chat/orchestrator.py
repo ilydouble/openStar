@@ -91,6 +91,7 @@ def create_orchestrator(
     enable_tools: bool = True,
     agent_hint: str | None = None,
     session_id: str = "",
+    hooks: list[Any] | None = None,
 ) -> Orchestrator:
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 
@@ -106,6 +107,7 @@ def create_orchestrator(
                            可节省 token 并彻底杜绝不必要的工具调用。
         agent_hint:        前端按钮传入的 agent 偏置（research/code/...）。
         session_id:        注入到 image_agent_tool 的会话 ID，用于生成图片存储路径。
+        hooks:             Strands lifecycle hooks for application-level observers.
     """
     # Pure-chat turns (enable_tools=False) go to the lighter fast model to
     # avoid paying glm-4.7's first-token latency for greetings and small talk.
@@ -133,8 +135,10 @@ def create_orchestrator(
         from .agents.code import code_agent_tool
         from .agents.data import data_agent_tool
         from .agents.research import research_agent_tool
+        from .tools.number_comparator import number_comparator
 
         tools = [
+            number_comparator,
             research_agent_tool,
             code_agent_tool,
             _make_scoped_knowledge_tool(session_id),
@@ -152,6 +156,7 @@ def create_orchestrator(
         callback_handler=callback_handler,
         conversation_manager=conversation_manager,
         tools=tools,
+        hooks=hooks or [],
         # 串行执行工具，避免一次回复里多个 tool_use 被并发打到 LLM 和搜索
         # endpoint，瞬时 QPS 压爆 Z.AI RPM 配额。
         tool_executor=SequentialToolExecutor(),

@@ -8,6 +8,7 @@ from ..projects.models import Project as Project  # noqa: E402,F401
 from ..projects.models import ProjectSession as ProjectSession  # noqa: E402,F401
 from ..sessions.models import ChatMessage as ChatMessage  # noqa: E402,F401
 from ..sessions.models import ChatSession as ChatSession  # noqa: E402,F401
+from ..sessions.models import LlmToolCall as LlmToolCall  # noqa: E402,F401
 from ..users.models import User as User  # noqa: E402,F401
 from .base import Base
 
@@ -16,6 +17,7 @@ __all__ = [
     "ChatMessage",
     "ChatSession",
     "FileAssetRecord",
+    "LlmToolCall",
     "OrgMember",
     "Organization",
     "Project",

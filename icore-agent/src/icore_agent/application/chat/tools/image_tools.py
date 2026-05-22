@@ -18,6 +18,7 @@ import httpx
 from litellm import completion as litellm_completion
 from strands import tool
 
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings
@@ -79,7 +80,7 @@ def understand_image(image_source: str, question: str = "") -> str:
         "model": settings.vision_model_id,
         "messages": [
             {
-                "role": "user",
+                "role": ChatCompletionRole.USER.value,
                 "content": [
                     {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": image_ref}},

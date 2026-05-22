@@ -5,10 +5,19 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class SessionToolCallItem(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    status: str
+    elapsed_ms: int | None = None
+    created_at: str
+
+
 class SessionMessageItem(BaseModel):
     role: str
     content: str
     metadata: dict[str, Any] | None = None
+    tool_calls: list[SessionToolCallItem] | None = None
 
 
 class SessionAttachmentItem(BaseModel):

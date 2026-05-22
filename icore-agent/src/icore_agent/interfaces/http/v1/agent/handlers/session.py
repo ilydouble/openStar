@@ -31,6 +31,7 @@ class SessionMessagePayload(TypedDict, total=False):
     role: str
     content: str
     metadata: dict[str, Any]
+    tool_calls: list[dict[str, Any]]
 
 
 def _history_http_error(exc: Exception) -> HTTPException:
@@ -98,19 +99,20 @@ async def get_session_state(
     try:
         chat_history.assert_owned_session(session_id, user.public_id)
         persisted_messages = chat_history.load_messages(
-            session_id, user.public_id)
+            session_id,
+            user.public_id,
+            include_tool_calls=True,
+        )
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
-    summary, messages = await memory.get_context(session_id)
-    if not messages:
-        messages = persisted_messages
+    summary, _messages = await memory.get_context(session_id)
     return SessionStateResponse(
         session_id=session_id,
         summary=summary or None,
         messages=[
             SessionMessageItem(**message)
-            for message in messages
+            for message in persisted_messages
         ],
         attachments=_session_attachment_refs(
             persisted_messages,

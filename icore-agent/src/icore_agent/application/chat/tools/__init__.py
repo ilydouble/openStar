@@ -5,6 +5,7 @@ __all__ = [
     "read_file",
     "write_file",
     "list_files",
+    "number_comparator",
 ]
 
 
@@ -48,3 +49,10 @@ def list_files(*args, **kwargs):
     from .file_ops import list_files as _list_files
 
     return _list_files(*args, **kwargs)
+
+
+def number_comparator(*args, **kwargs):
+    """Proxy to the deterministic number comparison tool."""
+    from .number_comparator import number_comparator as _number_comparator
+
+    return _number_comparator(*args, **kwargs)

@@ -9,7 +9,7 @@ import pytest
 from fastapi.responses import StreamingResponse
 
 from icore_agent.application.chat import ChatStreamEvent, ChatTurnResult
-from application.chat.services.history_service import ChatHistoryService
+from icore_agent.application.chat.services.history_service import ChatHistoryService
 from icore_agent.domain.files import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat

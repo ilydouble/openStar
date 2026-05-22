@@ -512,9 +512,21 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
     chat_dir = package_dir / "application" / "chat"
     routing = (chat_dir / "routing.py").read_text(encoding="utf-8")
     events = (chat_dir / "events.py").read_text(encoding="utf-8")
+    services_dir = chat_dir / "services"
 
-    assert (chat_dir / "history_service.py").is_file()
+    assert (services_dir / "__init__.py").is_file()
+    assert (services_dir / "history_service.py").is_file()
+    assert (services_dir / "turn_service.py").is_file()
+    assert not (chat_dir / "history_service.py").exists()
+    assert not (chat_dir / "turn_service.py").exists()
     assert not (chat_dir / "service.py").exists()
+    forbidden_import = "from " + "application.chat"
+    for path in (
+        chat_dir / "__init__.py",
+        chat_dir / "context.py",
+        services_dir / "turn_service.py",
+    ):
+        assert forbidden_import not in path.read_text(encoding="utf-8")
     assert "class ChatIntent(str, Enum)" in routing
     assert "class AgentHint(str, Enum)" in routing
     assert "intent: ChatIntent" in routing

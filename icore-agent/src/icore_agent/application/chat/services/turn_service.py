@@ -9,15 +9,15 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
-from application.chat.callback_ctx import reset_parent_callback, set_parent_callback
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
-from application.chat.commands import ChatTurnCommand
-from application.chat.context import ConversationMemory, dedupe_file_uuids, load_chat_context
-from application.chat.events import ChatStreamEvent, ChatTurnResult
-from application.chat.services.history_service import ChatHistoryService
-from application.chat.routing import AgentHint, ChatIntent, ChatRoutingDecision, resolve_routing
+from ..callback_ctx import reset_parent_callback, set_parent_callback
+from ..commands import ChatTurnCommand
+from ..context import ConversationMemory, dedupe_file_uuids, load_chat_context
+from ..events import ChatStreamEvent, ChatTurnResult
+from ..routing import AgentHint, ChatIntent, ChatRoutingDecision, resolve_routing
+from .history_service import ChatHistoryService
 
 log = get_logger(__name__)
 

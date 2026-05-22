@@ -1,9 +1,9 @@
 from .commands import ChatTurnCommand
 from .events import ChatStreamEvent, ChatStreamEventKind, ChatTurnResult
-from application.chat.services.history_service import ChatHistoryService
 from .prompts import build_orchestrator_system_prompt
 from .routing import AgentHint, ChatIntent
-from application.chat.services.turn_service import ChatTurnService
+from .services.history_service import ChatHistoryService
+from .services.turn_service import ChatTurnService
 
 __all__ = [
     "AgentHint",

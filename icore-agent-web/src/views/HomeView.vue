@@ -23,6 +23,7 @@
       @new="onSidebarNew"
       @navigate="sidebarMobileOpen = false"
       @search="onSessionSearch"
+      @delete-session="onDeleteSession"
     />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col lg:min-w-0">
@@ -123,7 +124,7 @@
               <div
                 v-for="msg in messages"
                 :key="msg.id"
-                v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
+                v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
                 :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
               >
                 <div
@@ -180,9 +181,7 @@
                           class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
                           :title="row.filename"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
@@ -224,9 +223,7 @@
                           class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
                           :title="row.filename"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
@@ -591,6 +588,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   chatStream,
+  clearSession,
   deleteFileAsset,
   fetchAllSessions,
   getSessionState,
@@ -607,6 +605,7 @@ import {
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import SearchBar from '../components/SearchBar.vue'
+import DocumentFileIcon from '../components/DocumentFileIcon.vue'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -656,6 +655,19 @@ function userImageList(msg) {
     return [{ content: msg.content, filename: msg.filename }]
   }
   return []
+}
+
+/** Return true when a user bubble should stay visible without plain text content. */
+function userMessageVisible(msg) {
+  if (msg?.role !== 'user') return false
+  if (msg.type === 'image') return userImageList(msg).length > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'composite') {
+    return userImageList(msg).length > 0
+      || (msg.dataAttachments?.length ?? 0) > 0
+      || Boolean(msg.caption?.trim())
+  }
+  return Boolean(msg?.content?.trim())
 }
 
 /** 用户气泡是否采用「附件」紧凑布局（图片 / 数据文件 / 混合） */
@@ -744,9 +756,9 @@ const recentProjects = computed(() => {
   }))
 })
 
-/** 输入区只展示文档等非图片、非数据会话附件；图片与数据文件仅在对话气泡中展示 */
+/** 输入区只展示 RAG 等会话级附件；图片与非图片文件均在 SearchBar 预览或气泡内展示 */
 const composerAttachments = computed(() =>
-  attachmentList.value.filter((a) => a.mode !== 'image' && a.mode !== 'data'),
+  attachmentList.value.filter((a) => a.mode === 'rag'),
 )
 
 async function loadPlanSummary() {
@@ -785,31 +797,27 @@ function extOf(name) {
 
 async function handleFileSelected(file) {
   if (loading.value || uploading.value) return
+  const ext = extOf(file.name)
+  if (!IMAGE_EXTS.has(ext)) return
   uploading.value = true
   uploadError.value = ''
   try {
-    const ext = extOf(file.name)
-    if (IMAGE_EXTS.has(ext)) {
-      const uploaded = await uploadFileAsset(file)
-      attachmentList.value = [...attachmentList.value, uploaded]
-      const url = uploaded.download_url || URL.createObjectURL(file)
-      if (url) {
-        messages.value.push({
-          id: `${Date.now()}-u`,
-          role: 'user',
-          type: 'image',
-          images: [{ content: url, filename: uploaded.original_filename || file.name }],
-        })
-        ensureChatRoute()
-        await scrollBottom()
-        const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-        if (!loading.value) {
-          await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
-        }
+    const uploaded = await uploadFileAsset(file)
+    attachmentList.value = [...attachmentList.value, uploaded]
+    const url = uploaded.download_url || URL.createObjectURL(file)
+    if (url) {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'image',
+        images: [{ content: url, filename: uploaded.original_filename || file.name }],
+      })
+      ensureChatRoute()
+      await scrollBottom()
+      const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+      if (!loading.value) {
+        await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
       }
-    } else {
-      const uploaded = await uploadFileAsset(file)
-      attachmentList.value = [...attachmentList.value, uploaded]
     }
     await loadSessions()
     await loadPlanSummary()
@@ -1006,6 +1014,24 @@ async function loadSessions() {
   }
 }
 
+async function onDeleteSession(sessionId) {
+  try {
+    await clearSession(sessionId)
+    recentSessions.value = recentSessions.value.filter(
+      (s) => s.sessionId !== sessionId,
+    )
+    sessionSearchResults.value = sessionSearchResults.value.filter(
+      (s) => s.sessionId !== sessionId,
+    )
+    if (sessionId === sessionId.value) {
+      router.push({ name: 'workspace' })
+      resetConversationState()
+    }
+  } catch (err) {
+    console.error('Failed to delete session:', err)
+  }
+}
+
 function mapSearchResult(item) {
   return {
     sessionId: item.public_id,
@@ -1158,10 +1184,14 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
     streamingMsg.value = next
   }
 
+  const fileUuids = attachmentList.value
+    .map((item) => item.file_uuid)
+    .filter(Boolean)
+
   try {
     for await (const evt of chatStream(requestText, sessionId.value, agentHint, {
       signal: ac.signal,
-      fileUuids: attachmentList.value.map((item) => item.file_uuid).filter(Boolean),
+      fileUuids,
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {

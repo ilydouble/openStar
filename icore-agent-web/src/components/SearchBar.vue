@@ -86,7 +86,7 @@
           {{ t('chat.pendingImagesTrimmed', { n: pendingTrimmedCount, max: MAX_PENDING_IMAGES }) }}
         </p>
       </div>
-      <!-- 待发送数据文件（CSV / Excel）：与图片一致的「先发预览、发送后进气泡」 -->
+      <!-- 待发送非图片文件（Excel / PDF / Word / TXT 等）：与图片一致的「先发预览、发送后进气泡」 -->
       <div v-if="pendingDataFiles.length" class="mb-2 flex flex-col gap-1">
         <div class="flex flex-wrap items-center gap-1.5">
           <div
@@ -95,9 +95,7 @@
             :title="item.file.name"
             class="relative flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-800/80 dark:ring-white/10"
           >
-            <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            <DocumentFileIcon :filename="item.file.name" />
             <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
               {{ item.file.name }}
             </span>
@@ -143,7 +141,7 @@
               type="file"
               multiple
               class="hidden"
-              accept=".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
+              accept=".pdf,.doc,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
               @change="handleFileSelect"
             />
 
@@ -331,6 +329,7 @@ import {
 } from 'lucide-vue-next'
 
 import { transcribeSpeech } from '../api/agent.js'
+import DocumentFileIcon from './DocumentFileIcon.vue'
 
 const TEXTAREA_MAX_HEIGHT = 200
 
@@ -678,7 +677,9 @@ const pendingDataTrimmedCount = ref(0)
 
 const hasComposerPayload = computed(
   () =>
-    !!input.value.trim() || pendingImages.value.length > 0 || pendingDataFiles.value.length > 0,
+    !!input.value.trim()
+    || pendingImages.value.length > 0
+    || pendingDataFiles.value.length > 0,
 )
 
 /** 流式输出时可点停止；录音中可点发送以结束录音并转写后发送；转写中禁用 */
@@ -736,13 +737,17 @@ function onPaste(e) {
 }
 
 const ACCEPTED_EXTS = new Set([
-  '.pdf', '.docx', '.txt', '.md',
+  '.pdf', '.doc', '.docx', '.txt', '.md',
   '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif',
   '.csv', '.xls', '.xlsx',
 ])
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
-const DATA_EXTS = new Set(['.csv', '.xls', '.xlsx'])
+/** 所有非图片的可上传扩展名（与 Excel 共用同一 pending 流程） */
+const DOCUMENT_EXTS = new Set([
+  '.pdf', '.doc', '.docx', '.txt', '.md',
+  '.csv', '.xls', '.xlsx',
+])
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -802,7 +807,7 @@ function clearPendingImage() {
   if (fileInputEl.value) fileInputEl.value.value = ''
 }
 
-/** 待发送数据文件加入列表（总数不超过 MAX_PENDING_DATA_FILES） */
+/** 将非图片文件加入待发送列表（总数不超过 MAX_PENDING_DATA_FILES） */
 function addPendingDataFiles(files) {
   pendingDataTrimmedCount.value = 0
   const list = Array.isArray(files) ? files : [files]
@@ -815,7 +820,7 @@ function addPendingDataFiles(files) {
     }
     if (!file?.size) continue
     const ext = extOf(file.name)
-    if (!DATA_EXTS.has(ext)) continue
+    if (!DOCUMENT_EXTS.has(ext)) continue
     next.push({ id: makePendingId(), file })
   }
   pendingDataFiles.value = next
@@ -844,8 +849,8 @@ function handleDrop(e) {
     addPendingImageFiles(files)
     return
   }
-  const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
-  if (allData) {
+  const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
+  if (allDocuments) {
     addPendingDataFiles(files)
     return
   }
@@ -856,11 +861,9 @@ function handleDrop(e) {
     addPendingImageFiles([file])
     return
   }
-  if (DATA_EXTS.has(ext)) {
+  if (DOCUMENT_EXTS.has(ext)) {
     addPendingDataFiles([file])
-    return
   }
-  emit('file-selected', file)
 }
 
 const plusMenuItems = [
@@ -912,18 +915,16 @@ function handleFileSelect(e) {
   if (allImages) {
     addPendingImageFiles(files)
   } else {
-    const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
-    if (allData) {
+    const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
+    if (allDocuments) {
       addPendingDataFiles(files)
     } else {
       const file = files[0]
       const ext = extOf(file.name)
       if (IMAGE_EXTS.has(ext)) {
         addPendingImageFiles([file])
-      } else if (DATA_EXTS.has(ext)) {
+      } else if (DOCUMENT_EXTS.has(ext)) {
         addPendingDataFiles([file])
-      } else {
-        emit('file-selected', file)
       }
     }
   }

@@ -305,10 +305,12 @@ def create_orchestrator(
             from .agents.code import code_agent_tool
             from .agents.data import data_agent_tool
             from .agents.research import research_agent_tool
+            from .agents.email import email_agent_tool  # 新增：邮件Agent
         except ModuleNotFoundError:
             research_agent_tool = _missing_tool("research_agent_tool")
             code_agent_tool = _missing_tool("code_agent_tool")
             data_agent_tool = _missing_tool("data_agent_tool")
+            email_agent_tool = _missing_tool("email_agent_tool")  # 新增
 
         tools = [
             research_agent_tool,
@@ -316,6 +318,7 @@ def create_orchestrator(
             _make_scoped_knowledge_tool(session_id),
             _make_scoped_image_tool(session_id),
             data_agent_tool,
+            email_agent_tool,  # 新增：现在 Orchestrator 可以调用邮件工具
         ]
     else:
         tools = []

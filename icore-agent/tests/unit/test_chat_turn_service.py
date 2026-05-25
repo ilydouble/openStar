@@ -109,6 +109,9 @@ def _command(
         tenant_code="",
         agent_hint=AgentHint(agent_hint) if agent_hint else None,
         file_uuids=file_uuids,
+        display_caption=None,
+        agent_message=None,
+        template_id=None,
         user=_auth_user(),
     )
 

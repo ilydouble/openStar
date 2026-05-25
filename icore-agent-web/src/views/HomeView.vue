@@ -175,17 +175,21 @@
                   <template v-else-if="msg.type === 'data'">
                     <div class="flex flex-col gap-1.5">
                       <div class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in (msg.dataAttachments || [])"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
                           <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -217,17 +221,21 @@
                         </a>
                       </div>
                       <div v-if="msg.dataAttachments?.length" class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in msg.dataAttachments"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
                           <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -592,6 +600,7 @@ import {
   deleteFileAsset,
   fetchAllSessions,
   getSessionState,
+  getFileDownloadUrl,
   newSessionId,
   uploadFileAsset,
   searchSessions,
@@ -606,6 +615,14 @@ import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import SearchBar from '../components/SearchBar.vue'
 import DocumentFileIcon from '../components/DocumentFileIcon.vue'
+import {
+  hydrateSessionMessages,
+  refreshHydratedImageUrls,
+} from '../utils/sessionMessageHydration.js'
+import {
+  composeScenarioPrompt,
+  resolveTemplateBubbleText,
+} from '../utils/scenarioPrompt.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -646,6 +663,31 @@ marked.setOptions({ breaks: true, gfm: true })
 function imageItemAlt(filename) {
   if (filename) return t('chat.imageUploadedAlt', { name: filename })
   return t('chat.imageUploadedAltGeneric')
+}
+
+/** Build the hover title for one document attachment chip. */
+function documentChipTitle(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${name} — ${t('chat.openDocumentFile')}`
+}
+
+/** Build the aria label for one document attachment chip. */
+function documentChipAria(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${t('chat.openDocumentFile')}: ${name}`
+}
+
+/** Open one uploaded document in a new browser tab. */
+async function openDocumentAttachment(row) {
+  const fileUuid = String(row?.file_uuid || '').trim()
+  if (!fileUuid) return
+  try {
+    const payload = await getFileDownloadUrl(fileUuid)
+    const url = payload?.download_url
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (err) {
+    console.error('Failed to open document attachment:', err)
+  }
 }
 
 /** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string, type?: string }} msg */
@@ -810,13 +852,20 @@ async function handleFileSelected(file) {
         id: `${Date.now()}-u`,
         role: 'user',
         type: 'image',
-        images: [{ content: url, filename: uploaded.original_filename || file.name }],
+        images: [{
+          file_uuid: uploaded.file_uuid,
+          content: url,
+          filename: uploaded.original_filename || file.name,
+        }],
       })
       ensureChatRoute()
       await scrollBottom()
       const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
       if (!loading.value) {
-        await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
+        await sendUserMessage(t('chat.imageReplyPrompt'), hint, {
+          skipUserBubble: true,
+          turnFileUuids: [uploaded.file_uuid],
+        })
       }
     }
     await loadSessions()
@@ -919,6 +968,10 @@ const activeShortcut = computed(
 const activeScenarioTemplate = computed(
   () => scenarioTemplates.value.find((it) => it.id === activeShortcutId.value) || null,
 )
+
+const templateLabelById = computed(() =>
+  Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label])),
+)
 const activeShortcutPill = computed(() => {
   const it = activeShortcut.value
   if (!it) return null
@@ -1014,18 +1067,18 @@ async function loadSessions() {
   }
 }
 
-async function onDeleteSession(sessionId) {
+async function onDeleteSession(deletedSessionId) {
   try {
-    await clearSession(sessionId)
+    await clearSession(deletedSessionId)
     recentSessions.value = recentSessions.value.filter(
-      (s) => s.sessionId !== sessionId,
+      (s) => s.sessionId !== deletedSessionId,
     )
     sessionSearchResults.value = sessionSearchResults.value.filter(
-      (s) => s.sessionId !== sessionId,
+      (s) => s.sessionId !== deletedSessionId,
     )
-    if (sessionId === sessionId.value) {
-      router.push({ name: 'workspace' })
+    if (deletedSessionId === sessionId.value) {
       resetConversationState()
+      await router.push({ name: 'workspace' })
     }
   } catch (err) {
     console.error('Failed to delete session:', err)
@@ -1105,14 +1158,13 @@ async function hydrateCurrentSession() {
   }
   try {
     const state = await getSessionState(sessionId.value)
-    messages.value = (state.messages || []).map((msg, index) => ({
-      id: `${sessionId.value}-${index}-${msg.role}`,
-      role: msg.role,
-      content: msg.content || '',
-      steps: [],
-      stepsCollapsed: true,
-      streaming: false,
-    }))
+    messages.value = hydrateSessionMessages({
+      messages: state.messages || [],
+      attachments: state.attachments || [],
+      sessionId: sessionId.value,
+      templateLabels: templateLabelById.value,
+    })
+    await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
     await loadSessions()
     const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
@@ -1130,32 +1182,38 @@ async function hydrateCurrentSession() {
   }
 }
 
-function composeScenarioPrompt(message) {
+function buildTemplateSendPayload(userQuery) {
+  const query = String(userQuery || '').trim()
   const template = activeScenarioTemplate.value
-  if (!template) return message
-  const outputSections = (template.outputs || []).map((item) => `- ${item}`).join('\n')
-  const markdownSections = (template.sections || [])
-    .map((item) => `## ${item}\n- Keep this section concise and actionable.`)
-    .join('\n\n')
-  return [
-    message,
-    '',
-    '---',
-    'Please answer in markdown using this exact section order when it fits the task:',
-    markdownSections,
-    '',
-    'Checklist:',
-    outputSections,
-  ].join('\n')
+  if (!template) {
+    return {
+      bubbleText: query,
+      agentMessage: query,
+      templateId: '',
+    }
+  }
+  return {
+    bubbleText: resolveTemplateBubbleText(activeModeItem.value?.label, query),
+    agentMessage: composeScenarioPrompt(query, template),
+    templateId: activeShortcutId.value || template.id || '',
+  }
 }
 
-async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } = {}) {
+async function sendUserMessage(msg, agentHint = '', {
+  skipUserBubble = false,
+  displayCaption = '',
+  turnFileUuids = null,
+} = {}) {
   const text = String(msg ?? '').trim()
   if (!text || loading.value) return
-  const requestText = composeScenarioPrompt(text)
+  const { bubbleText, agentMessage, templateId } = buildTemplateSendPayload(text)
+  const captionForApi = String(displayCaption || '').trim()
+  const fileUuids = Array.isArray(turnFileUuids)
+    ? turnFileUuids.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
 
   if (!skipUserBubble) {
-    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: bubbleText })
     ensureChatRoute()
   }
   loading.value = true
@@ -1184,14 +1242,13 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
     streamingMsg.value = next
   }
 
-  const fileUuids = attachmentList.value
-    .map((item) => item.file_uuid)
-    .filter(Boolean)
-
   try {
-    for await (const evt of chatStream(requestText, sessionId.value, agentHint, {
+    for await (const evt of chatStream(bubbleText, sessionId.value, agentHint, {
       signal: ac.signal,
       fileUuids,
+      agentMessage: agentMessage !== bubbleText ? agentMessage : '',
+      templateId,
+      ...(captionForApi ? { displayCaption: captionForApi } : {}),
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1270,6 +1327,7 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
       const url = uploaded.download_url || URL.createObjectURL(imageFile)
       if (url) {
         uploadedImages.push({
+          file_uuid: uploaded.file_uuid,
           content: url,
           filename: uploaded.original_filename || imageFile.name,
         })
@@ -1279,7 +1337,10 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
     for (const df of datas) {
       const meta = await uploadFileAsset(df)
       attachmentList.value = [...attachmentList.value, meta]
-      uploadedDataMeta.push({ filename: meta.original_filename || df.name })
+      uploadedDataMeta.push({
+        file_uuid: meta.file_uuid,
+        filename: meta.original_filename || df.name,
+      })
     }
     await loadPlanSummary()
 
@@ -1328,7 +1389,15 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
           uploadedDataMeta.length > 1 ? t('chat.dataReplyPromptMulti') : t('chat.dataReplyPrompt')
       }
     }
-    await sendUserMessage(apiText, hint, { skipUserBubble: true })
+    const turnFileUuids = [
+      ...uploadedImages.map((item) => item.file_uuid),
+      ...uploadedDataMeta.map((item) => item.file_uuid),
+    ].filter(Boolean)
+    await sendUserMessage(apiText, hint, {
+      skipUserBubble: true,
+      turnFileUuids,
+      ...(text ? { displayCaption: text } : {}),
+    })
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
   } finally {

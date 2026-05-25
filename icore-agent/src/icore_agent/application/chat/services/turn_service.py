@@ -108,13 +108,26 @@ class ChatTurnService:
             command.user_id,
             title=command.message.strip()[:255],
         )
+        metadata = None
+        if file_uuids:
+            metadata = {"file_uuids": list(file_uuids)}
+            caption = (command.display_caption or "").strip()
+            if caption:
+                metadata["display_caption"] = caption
+        template_id = (command.template_id or "").strip()
+        if template_id:
+            metadata = metadata or {}
+            metadata["template_id"] = template_id
         self._chat_history.save_user_message(
             command.session_id,
             command.user_id,
             command.message,
-            metadata={"file_uuids": list(file_uuids)} if file_uuids else None,
+            metadata=metadata,
         )
-        route = resolve_routing(command.message, command.agent_hint)
+        route = resolve_routing(
+            command.agent_message or command.message,
+            command.agent_hint,
+        )
         log.info(
             "chat_request",
             session_id=command.session_id,
@@ -160,7 +173,8 @@ class ChatTurnService:
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history
-            return runner(command.message)
+            agent_input = command.agent_message or command.message
+            return runner(agent_input)
         finally:
             clear_runtime_user(runtime_token)
 

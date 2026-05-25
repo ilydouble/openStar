@@ -102,9 +102,9 @@ async def get_session_state(
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
-    summary, messages = await memory.get_context(session_id)
-    if not messages:
-        messages = persisted_messages
+    summary, _memory_messages = await memory.get_context(session_id)
+    # Persisted rows include attachment metadata; in-memory cache does not.
+    messages = persisted_messages if persisted_messages else _memory_messages
     return SessionStateResponse(
         session_id=session_id,
         summary=summary or None,
@@ -169,6 +169,9 @@ def _asset_mode(filename: str, content_type: str) -> str:
     lower = filename.lower()
     if content_type.startswith("image/"):
         return "image"
-    if lower.endswith((".csv", ".xlsx", ".xls")):
+    if lower.endswith((
+        ".csv", ".xlsx", ".xls",
+        ".pdf", ".doc", ".docx", ".txt", ".md",
+    )):
         return "data"
     return "file"

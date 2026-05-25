@@ -124,7 +124,7 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
             "original_filename": "brief.txt",
             "filename": "brief.txt",
             "content_type": "text/plain",
-            "mode": "file",
+            "mode": "data",
         },
         {
             "file_uuid": image_uuid,

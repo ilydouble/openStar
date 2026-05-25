@@ -66,6 +66,15 @@ function *yieldTokenChunks(text) {
 export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
   const signal = options && options.signal
   const fileUuids = Array.isArray(options?.fileUuids) ? options.fileUuids : []
+  const displayCaption = typeof options?.displayCaption === 'string'
+    ? options.displayCaption.trim()
+    : ''
+  const agentMessage = typeof options?.agentMessage === 'string'
+    ? options.agentMessage.trim()
+    : ''
+  const templateId = typeof options?.templateId === 'string'
+    ? options.templateId.trim()
+    : ''
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -75,6 +84,9 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       stream: true,
       agent_hint: agentHint || '',
       file_uuids: fileUuids,
+      ...(displayCaption ? { display_caption: displayCaption } : {}),
+      ...(agentMessage ? { agent_message: agentMessage } : {}),
+      ...(templateId ? { template_id: templateId } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -329,7 +341,16 @@ export async function uploadFileAsset(file) {
 function assetMode(filename, contentType) {
   const lower = filename.toLowerCase()
   if (contentType.startsWith('image/')) return 'image'
-  if (lower.endsWith('.csv') || lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'data'
+  if (
+    lower.endsWith('.csv')
+    || lower.endsWith('.xlsx')
+    || lower.endsWith('.xls')
+    || lower.endsWith('.pdf')
+    || lower.endsWith('.doc')
+    || lower.endsWith('.docx')
+    || lower.endsWith('.txt')
+    || lower.endsWith('.md')
+  ) return 'data'
   return 'file'
 }
 

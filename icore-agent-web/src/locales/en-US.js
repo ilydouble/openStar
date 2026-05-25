@@ -668,6 +668,8 @@ export default {
     pendingImagesCount: 'Images ({n} / {max})',
     pendingImagesTrimmed: '{n} image(s) not added (max {max}).',
     openImageFullSize: 'Open full size',
+    openDocumentFile: 'Open file',
+    documentUntitled: 'Document',
     imageReplyPrompt: 'Please answer based on the image I uploaded.',
     imageReplyPromptMulti: 'Please answer based on the images I uploaded.',
     fileReplyPrompt: 'Please answer based on the file I uploaded.',

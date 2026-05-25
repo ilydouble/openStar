@@ -43,6 +43,9 @@ def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> ChatTurn
         tenant_code=req.tenant_code,
         agent_hint=_parse_agent_hint(req.agent_hint),
         file_uuids=tuple(req.file_uuids),
+        display_caption=(req.display_caption or "").strip() or None,
+        agent_message=(req.agent_message or "").strip() or None,
+        template_id=(req.template_id or "").strip() or None,
         user=user,
     )
 

@@ -667,6 +667,8 @@ export default {
     pendingImagesCount: '图片（{n} / {max}）',
     pendingImagesTrimmed: '已有 {n} 张未添加（最多 {max} 张）。',
     openImageFullSize: '查看原图',
+    openDocumentFile: '打开文件',
+    documentUntitled: '文档',
     imageReplyPrompt: '请结合我上传的图片回答。',
     imageReplyPromptMulti: '请结合我上传的多张图片回答。',
     fileReplyPrompt: '请结合我上传的文件回答。',

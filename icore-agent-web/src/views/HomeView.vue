@@ -3,6 +3,7 @@
     class="flex h-dvh min-h-0 overflow-x-hidden bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
     <OnboardingModal :show="showOnboarding" @select-scenario="handleOnboardingScenario" @close="showOnboarding = false" />
+    <QuotaExceededModal :show="showQuotaModal" :current-plan="quotaExceededPlan" @dismiss="showQuotaModal = false" />
 
     <!-- 移动端侧边栏遮罩层 -->
     <div
@@ -604,6 +605,7 @@ import {
   newSessionId,
   uploadFileAsset,
   searchSessions,
+  QuotaExceededError,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
@@ -613,6 +615,7 @@ import {
 } from '../stores/workspace.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
+import QuotaExceededModal from '../components/QuotaExceededModal.vue'
 import SearchBar from '../components/SearchBar.vue'
 import DocumentFileIcon from '../components/DocumentFileIcon.vue'
 import {
@@ -636,6 +639,10 @@ const sidebarMobileOpen = ref(false)
 
 // Onboarding: 首次访问时弹出场景选择引导
 const showOnboarding = ref(false)
+
+// Quota: 控制 Token 超限升级弹窗的显示
+const showQuotaModal = ref(false)
+const quotaExceededPlan = ref('trial')
 
 onMounted(() => {
   const completed = getWorkspaceOnboardingComplete()
@@ -1274,14 +1281,22 @@ async function sendUserMessage(msg, agentHint = '', {
   } catch (e) {
     const aborted = typeof e?.name === 'string' && e.name === 'AbortError'
     if (!aborted) {
-      const errorMsg = String(e?.message || '')
-      if (errorMsg.includes('401')) {
-        signOut()
-        router.push({ name: 'auth' })
+      if (e instanceof QuotaExceededError) {
+        // 超出 Token 配额 → 显示升级弹窗，而不是报错
+        quotaExceededPlan.value = e.currentPlan
+        showQuotaModal.value = true
+        // 移除空的 assistant bubble
+        commitAssistant({ content: '', streaming: false, stepsCollapsed: true })
       } else {
-        commitAssistant({
-          content: t('chat.requestFailed', { msg: errorMsg }),
-        })
+        const errorMsg = String(e?.message || '')
+        if (errorMsg.includes('401')) {
+          signOut()
+          router.push({ name: 'auth' })
+        } else {
+          commitAssistant({
+            content: t('chat.requestFailed', { msg: errorMsg }),
+          })
+        }
       }
     }
   } finally {

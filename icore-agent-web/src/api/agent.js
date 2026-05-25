@@ -5,6 +5,23 @@ import { readJsonResponse } from './client.js'
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
 
+/**
+ * Thrown when the backend returns 402 quota_exceeded.
+ * Carries the current plan and the upgrade URL so the UI can show
+ * an upgrade modal without needing extra API calls.
+ */
+export class QuotaExceededError extends Error {
+  /**
+   * @param {{ current_plan?: string, upgrade_url?: string }} [data]
+   */
+  constructor(data = {}) {
+    super('quota_exceeded')
+    this.name = 'QuotaExceededError'
+    this.currentPlan = data.current_plan || 'trial'
+    this.upgradeUrl = data.upgrade_url || '/pricing'
+  }
+}
+
 /** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
 function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
   const token = getAccessToken()
@@ -18,14 +35,32 @@ function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
 }
 
 /**
- * Parse an agent API error response and preserve structured backend details when available.
+ * Parse an agent API error response.
+ *
+ * Returns 402 quota_exceeded as a typed QuotaExceededError so callers
+ * can show an upgrade modal instead of a generic error message.
+ * All other non-ok responses become a plain Error with HTTP status info.
  *
  * @param {Response} resp
  * @returns {Promise<never>}
  */
 export async function readAgentError(resp) {
-  await readJsonResponse(resp)
-  throw new Error(`HTTP ${resp.status}`)
+  let payload = null
+  try {
+    const ct = resp.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      payload = await resp.json()
+    }
+  } catch {
+    // ignore parse failures — fall through to generic error
+  }
+
+  if (resp.status === 402 && payload?.error_code === 'quota_exceeded') {
+    throw new QuotaExceededError(payload?.data || {})
+  }
+
+  const detail = String(payload?.detail || payload?.message || '').trim()
+  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
 }
 
 /**

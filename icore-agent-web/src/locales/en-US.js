@@ -692,4 +692,34 @@ export default {
     switchToLight: 'Switch to light mode',
     switchToDark: 'Switch to dark mode',
   },
+  quotaModal: {
+    title: 'Trial Quota Exhausted',
+    subtitle: 'Your {tokens} trial tokens have been used up. Upgrade to keep using AI-powered productivity.',
+    currentPlan: 'Current plan',
+    plans: {
+      team: {
+        name: 'Team',
+        tokens: '1M tokens / month',
+        desc: '~600 deep conversations, great for small teams',
+        cta: 'Upgrade to Team',
+        badge: '',
+      },
+      enterprise: {
+        name: 'Enterprise',
+        tokens: '10M tokens / month',
+        desc: '~6,000 deep conversations, built for high-volume use',
+        cta: 'Upgrade to Enterprise',
+        badge: 'Most Popular',
+      },
+      byok: {
+        name: 'Bring Your Key',
+        tokens: 'Unlimited tokens',
+        desc: 'Use your own API key — only a small platform fee',
+        cta: 'Set Up BYOK',
+        badge: 'Best Value',
+      },
+    },
+    dismiss: 'Maybe later',
+    contactSales: 'Contact sales',
+  },
 }

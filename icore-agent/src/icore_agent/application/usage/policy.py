@@ -27,10 +27,17 @@ def plan_or_free(value: str) -> Plan:
 def ensure_current_usage(
     user: UserProfile,
 ) -> tuple[UserProfile, dict[str, Any], bool]:
-    """Return current usage counters and whether they need to be persisted."""
+    """Return current usage counters and whether they need to be persisted.
+
+    TRIAL plan is a one-time lifetime grant and is never subject to monthly
+    resets.  All other plans reset their counters at the start of each calendar
+    month.
+    """
     usage = dict(user.usage or default_usage())
     should_save = False
-    if should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
+    plan = plan_or_free(user.plan)
+    is_monthly = plan != Plan.TRIAL
+    if is_monthly and should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
         usage = default_usage()
         usage["quota_period_start"] = quota_period_start()
         should_save = True

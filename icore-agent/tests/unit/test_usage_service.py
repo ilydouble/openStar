@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from icore_agent.application.usage.policy import default_usage, quota_period_start
+from icore_agent.application.usage.policy import (
+    default_usage,
+    ensure_current_usage,
+    quota_period_start,
+)
 from icore_agent.application.usage.service import UsageService
 from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
@@ -98,3 +102,82 @@ def test_usage_service_does_not_cap_messages():
     allowed, reason = service.check_quota("u1", "messages")
     assert (allowed, reason) == (True, None)
     assert store.users["u1"].usage["message_count"] == 10
+
+
+# ---------------------------------------------------------------------------
+# TRIAL plan — one-time lifetime quota, must never reset monthly
+# ---------------------------------------------------------------------------
+
+def _trial_user(user_id: str = "t1", token_count: int = 0) -> UserProfile:
+    """Create a TRIAL user whose quota period started in a past month."""
+    # Set quota_period_start to January 2024 so should_reset_quota() would
+    # return True for any FREE/TEAM/ENTERPRISE user — but NOT for TRIAL.
+    stale_period = 1704067200  # 2024-01-01 00:00:00 UTC
+    usage = default_usage()
+    usage["quota_period_start"] = stale_period
+    usage["token_count"] = token_count
+    return UserProfile(
+        public_id=user_id,
+        email=f"{user_id}@example.com",
+        name="Trial User",
+        plan=Plan.TRIAL.value,
+        plan_label=Plan.TRIAL.limits.label,
+        roles=["owner"],
+        byok={},
+        usage=usage,
+        created_at=1,
+        updated_at=1,
+    )
+
+
+def test_trial_usage_is_never_reset_monthly():
+    """TRIAL counters must survive a month boundary — quota is one-time."""
+    user = _trial_user(token_count=49_000)
+    result_user, usage, should_save = ensure_current_usage(user)
+    # should_save may be False (no reset triggered) or True only if usage was
+    # missing entirely — but the token count must never be zeroed out.
+    assert usage["token_count"] == 49_000, (
+        "TRIAL token_count must not be reset at a month boundary"
+    )
+
+
+def test_trial_quota_blocks_after_limit():
+    """TRIAL user who exhausted 50K tokens must be denied further chat."""
+    store = FakeUsageStore(_trial_user(token_count=50_000))
+    service = UsageService(store)
+    allowed, reason = service.check_quota("t1", "tokens")
+    assert allowed is False
+    assert reason is not None
+
+
+def test_trial_quota_allows_before_limit():
+    """TRIAL user with remaining tokens must be permitted to continue."""
+    store = FakeUsageStore(_trial_user(token_count=10_000))
+    service = UsageService(store)
+    allowed, reason = service.check_quota("t1", "tokens")
+    assert (allowed, reason) == (True, None)
+
+
+def test_free_quota_resets_on_new_month():
+    """FREE plan must reset counters when the quota period is stale."""
+    stale_period = 1704067200  # 2024-01-01 UTC — always in the past
+    usage = default_usage()
+    usage["quota_period_start"] = stale_period
+    usage["token_count"] = 9_500
+    user = UserProfile(
+        public_id="f1",
+        email="f1@example.com",
+        name="Free User",
+        plan=Plan.FREE.value,
+        plan_label=Plan.FREE.limits.label,
+        roles=["owner"],
+        byok={},
+        usage=usage,
+        created_at=1,
+        updated_at=1,
+    )
+    _, refreshed_usage, should_save = ensure_current_usage(user)
+    assert should_save is True, "FREE usage should be persisted after reset"
+    assert refreshed_usage["token_count"] == 0, (
+        "FREE token_count must be zeroed at the start of a new month"
+    )

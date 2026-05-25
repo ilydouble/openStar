@@ -11,6 +11,97 @@ from sqlalchemy.orm import Session
 from .models import ChatMessage, ChatSession
 
 _HEADLINE_OPTS = "MaxFragments=1, MaxWords=20, MinWords=6, StartSel=<mark>, StopSel=</mark>"
+_SEARCH_LANG = "english"
+_TITLE_RANK_BOOST = 2.0
+
+_SESSION_SEARCH_QUERY_CTE = f"""
+    WITH query AS (
+        SELECT
+            plainto_tsquery('{_SEARCH_LANG}', :search_text) AS tsq,
+            :search_text AS raw_text
+    )
+"""
+
+_SESSION_SEARCH_MATCH_SQL = f"""
+    (
+        to_tsvector('{_SEARCH_LANG}', s.title) @@ q.tsq
+        OR s.title ILIKE '%' || q.raw_text || '%'
+        OR EXISTS (
+            SELECT 1
+            FROM messages m
+            WHERE m.session_id = s.id
+              AND (
+                  to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
+                  OR m.content ILIKE '%' || q.raw_text || '%'
+              )
+        )
+    )
+"""
+
+_SESSION_SEARCH_TITLE_SCORE_SQL = f"""
+    (
+        COALESCE(ts_rank(to_tsvector('{_SEARCH_LANG}', s.title), q.tsq), 0)
+        + COALESCE(similarity(s.title, q.raw_text), 0)
+        + CASE
+            WHEN s.title ILIKE '%' || q.raw_text || '%' THEN 0.05
+            ELSE 0
+          END
+    )
+"""
+
+_SESSION_SEARCH_MESSAGE_SCORE_SQL = f"""
+    COALESCE(
+        (
+            SELECT MAX(
+                COALESCE(ts_rank(to_tsvector('{_SEARCH_LANG}', m.content), q.tsq), 0)
+                + COALESCE(similarity(m.content, q.raw_text), 0)
+                + CASE
+                    WHEN m.content ILIKE '%' || q.raw_text || '%' THEN 0.05
+                    ELSE 0
+                  END
+            )
+            FROM messages m
+            WHERE m.session_id = s.id
+              AND (
+                  to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
+                  OR m.content ILIKE '%' || q.raw_text || '%'
+              )
+        ),
+        0
+    )
+"""
+
+_SESSION_SEARCH_SNIPPET_SQL = f"""
+    COALESCE(
+        (
+            SELECT ts_headline(
+                '{_SEARCH_LANG}', m.content, q.tsq, :headline_opts
+            )
+            FROM messages m
+            WHERE m.session_id = s.id
+              AND to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
+            ORDER BY ts_rank(to_tsvector('{_SEARCH_LANG}', m.content), q.tsq) DESC
+            LIMIT 1
+        ),
+        (
+            SELECT left(m.content, 200)
+            FROM messages m
+            WHERE m.session_id = s.id
+              AND m.content ILIKE '%' || q.raw_text || '%'
+            ORDER BY similarity(m.content, q.raw_text) DESC
+            LIMIT 1
+        ),
+        ts_headline('{_SEARCH_LANG}', s.title, q.tsq, :headline_opts),
+        s.title
+    )
+"""
+
+_SESSION_SEARCH_RANK_SQL = f"""
+    GREATEST(
+        ({_SESSION_SEARCH_TITLE_SCORE_SQL}) * {_TITLE_RANK_BOOST},
+        ({_SESSION_SEARCH_MESSAGE_SCORE_SQL})
+    )
+"""
 
 
 class SqlAlchemyChatHistoryRepository:
@@ -133,7 +224,7 @@ class SqlAlchemyChatHistoryRepository:
         limit: int,
         offset: int,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Search owned sessions by title and message content using PostgreSQL FTS."""
+        """Search owned sessions by title and message content using FTS and trigrams."""
         search_text = query.strip()
         if not search_text:
             return [], 0
@@ -151,25 +242,14 @@ class SqlAlchemyChatHistoryRepository:
         }
         count_result = self._session.execute(
             text(
-                """
-                WITH query AS (
-                    SELECT plainto_tsquery('simple', :search_text) AS tsq
-                )
+                f"""
+                {_SESSION_SEARCH_QUERY_CTE}
                 SELECT COUNT(*)
                 FROM sessions s
                 CROSS JOIN query q
                 WHERE s.user_id = :user_id
                   AND s.deleted_at IS NULL
-                  AND q.tsq <> ''::tsquery
-                  AND (
-                      to_tsvector('simple', s.title) @@ q.tsq
-                      OR EXISTS (
-                          SELECT 1
-                          FROM messages m
-                          WHERE m.session_id = s.id
-                            AND to_tsvector('simple', m.content) @@ q.tsq
-                      )
-                  )
+                  AND {_SESSION_SEARCH_MATCH_SQL}
                 """
             ),
             params,
@@ -180,54 +260,20 @@ class SqlAlchemyChatHistoryRepository:
 
         rows_result = self._session.execute(
             text(
-                """
-                WITH query AS (
-                    SELECT plainto_tsquery('simple', :search_text) AS tsq
-                ),
+                f"""
+                {_SESSION_SEARCH_QUERY_CTE},
                 ranked AS (
                     SELECT
                         s.public_id,
                         s.title,
                         s.updated_at,
-                        GREATEST(
-                            COALESCE(ts_rank(to_tsvector('simple', s.title), q.tsq), 0),
-                            COALESCE(
-                                (
-                                    SELECT MAX(ts_rank(to_tsvector('simple', m.content), q.tsq))
-                                    FROM messages m
-                                    WHERE m.session_id = s.id
-                                      AND to_tsvector('simple', m.content) @@ q.tsq
-                                ),
-                                0
-                            )
-                        ) AS rank,
-                        COALESCE(
-                            (
-                                SELECT ts_headline(
-                                    'simple', m.content, q.tsq, :headline_opts
-                                )
-                                FROM messages m
-                                WHERE m.session_id = s.id
-                                  AND to_tsvector('simple', m.content) @@ q.tsq
-                                ORDER BY ts_rank(to_tsvector('simple', m.content), q.tsq) DESC
-                                LIMIT 1
-                            ),
-                            ts_headline('simple', s.title, q.tsq, :headline_opts)
-                        ) AS snippet
+                        ({_SESSION_SEARCH_RANK_SQL}) AS rank,
+                        ({_SESSION_SEARCH_SNIPPET_SQL}) AS snippet
                     FROM sessions s
                     CROSS JOIN query q
                     WHERE s.user_id = :user_id
                       AND s.deleted_at IS NULL
-                      AND q.tsq <> ''::tsquery
-                      AND (
-                          to_tsvector('simple', s.title) @@ q.tsq
-                          OR EXISTS (
-                              SELECT 1
-                              FROM messages m
-                              WHERE m.session_id = s.id
-                                AND to_tsvector('simple', m.content) @@ q.tsq
-                          )
-                      )
+                      AND {_SESSION_SEARCH_MATCH_SQL}
                 )
                 SELECT public_id, title, updated_at, rank, snippet
                 FROM ranked

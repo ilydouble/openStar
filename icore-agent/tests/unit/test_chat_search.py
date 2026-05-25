@@ -1,4 +1,4 @@
-"""Tests for chat session full-text search."""
+"""Tests for chat session hybrid FTS and trigram search."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from icore_agent.application.chat import ChatStreamEvent, ChatTurnResult
 from icore_agent.application.chat.services.history_service import ChatHistoryService
 from icore_agent.domain.files import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.infrastructure.persistence.sessions import repository as search_repo
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
 from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
@@ -44,6 +45,25 @@ def test_search_user_sessions_clamps_pagination() -> None:
     assert payload["query"] == "hello"
     assert payload["sessions"] == []
     assert payload["total"] == 0
+
+
+def test_search_user_sessions_accepts_single_character_query() -> None:
+    """Single-character queries should reach the repository without a minimum limit."""
+    service = ChatHistoryService()
+    payload = service.search_user_sessions("missing-user", query="a")
+    assert payload["query"] == "a"
+    assert payload["sessions"] == []
+    assert payload["total"] == 0
+
+
+def test_session_search_sql_uses_english_fts_and_trigram_ranking() -> None:
+    """Search SQL should combine english FTS with trigram similarity and title boost."""
+    assert search_repo._SEARCH_LANG == "english"
+    assert search_repo._TITLE_RANK_BOOST == 2.0
+    assert "plainto_tsquery('english'" in search_repo._SESSION_SEARCH_QUERY_CTE
+    assert "similarity(" in search_repo._SESSION_SEARCH_TITLE_SCORE_SQL
+    assert "ILIKE '%' || q.raw_text || '%'" in search_repo._SESSION_SEARCH_MATCH_SQL
+    assert f"* {search_repo._TITLE_RANK_BOOST}" in search_repo._SESSION_SEARCH_RANK_SQL
 
 
 def test_chat_history_preserves_user_message_file_uuid_metadata() -> None:

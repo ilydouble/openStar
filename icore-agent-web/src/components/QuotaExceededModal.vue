@@ -32,12 +32,12 @@
                 {{ t('quotaModal.title') }}
               </h2>
               <p class="mt-2 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                {{ t('quotaModal.subtitle', { tokens: '50,000' }) }}
+                {{ t('quotaModal.subtitle', { plan: planLabel, limit: taskLimit }) }}
               </p>
             </div>
 
             <!-- plan cards -->
-            <div class="mt-8 grid gap-3 sm:grid-cols-3">
+            <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div
                 v-for="plan in plans"
                 :key="plan.key"
@@ -58,7 +58,8 @@
                 </span>
 
                 <p class="text-sm font-semibold text-zinc-950 dark:text-white">{{ plan.name }}</p>
-                <p class="mt-1 text-xs font-medium text-violet-600 dark:text-violet-400">{{ plan.tokens }}</p>
+                <p class="mt-1 text-xs font-medium text-violet-600 dark:text-violet-400">{{ plan.tasks }}</p>
+                <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ plan.price }}</p>
                 <p class="mt-2 flex-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ plan.desc }}</p>
 
                 <button
@@ -99,6 +100,7 @@ import { useRouter } from 'vue-router'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
+  /** The user's current plan key e.g. 'trial', 'pro'. */
   currentPlan: { type: String, default: 'trial' },
 })
 
@@ -107,31 +109,54 @@ const emit = defineEmits(['dismiss'])
 const { t } = useI18n()
 const router = useRouter()
 
+/** Task limit per plan tier — mirrors backend Plan enum for display only. */
+const TASK_LIMITS = { trial: 10, pro: 200, team: 1000, premium: 5000, byok: null }
+
+/** Human-readable plan label shown in the subtitle. */
+const planLabel = computed(() => props.currentPlan.charAt(0).toUpperCase() + props.currentPlan.slice(1))
+
+/** Task limit for the user's current plan. */
+const taskLimit = computed(() => TASK_LIMITS[props.currentPlan] ?? 10)
+
 const plans = computed(() => [
+  {
+    key: 'pro',
+    name: t('quotaModal.plans.pro.name'),
+    tasks: t('quotaModal.plans.pro.tasks'),
+    price: t('quotaModal.plans.pro.price'),
+    desc: t('quotaModal.plans.pro.desc'),
+    cta: t('quotaModal.plans.pro.cta'),
+    badge: t('quotaModal.plans.pro.badge'),
+    featured: false,
+    route: '/account?tab=plan&upgrade=pro',
+  },
   {
     key: 'team',
     name: t('quotaModal.plans.team.name'),
-    tokens: t('quotaModal.plans.team.tokens'),
+    tasks: t('quotaModal.plans.team.tasks'),
+    price: t('quotaModal.plans.team.price'),
     desc: t('quotaModal.plans.team.desc'),
     cta: t('quotaModal.plans.team.cta'),
     badge: t('quotaModal.plans.team.badge'),
-    featured: false,
+    featured: true,
     route: '/account?tab=plan&upgrade=team',
   },
   {
-    key: 'enterprise',
-    name: t('quotaModal.plans.enterprise.name'),
-    tokens: t('quotaModal.plans.enterprise.tokens'),
-    desc: t('quotaModal.plans.enterprise.desc'),
-    cta: t('quotaModal.plans.enterprise.cta'),
-    badge: t('quotaModal.plans.enterprise.badge'),
-    featured: true,
-    route: '/account?tab=plan&upgrade=enterprise',
+    key: 'premium',
+    name: t('quotaModal.plans.premium.name'),
+    tasks: t('quotaModal.plans.premium.tasks'),
+    price: t('quotaModal.plans.premium.price'),
+    desc: t('quotaModal.plans.premium.desc'),
+    cta: t('quotaModal.plans.premium.cta'),
+    badge: t('quotaModal.plans.premium.badge'),
+    featured: false,
+    route: '/account?tab=plan&upgrade=premium',
   },
   {
     key: 'byok',
     name: t('quotaModal.plans.byok.name'),
-    tokens: t('quotaModal.plans.byok.tokens'),
+    tasks: t('quotaModal.plans.byok.tasks'),
+    price: t('quotaModal.plans.byok.price'),
     desc: t('quotaModal.plans.byok.desc'),
     cta: t('quotaModal.plans.byok.cta'),
     badge: t('quotaModal.plans.byok.badge'),

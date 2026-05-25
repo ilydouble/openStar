@@ -59,26 +59,25 @@ class ChatTurnService:
         self._usage_service = usage_service
         self._wall_budget_sec = wall_budget_sec
 
-    def _check_token_quota(self, command: ChatTurnCommand) -> None:
-        """Raise PermissionError if the user's token quota is exhausted.
+    def _check_task_quota(self, command: ChatTurnCommand) -> None:
+        """Raise PermissionError if the user's monthly task quota is exhausted.
 
-        Called before any LLM work begins so we never charge users for
-        a request that would be denied anyway.  If no usage_service is
-        wired (e.g. tests) quota enforcement is skipped.
+        Called before any LLM work begins so users are never billed for a turn
+        that would be denied.  Skipped when no usage_service is wired (tests).
         """
         if self._usage_service is None:
             return
         allowed, reason = self._usage_service.check_quota(
-            command.user_id, "tokens"
+            command.user_id, "tasks"
         )
         if not allowed:
             raise PermissionError(
-                f"token_quota_exceeded:{reason or 'token quota exhausted'}"
+                f"task_quota_exceeded:{reason or 'monthly task quota exhausted'}"
             )
 
     async def run(self, command: ChatTurnCommand) -> ChatTurnResult:
         """Execute one non-streaming chat turn."""
-        self._check_token_quota(command)
+        self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments
@@ -101,6 +100,9 @@ class ChatTurnService:
         reply = str(result)
         await self._append_memory_pair(command, reply)
         self._save_assistant_message(command, reply)
+        # Deduct one task after the turn is fully persisted.
+        if self._usage_service is not None:
+            self._usage_service.consume_task(command.user_id)
         return ChatTurnResult(session_id=command.session_id, reply=reply)
 
     async def stream(
@@ -108,7 +110,7 @@ class ChatTurnService:
         command: ChatTurnCommand,
     ) -> AsyncIterator[ChatStreamEvent]:
         """Prepare one streaming chat turn and return its application event stream."""
-        self._check_token_quota(command)
+        self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments
@@ -326,6 +328,9 @@ class ChatTurnService:
         reply = "".join(full_reply)
         await self._append_memory_pair(command, reply)
         self._save_assistant_message(command, reply)
+        # Deduct one task only on clean completion (not on error or timeout).
+        if not timed_out and self._usage_service is not None:
+            self._usage_service.consume_task(command.user_id)
         yield ChatStreamEvent.done()
 
     def _initial_status_event(

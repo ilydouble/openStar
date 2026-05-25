@@ -31,16 +31,16 @@ async def chat(
         result = await chat_turn_service.run(command)
     except PermissionError as exc:
         msg = str(exc)
-        # Quota-exhausted errors start with "token_quota_exceeded:" prefix.
-        # Return 402 so the frontend can distinguish "upgrade needed" from
-        # regular 403 access-denied errors and show an upgrade modal.
-        if msg.startswith("token_quota_exceeded:"):
+        # Task-quota errors carry the "task_quota_exceeded:" prefix.
+        # Return 402 so the frontend can show an upgrade modal instead of
+        # a generic error, keeping the UX upgrade funnel intact.
+        if msg.startswith("task_quota_exceeded:"):
             return JSONResponse(
                 status_code=402,
                 content={
                     "code": 402,
                     "error_code": "quota_exceeded",
-                    "message": "您的 Token 配额已用尽，请升级套餐继续使用。",
+                    "message": "本月免费任务次数已用完，请升级套餐继续使用。",
                     "data": {
                         "upgrade_url": _UPGRADE_URL,
                         "current_plan": user.plan,

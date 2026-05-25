@@ -54,7 +54,12 @@ class UsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> None:
-        """Persist one LLM usage event and update token quota counters."""
+        """Persist one LLM cost event and update the internal token counter.
+
+        Tokens are recorded for cost reporting only and do NOT count against
+        the user's task quota.  Call consume_task() separately after each
+        successfully completed agent turn.
+        """
         payload = {
             "user_id": user_id,
             "session_id": session_id,
@@ -67,10 +72,24 @@ class UsageService:
         self._store.record_usage_event(**payload)
         if total_tokens > 0:
             try:
+                # Track token spend internally; quota enforcement uses tasks.
                 self.consume_quota(user_id, "tokens", total_tokens)
             except KeyError:
-                # Usage event persistence must not fail when a legacy token has no user row.
+                # Do not fail cost recording when a legacy row is missing.
                 return
+
+    def consume_task(self, user_id: str) -> None:
+        """Deduct one task from the user's monthly quota.
+
+        Call this once per successfully completed agent turn, after the reply
+        has been persisted.  Errors are swallowed so a missing user row never
+        crashes the response path.
+        """
+        try:
+            self.consume_quota(user_id, "tasks", 1)
+        except KeyError:
+            # Gracefully handle missing user rows (e.g. during local dev).
+            return
 
     def get_usage_summary(self, user_id: str) -> dict[str, Any]:
         """Load event-based usage metrics for one user."""

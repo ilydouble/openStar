@@ -33,15 +33,12 @@ def ensure_current_usage(
 ) -> tuple[UserProfile, dict[str, Any], bool]:
     """Return current usage counters and whether they need to be persisted.
 
-    TRIAL plan is a one-time lifetime grant and is never subject to monthly
-    resets.  All other plans reset their counters at the start of each calendar
-    month.
+    All plans (including Trial) reset task_count at the start of each calendar
+    month.  Trial is now a recurring free tier, not a one-time lifetime grant.
     """
     usage = dict(user.usage or default_usage())
     should_save = False
-    plan = plan_or_trial(user.plan)
-    is_monthly = plan != Plan.TRIAL
-    if is_monthly and should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
+    if should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
         usage = default_usage()
         usage["quota_period_start"] = quota_period_start()
         should_save = True
@@ -58,11 +55,15 @@ def check_quota(
     resource: str,
     amount: int = 1,
 ) -> tuple[bool, str | None]:
-    """Return whether the user can consume from one quota bucket."""
+    """Return whether the user can consume from one quota bucket.
+
+    Only 'tasks' is enforced as a hard quota.  Token counts are tracked
+    internally for cost reporting but never block a request.
+    """
     limits = plan_or_trial(user.plan).limits
     limit, used = quota_limit_and_usage(limits, usage, resource)
-    if limit and used + amount > limit:
-        return False, f"{resource} quota exceeded for {user.plan}"
+    if limit is not None and used + amount > limit:
+        return False, f"{resource} quota exceeded for plan '{user.plan}'"
     return True, None
 
 
@@ -75,7 +76,8 @@ def consume_quota(
     """Return a user copy with one quota bucket incremented."""
     updated_usage = dict(usage)
     key = usage_key(resource)
-    updated_usage[key] = int(updated_usage[key]) + amount
+    # Use .get to safely handle existing DB rows that pre-date new counter keys.
+    updated_usage[key] = int(updated_usage.get(key, 0)) + amount
     return user.with_usage(updated_usage, updated_at=current_timestamp())
 
 
@@ -86,24 +88,19 @@ def quota_limit_and_usage(
 ) -> tuple[int | None, int]:
     """Return the configured limit and current usage for one resource."""
     key = usage_key(resource)
-    if key == "message_count":
-        return limits.message_limit, int(usage[key])
-    if key == "token_count":
-        return limits.token_limit, int(usage[key])
-    if key == "image_count":
-        return limits.image_limit, int(usage[key])
-    return limits.attachment_limit, int(usage[key])
+    if key == "task_count":
+        # Primary enforced quota.
+        return limits.task_limit, int(usage.get(key, 0))
+    # token_count: tracked for cost, never enforced (limit = None).
+    return None, int(usage.get(key, 0))
 
 
 def usage_key(resource: str) -> str:
     """Map a quota resource name to its usage counter key."""
-    if resource == "messages":
-        return "message_count"
-    if resource == "tokens":
-        return "token_count"
-    if resource == "images":
-        return "image_count"
-    return "attachment_count"
+    if resource == "tasks":
+        return "task_count"
+    # 'tokens' maps to token_count for cost tracking.
+    return "token_count"
 
 
 def should_reset_quota(quota_period_start: int) -> bool:

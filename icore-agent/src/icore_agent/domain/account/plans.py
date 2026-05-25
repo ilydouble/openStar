@@ -1,4 +1,16 @@
-"""Shared control-plane constants for plans and usage counters."""
+"""Shared control-plane constants for plans and usage counters.
+
+Quota model (v2): the user-visible unit is a *task* (one complete agent turn).
+Token counts are recorded internally for cost tracking but are NOT enforced
+as a hard quota.  All plans — including Trial — reset monthly.
+
+Plan ladder:
+  Trial   – free forever,  10 tasks/month  (always-on acquisition hook)
+  Pro     – $29/month,    200 tasks/month  (individual sellers / creators)
+  Team    – $99/month,  1 000 tasks/month  (small teams)
+  Premium – $299/month, 5 000 tasks/month  (integrations: Shopify, CRM, …)
+  BYOK    – $9/month,   unlimited          (user supplies own API key)
+"""
 
 from __future__ import annotations
 
@@ -8,75 +20,60 @@ from enum import Enum
 
 @dataclass(frozen=True, slots=True)
 class Usage:
-    message_count: int = 0
+    """Per-user usage counters stored as a JSON blob in the DB."""
+
+    # Primary quota counter — one unit consumed per completed agent turn.
+    task_count: int = 0
+    # Internal cost tracking only; not enforced as a hard quota.
     token_count: int = 0
-    image_count: int = 0
-    attachment_count: int = 0
+    # Timestamp of the current quota period start (Unix seconds).
     quota_period_start: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class PlanLimits:
-    message_limit: int | None
-    token_limit: int | None
-    image_limit: int
-    attachment_limit: int
+    """Limits attached to each plan tier."""
+
+    # Maximum tasks per quota period; None = unlimited (BYOK).
+    task_limit: int | None
+    # Human-readable tier label shown in the UI.
     label: str
+    # Monthly price in USD (0 = free).
+    price_usd: int = 0
 
 
 class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchanged.
     limits: PlanLimits
 
-    # Trial: one-time registration gift (~30-50 real AI conversations).
-    # token_limit=50_000 costs us ~¥5-10 per user; generous enough to
-    # demonstrate value, small enough to control burn rate.
-    # No monthly reset — use it or lose it.
+    # Free forever — resets monthly.  Keeps a permanent acquisition hook so
+    # churned users can always come back and re-experience the product.
     TRIAL = (
         "trial",
-        PlanLimits(
-            message_limit=None,
-            token_limit=50_000,
-            image_limit=5,
-            attachment_limit=10,
-            label="Trial",
-        ),
+        PlanLimits(task_limit=10, label="Trial", price_usd=0),
     )
 
-    # Team: paid tier (~¥99/month), 600-1000 conversations/month.
+    # Individual sellers, freelancers, solo creators.
+    PRO = (
+        "pro",
+        PlanLimits(task_limit=200, label="Pro", price_usd=29),
+    )
+
+    # Small teams that collaborate on agent workflows.
     TEAM = (
         "team",
-        PlanLimits(
-            message_limit=None,
-            token_limit=1_000_000,
-            image_limit=100,
-            attachment_limit=200,
-            label="Team",
-        ),
+        PlanLimits(task_limit=1_000, label="Team", price_usd=99),
     )
 
-    # Enterprise: paid tier (~¥999/month), 6000-10000 conversations/month.
-    ENTERPRISE = (
-        "enterprise",
-        PlanLimits(
-            message_limit=None,
-            token_limit=10_000_000,
-            image_limit=1_000,
-            attachment_limit=5_000,
-            label="Enterprise",
-        ),
+    # Power users who need platform integrations (Shopify, CRM, WhatsApp, …).
+    PREMIUM = (
+        "premium",
+        PlanLimits(task_limit=5_000, label="Premium", price_usd=299),
     )
 
-    # BYOK: user supplies their own API key — platform charges a small
-    # infrastructure fee. token_limit=None means no quota enforcement.
+    # User supplies their own LLM API key; platform charges infra fee only.
     BYOK = (
         "byok",
-        PlanLimits(
-            message_limit=None,
-            token_limit=None,
-            image_limit=200,
-            attachment_limit=400,
-            label="BYOK",
-        ),
+        PlanLimits(task_limit=None, label="BYOK", price_usd=9),
     )
 
     def __new__(cls, value: str, limits: PlanLimits):

@@ -10,7 +10,7 @@
         <svg class="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" d="M15 19l-7-7 7-7"/>
         </svg>
-        返回首页
+        {{ t('auth.backHome') }}
       </button>
     </div>
     <div class="flex-1 overflow-hidden">
@@ -21,10 +21,12 @@
 
 <script setup>
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { newSessionId } from '../api/agent.js'
 import AppNavbar from '../components/AppNavbar.vue'
 import ChatPanel from '../components/ChatPanel.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const sessionId = route.params.sessionId || newSessionId()

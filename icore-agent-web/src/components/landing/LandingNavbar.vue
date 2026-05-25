@@ -28,9 +28,9 @@
           class="rounded-full border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
           @click="toggleLocale"
         >
-          {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
+          {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
         </button>
-        <!-- 已登录：显示"进入工作台"；未登录：显示"选择方案"+"免费试用" -->
+        <ThemeToggle variant="navbar" />
         <template v-if="loggedIn">
           <RouterLink
             to="/app"
@@ -62,9 +62,9 @@
           @click="toggleLocale"
           :aria-label="t('landing.nav.language')"
         >
-          {{ currentLocale === 'zh-CN' ? 'EN' : '中' }}
+          {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
         </button>
-        <!-- 移动端：已登录跳工作台，未登录跳注册 -->
+        <ThemeToggle variant="navbar" />
         <RouterLink
           :to="loggedIn ? '/app' : '/auth'"
           class="inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-3.5 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 dark:bg-white dark:text-zinc-950"
@@ -115,14 +115,28 @@
         </a>
         </nav>
         <div class="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          class="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
-          @click="toggleLocale"
-        >
-          {{ t('landing.nav.language') }}: {{ currentLocale === 'zh-CN' ? 'English' : '中文' }}
-        </button>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
+              @click="toggleLocale"
+            >
+              {{ t('landing.nav.language') }}:
+              {{
+                currentLocale === 'zh-CN' ? t('common.localeNameEnglish') : t('common.localeNameChinese')
+              }}
+            </button>
+            <ThemeToggle variant="navbar" />
+          </div>
+          <RouterLink
+            v-if="loggedIn"
+            to="/app"
+            class="rounded-full bg-zinc-950 px-4 py-2.5 text-center text-sm font-semibold text-white dark:bg-white dark:text-zinc-950"
+            @click="menuOpen = false"
+          >
+            {{ t('landing.nav.goToApp') }}
+          </RouterLink>
+          <div v-else class="grid grid-cols-2 gap-2">
             <RouterLink
               to="/#plans"
               class="rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-center text-sm font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
@@ -150,12 +164,12 @@ import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
 import { isAuthenticated } from '../../auth/session.js'
+import ThemeToggle from '../ThemeToggle.vue'
 
 const { t, tm, locale } = useI18n()
 
 const menuOpen = ref(false)
 const currentLocale = computed(() => locale.value)
-/** 是否已登录，决定导航栏显示"进入工作台"还是"免费试用" */
 const loggedIn = computed(() => isAuthenticated())
 const navLinks = computed(() => {
   const items = tm('landing.nav.links')

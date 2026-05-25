@@ -8,6 +8,7 @@ This repository should be developed with clear domain boundaries and verified ch
 - Keep relational database access behind repository classes. Do not issue ad hoc SQL from API handlers.
 - Database schema changes must be represented as Alembic migrations under `icore-agent/alembic/`.
 - Keep configuration grouped by business domain. Preserve stable public exports when refactoring shared config.
+- Use the shared `ApiEnvelope` response shape for HTTP JSON contracts. The Python backend owns this contract at `icore-agent/src/icore_agent/interfaces/http/v1/envelope.py`: successful responses include `code`, `message`, `data`, and `timestamp`; error responses also include `error_code`. Service clients must unwrap `data` at the adapter boundary and must not read business fields from the top-level envelope.
 
 ## Environment
 
@@ -23,6 +24,7 @@ This repository should be developed with clear domain boundaries and verified ch
 - Do not bundle unrelated workspace changes into the same commit.
 - Every code change must include or update focused tests.
 - 每次代码改动都要进行测试，并在测试通过后再交付。
+- use icore-agent/.venv/bin/autopep8 to format all changes
 - Run the relevant test slice before broad verification.
 - Before handing off or committing, run the full applicable test suite and ensure it passes.
 - Commit only after tests pass. Keep git commits scoped to the completed change.

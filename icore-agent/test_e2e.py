@@ -21,6 +21,7 @@ This script prints a per-scenario token summary from those log lines.
 
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -30,8 +31,8 @@ from typing import Any
 
 import httpx
 
-BASE_URL = "http://localhost:8080"
-TIMEOUT  = 120   # seconds per request (novel gen can be slow)
+BASE_URL = os.getenv("ICORE_TEST_BASE_URL", "http://localhost:11000")
+TIMEOUT = 120   # seconds per request (novel gen can be slow)
 
 # trust_env=False disables macOS system-level proxy settings that would
 # cause httpx to route localhost traffic through an external proxy (→ 502).
@@ -39,10 +40,12 @@ _client = httpx.Client(trust_env=False, timeout=TIMEOUT)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _hdr(title: str) -> None:
     print(f"\n{'='*60}")
     print(f"  {title}")
     print('='*60)
+
 
 def chat(session_id: str, message: str, tenant_code: str = "",
          retries: int = 5, retry_delay: float = 62.0) -> str:
@@ -59,14 +62,17 @@ def chat(session_id: str, message: str, tenant_code: str = "",
         if resp.is_error:
             is_rate_limit = "RateLimit" in resp.text or "rate limit" in resp.text.lower()
             if is_rate_limit and attempt < retries:
-                print(f"  [Rate limit] Waiting {retry_delay:.0f}s before retry {attempt+1}/{retries}...")
+                print(
+                    f"  [Rate limit] Waiting {retry_delay:.0f}s before retry {attempt+1}/{retries}...")
                 time.sleep(retry_delay)
                 continue
-            print(f"[HTTP {resp.status_code}] Server error detail: {resp.text[:500]}")
+            print(
+                f"[HTTP {resp.status_code}] Server error detail: {resp.text[:500]}")
             resp.raise_for_status()
         return resp.json()["reply"]
     resp.raise_for_status()
     return ""  # unreachable
+
 
 def upload_doc(filepath: str, content: bytes, tenant_code: str = "") -> dict[str, Any]:
     """Upload a document to the knowledge base."""
@@ -77,6 +83,7 @@ def upload_doc(filepath: str, content: bytes, tenant_code: str = "") -> dict[str
     )
     resp.raise_for_status()
     return resp.json()
+
 
 def health_check() -> None:
     try:
@@ -89,6 +96,7 @@ def health_check() -> None:
         sys.exit(1)
 
 # ── Scenario 1: Multi-turn conversation ──────────────────────────────────────
+
 
 def test_multi_turn() -> None:
     _hdr("Scenario 1 — Multi-turn Conversation")
@@ -104,15 +112,18 @@ def test_multi_turn() -> None:
 
     for i, msg in enumerate(turns, 1):
         if i > 1:
-            time.sleep(15)  # pause between turns to avoid Zhipu RPM rate limiting
+            # pause between turns to avoid Zhipu RPM rate limiting
+            time.sleep(15)
         print(f"[Turn {i}] USER: {msg}")
         t0 = time.time()
         reply = chat(sid, msg)
         elapsed = time.time() - t0
-        print(f"[Turn {i}] AGENT ({elapsed:.1f}s): {reply[:200]}{'...' if len(reply)>200 else ''}")
+        print(
+            f"[Turn {i}] AGENT ({elapsed:.1f}s): {reply[:200]}{'...' if len(reply)>200 else ''}")
         print()
 
 # ── Scenario 2: Document upload + Q&A + Summary ──────────────────────────────
+
 
 SAMPLE_DOC = b"""
 iCore Platform - Employee Handbook (Excerpt)
@@ -137,6 +148,7 @@ iCore Platform - Employee Handbook (Excerpt)
    Each review includes a self-assessment form and a manager evaluation.
    Promotion decisions are made following the September review.
 """.strip()
+
 
 def test_document_rag() -> None:
     _hdr("Scenario 2 — Document Upload + Q&A + Summary")
@@ -163,10 +175,12 @@ def test_document_rag() -> None:
         t0 = time.time()
         reply = chat(sid, msg, tenant_code=tenant)
         elapsed = time.time() - t0
-        print(f"[A{i}] AGENT ({elapsed:.1f}s): {reply[:300]}{'...' if len(reply)>300 else ''}")
+        print(
+            f"[A{i}] AGENT ({elapsed:.1f}s): {reply[:300]}{'...' if len(reply)>300 else ''}")
         print()
 
 # ── Scenario 3: Complex task — short novel ───────────────────────────────────
+
 
 def test_complex_task() -> None:
     _hdr("Scenario 3 — Complex Task: Short Novel Generation")
@@ -185,6 +199,7 @@ def test_complex_task() -> None:
     print(f"AGENT ({elapsed:.1f}s):\n{reply}")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 if __name__ == "__main__":
     health_check()

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any
+
+from icore_agent.domain.user import AuthenticatedUser
 
 from .parsers import parse_file
 from .text import chunk_text
-
-
-class CollectionLike(Protocol):
-    """Minimal Chroma-like collection protocol used by delete flow tests and runtime."""
-
-    def get(self, **kwargs: Any) -> dict[str, Any]: ...
-    def delete(self, ids: list[str]) -> None: ...
 
 
 class KnowledgeService:
@@ -23,7 +19,7 @@ class KnowledgeService:
         *,
         add_documents: Callable[..., int],
         list_documents: Callable[..., list[dict[str, Any]]],
-        get_collection: Callable[..., CollectionLike],
+        get_collection: Callable[..., Any],
         rag_chunk_size: int,
         rag_chunk_overlap: int,
         file_size_limit_mb: int,
@@ -36,14 +32,20 @@ class KnowledgeService:
         self._rag_chunk_overlap = rag_chunk_overlap
         self._file_size_limit_mb = file_size_limit_mb
 
-    def resolve_tenant_code(self, user: dict[str, Any], *, tenant_code: str, scope: str) -> str:
+    def resolve_tenant_code(
+        self,
+        user: AuthenticatedUser,
+        *,
+        tenant_code: str,
+        scope: str,
+    ) -> str:
         """Resolve the tenant code from explicit input or the user/session scope."""
         if tenant_code.strip():
             return tenant_code.strip()
         if scope == "private":
-            return user["id"]
+            return user.public_id
         if scope == "organization":
-            return f"org:{user.get('organization_id', '')}"
+            return f"org:{user.organization_id or ''}"
         return ""
 
     def parse_document(self, filename: str, data: bytes) -> str:
@@ -54,7 +56,8 @@ class KnowledgeService:
         """Reject documents that exceed the configured upload size budget."""
         max_bytes = self._file_size_limit_mb * 1024 * 1024
         if len(data) > max_bytes:
-            raise ValueError(f"File exceeds {self._file_size_limit_mb} MB limit")
+            raise ValueError(
+                f"File exceeds {self._file_size_limit_mb} MB limit")
 
     def chunk_document(self, text: str) -> list[str]:
         """Chunk plain text according to the configured RAG settings."""
@@ -84,7 +87,8 @@ class KnowledgeService:
     def delete_document(self, *, filename: str, tenant_code: str) -> int:
         """Delete all indexed chunks belonging to one uploaded document."""
         collection = self._get_collection(tenant_code=tenant_code)
-        results = collection.get(where={"filename": filename}, include=["metadatas"])
+        results = collection.get(
+            where={"filename": filename}, include=["metadatas"])
         ids = results.get("ids") or []
         if not ids:
             raise LookupError(f"Document '{filename}' not found")

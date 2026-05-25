@@ -7,7 +7,8 @@ def test_database_session_is_lazy():
     with patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create_engine:
         import importlib
 
-        module = importlib.import_module("icore_agent.database.session")
+        module = importlib.import_module(
+            "icore_agent.infrastructure.persistence.sqlalchemy.session")
         importlib.reload(module)
 
         assert mock_create_engine.call_count == 0

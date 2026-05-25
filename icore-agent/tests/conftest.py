@@ -1,6 +1,9 @@
-"""Pytest configuration for the backend package."""
-
 from __future__ import annotations
+
+import os
+
+# Use an in-memory SQLite database for account integration tests unless overridden.
+os.environ.setdefault("ICORE_TEST_SYNC_DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
 import sys
 from pathlib import Path

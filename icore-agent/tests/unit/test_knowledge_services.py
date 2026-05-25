@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -9,6 +8,7 @@ import pytest
 from icore_agent.application.knowledge.parsers import SUPPORTED_EXTENSIONS, parse_file
 from icore_agent.application.knowledge.service import KnowledgeService
 from icore_agent.application.knowledge.text import chunk_text
+from icore_agent.domain.user import AuthenticatedUser
 
 
 def test_chunk_text_splits_on_boundaries():
@@ -55,7 +55,13 @@ def test_knowledge_service_resolves_tenant_code(tenant_code: str, scope: str, ex
     )
 
     resolved = service.resolve_tenant_code(
-        {"id": "user-1", "organization_id": "org-1"},
+        AuthenticatedUser(
+            public_id="user-1",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+            organization_id="org-1",
+        ),
         tenant_code=tenant_code,
         scope=scope,
     )

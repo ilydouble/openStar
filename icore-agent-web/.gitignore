@@ -1,24 +1,39 @@
-# ── 依赖 ──────────────────────────────────────
+# ── Dependencies ──────────────────────────────
 node_modules/
 
-# ── 构建产物 ───────────────────────────────────
+# ── Build output ──────────────────────────────
 dist/
 dist-ssr/
+.vite/
+.cache/
 
-# ── 环境变量 ───────────────────────────────────
+# ── Environment variables ─────────────────────
 .env
 .env.local
 .env.*.local
+!.env.example
 
-# ── 日志 ──────────────────────────────────────
+# ── Logs ──────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 logs/
+
+# ── Test & coverage ───────────────────────────
+coverage/
+.nyc_output/
 
 # ── IDE ───────────────────────────────────────
 .idea/
 .vscode/
+.cursor/
 *.swp
+*.swo
+*~
 
+# ── Legacy local vendor trees (not part of this repo)
+# ─────────────────────────────────────────────
 ft-base-services-dev_v3.0.0.1/
 ft-operation-mng-services-dev_v3.0.0.1/

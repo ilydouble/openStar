@@ -1,6 +1,7 @@
-# iCore Agent Platform — Python dependencies
-# Generated from pyproject.toml + conda env dp (Python 3.13)
+# iCore Agent Platform — Python runtime dependencies
+# Keep in sync with pyproject.toml [project.dependencies]
 # Install: pip install -r requirements.txt
+# Dev tools: pip install -e ".[dev]"
 
 # ── Strands Agents SDK ────────────────────────
 strands-agents==1.35.0
@@ -10,28 +11,40 @@ strands-agents-tools==0.4.1
 fastapi==0.115.12
 uvicorn[standard]==0.38.0
 sse-starlette==2.3.6
+python-multipart==0.0.20
 
 # ── Pydantic ──────────────────────────────────
-pydantic==2.12.5
+pydantic[email]==2.12.5
 pydantic-settings==2.13.1
+email-validator==2.3.0
 
 # ── LLM routing ───────────────────────────────
 litellm==1.83.8
+openai==1.68.2
 
 # ── HTTP client ───────────────────────────────
 httpx==0.28.1
 
-# ── Env & logging ─────────────────────────────
+# ── Env, auth & email ─────────────────────────
 python-dotenv==1.0.1
-structlog==25.5.0
+PyJWT==2.12.1
+resend==2.30.0
 
-# ── Redis (conversation memory) ───────────────
+# ── PostgreSQL & migrations ───────────────────
+sqlalchemy==2.0.38
+asyncpg==0.30.0
+psycopg[binary]==3.2.6
+alembic==1.14.1
+
+# ── Redis (conversation memory & cache) ───────
 redis==5.0.1
 hiredis==3.3.1
+
+# ── Knowledge base / RAG ──────────────────────
+chromadb==0.6.3
+pypdf==5.4.0
+python-docx==1.1.2
 
 # ── Structured data uploads (Data agent) ──────
 pandas==2.2.3
 openpyxl==3.1.5
-
-# ── Email service (Resend) ────────────────────
-resend==2.30.0

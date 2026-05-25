@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from icore_agent.application.usage import UsageService
+from icore_agent.domain.user import AuthenticatedUser, UserProfile
+
+from ...config import settings
+from ...shared.auth.jwt import JWTValidationError, sign_access_token, verify_access_token
 from .contracts import (
     BillingSummaryRepository,
     IdentityRepository,
@@ -11,7 +16,6 @@ from .contracts import (
     ProjectRepository,
     RegistrationRepository,
     TeamRepository,
-    UsageRepository,
     VerificationRepository,
 )
 
@@ -29,7 +33,7 @@ class AccountService:
         team_repository: TeamRepository,
         project_repository: ProjectRepository,
         billing_summary_repository: BillingSummaryRepository,
-        usage_repository: UsageRepository,
+        usage_service: UsageService,
     ) -> None:
         """Create an account service from narrow repository contracts."""
         self._identity_repository = identity_repository
@@ -39,31 +43,49 @@ class AccountService:
         self._team_repository = team_repository
         self._project_repository = project_repository
         self._billing_summary_repository = billing_summary_repository
-        self._usage_repository = usage_repository
+        self._usage_service = usage_service
 
-    def get_current_user(self, authorization: str) -> dict[str, Any]:
+    def get_current_user(self, authorization: str) -> UserProfile:
         """Resolve the bearer token into the current user payload."""
         if not authorization.startswith("Bearer "):
             raise ValueError("Missing Bearer token")
         token = authorization[7:].strip()
-        user = self._identity_repository.get_user_by_token(token)
+        if not token:
+            raise ValueError("Missing Bearer token")
+
+        user = self._resolve_user_from_token(token)
         if user is None:
             raise LookupError("Invalid or expired token")
         return user
+
+    def _resolve_user_from_token(self, token: str) -> UserProfile | None:
+        """Resolve a JWT or legacy opaque token to a persisted user profile."""
+        try:
+            claims = verify_access_token(
+                token,
+                secret=settings.jwt_secret,
+                issuer=settings.jwt_issuer,
+                audience=settings.jwt_audience,
+            )
+        except JWTValidationError:
+            return self._identity_repository.get_user_by_token(token)
+
+        return self._identity_repository.get_user_by_id(claims["sub"])
 
     def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
         """Dispatch a verification code to the given email."""
         return self._verification_repository.send_verification_code(email, client_ip)
 
-    def login_with_email_code(self, email: str, verification_code: str) -> tuple[dict[str, Any], str]:
+    def login_with_email_code(self, email: str, verification_code: str) -> tuple[UserProfile, str]:
         """Validate a one-time code and issue a fresh access token."""
         if not self._verification_repository.verify_code(email, verification_code):
-            raise ValueError("验证码错误或已过期")
+            raise ValueError("Invalid or expired verification code")
         user = self._identity_repository.get_user_by_email(email)
         if not user:
-            raise LookupError("该邮箱尚未注册，请先注册试用账号")
-        token = self._identity_repository.issue_token_for_user(user["id"])
-        return user, token
+            raise LookupError(
+                "This email is not registered. Please sign up for a trial account first."
+            )
+        return user, self._issue_access_token(user)
 
     def register_trial(
         self,
@@ -72,16 +94,32 @@ class AccountService:
         email: str,
         verification_code: str,
         client_ip: str,
-    ) -> tuple[dict[str, Any], str]:
+    ) -> tuple[UserProfile, str]:
         """Register a new trial user after code and IP checks pass."""
         if not self._verification_repository.verify_code(email, verification_code):
-            raise ValueError("验证码错误或已过期")
+            raise ValueError("Invalid or expired verification code")
         existing_user = self._identity_repository.get_user_by_email(email)
         if existing_user:
-            raise ValueError("该邮箱已注册，请使用「邮箱登录」功能")
+            raise ValueError(
+                "This email is already registered. Please use email login instead."
+            )
         if not self._registration_repository.check_ip_registration_limit(client_ip):
-            raise PermissionError("同一 IP 24 小时内只能注册 1 次账号")
-        return self._registration_repository.register_trial(name, email, client_ip)
+            raise PermissionError(
+                "Only one account can be registered from the same IP within 24 hours"
+            )
+        user, _legacy_token = self._registration_repository.register_trial(
+            name, email, client_ip)
+        return user, self._issue_access_token(user)
+
+    def _issue_access_token(self, user: UserProfile) -> str:
+        """Create the JWT access token consumed by the Go gateway and backend."""
+        return sign_access_token(
+            user={"id": user.public_id, "roles": user.roles},
+            secret=settings.jwt_secret,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        )
 
     def capture_lead(self, **payload: Any) -> dict[str, Any]:
         """Create a lead capture record for the marketing funnel."""
@@ -89,16 +127,16 @@ class AccountService:
 
     def get_usage_summary(self, user_id: str) -> dict[str, Any]:
         """Load the usage summary for one user."""
-        return self._usage_repository.usage_summary(user_id)
+        return self._usage_service.get_usage_summary(user_id)
 
-    def get_admin_overview(self, user: dict[str, Any]) -> dict[str, Any]:
+    def get_admin_overview(self, user: AuthenticatedUser) -> dict[str, Any]:
         """Return admin-only usage metrics after a role check."""
-        roles = user.get("roles") or []
+        roles = user.roles
         if "owner" not in roles and "admin" not in roles:
             raise PermissionError(
                 "Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."
             )
-        return self._usage_repository.admin_overview()
+        return self._usage_service.get_admin_overview()
 
     def get_plan(self, user_id: str) -> dict[str, Any]:
         """Return the billing plan summary for a user."""
@@ -132,10 +170,10 @@ class AccountService:
         """Update whether knowledge sharing is private or organization-wide."""
         return self._team_repository.update_knowledge_scope(user_id, scope)
 
-    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str]:
+    def check_quota(self, user_id: str, resource: str) -> tuple[bool, str | None]:
         """Read a quota decision without consuming the quota yet."""
-        return self._usage_repository.check_quota(user_id, resource)
+        return self._usage_service.check_quota(user_id, resource)
 
     def consume_quota(self, user_id: str, resource: str) -> None:
         """Consume one quota unit after a request is accepted."""
-        self._usage_repository.consume_quota(user_id, resource)
+        self._usage_service.consume_quota(user_id, resource)

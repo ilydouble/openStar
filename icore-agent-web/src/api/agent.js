@@ -1,7 +1,21 @@
-import { buildAuthHeaders } from '../auth/session.js'
+import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
+import { authTrace } from '../auth/trace.js'
 import { readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
+const FILE_BASE = '/api/v1/files'
+
+/** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
+function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
+  const token = getAccessToken()
+  const sessionTokenLen = typeof token === 'string' ? token.length : -1
+  const headers = buildAuthHeaders(extra)
+  authTrace(label, {
+    hasBearer: Boolean(headers.Authorization),
+    sessionTokenLength: sessionTokenLen,
+  })
+  return headers
+}
 
 /**
  * Parse an agent API error response and preserve structured backend details when available.
@@ -51,14 +65,28 @@ function *yieldTokenChunks(text) {
  */
 export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
   const signal = options && options.signal
+  const fileUuids = Array.isArray(options?.fileUuids) ? options.fileUuids : []
+  const displayCaption = typeof options?.displayCaption === 'string'
+    ? options.displayCaption.trim()
+    : ''
+  const agentMessage = typeof options?.agentMessage === 'string'
+    ? options.agentMessage.trim()
+    : ''
+  const templateId = typeof options?.templateId === 'string'
+    ? options.templateId.trim()
+    : ''
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
       stream: true,
       agent_hint: agentHint || '',
+      file_uuids: fileUuids,
+      ...(displayCaption ? { display_caption: displayCaption } : {}),
+      ...(agentMessage ? { agent_message: agentMessage } : {}),
+      ...(templateId ? { template_id: templateId } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -132,7 +160,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
 export async function chat(message, sessionId, agentHint = '') {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -141,7 +169,7 @@ export async function chat(message, sessionId, agentHint = '') {
     }),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
@@ -150,11 +178,11 @@ export async function chat(message, sessionId, agentHint = '') {
 export async function runSequential(task, useDocker = false) {
   const resp = await fetch(`${BASE}/sequential`, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
@@ -163,18 +191,75 @@ export async function runSequential(task, useDocker = false) {
 export async function clearSession(sessionId) {
   const resp = await fetch(`${BASE}/session/${sessionId}`, {
     method: 'DELETE',
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 export async function getSessionState(sessionId) {
   const resp = await fetch(`${BASE}/session/${sessionId}`, {
-    headers: buildAuthHeaders(),
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
+}
+
+/**
+ * Fetch one page of the user's chat sessions from PostgreSQL.
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<{ sessions: Array, total: number, limit: number, offset: number }>}
+ */
+export async function fetchSessions(opts = {}) {
+  const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
+  const offset = Math.max(Number(opts.offset) || 0, 0)
+  const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const resp = await fetch(`${BASE}/sessions?${qs}`, {
+    headers: mergeAgentAuthHeaders(),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Load every session page until all rows are retrieved (ordered by updated_at desc).
+ * @returns {Promise<{ sessions: Array, total: number }>}
+ */
+export async function fetchAllSessions() {
+  const pageSize = 100
+  let offset = 0
+  let total = 0
+  const sessions = []
+  while (true) {
+    const payload = await fetchSessions({ limit: pageSize, offset })
+    const page = Array.isArray(payload.sessions) ? payload.sessions : []
+    total = Number(payload.total ?? 0)
+    sessions.push(...page)
+    offset += page.length
+    if (page.length === 0 || offset >= total) break
+  }
+  return { sessions, total }
+}
+
+/**
+ * Search owned chat sessions by title and message content.
+ * @param {string} query
+ * @param {{ limit?: number, offset?: number }} [opts]
+ * @returns {Promise<{ query: string, sessions: Array, total: number, limit: number, offset: number }>}
+ */
+export async function searchSessions(query, opts = {}) {
+  const q = String(query || '').trim()
+  if (!q) {
+    return { query: '', sessions: [], total: 0, limit: 20, offset: 0 }
+  }
+  const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
+  const offset = Math.max(Number(opts.offset) || 0, 0)
+  const qs = new URLSearchParams({ q, limit: String(limit), offset: String(offset) })
+  const resp = await fetch(`${BASE}/sessions/search?${qs}`, {
+    headers: mergeAgentAuthHeaders(),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
 }
 
 /** 生成随机 session id */
@@ -182,103 +267,138 @@ export function newSessionId() {
   return crypto.randomUUID()
 }
 
-// ── 附件管理 ──────────────────────────────────────────────────────────────
+// ── 文件资产管理 ──────────────────────────────────────────────────────────
 
 /**
- * 上传文件并附加到会话上下文
+ * 计算文件的 SHA-256。
  * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, char_count: number, mode: string}>}
+ * @returns {Promise<string>}
  */
-export async function attachFile(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach`, {
-    method: 'POST',
-    headers: buildAuthHeaders(),
-    body: form,
-  })
-  if (!resp.ok) {
-    await readAgentError(resp)
-  }
-  return resp.json()
+async function sha256File(file) {
+  const buffer = await file.arrayBuffer()
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 /**
- * 上传图片（jpg/png/webp 等）并附加到会话上下文
+ * 上传用户文件资产：申请 URL、直传 storage-service、complete 校验。
  * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, ref: string, size: number, mode: string}>}
+ * @returns {Promise<{file_uuid: string, original_filename: string, filename: string,
+ *   content_type: string, storage_etag: string|null, mode: string, download_url?: string}>}
  */
-export async function attachImage(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/image`, {
+export async function uploadFileAsset(file) {
+  const contentType = file.type || 'application/octet-stream'
+  const checksum = await sha256File(file)
+  const uploadResp = await fetch(`${FILE_BASE}/upload-url/`, {
     method: 'POST',
-    headers: buildAuthHeaders(),
-    body: form,
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-upload-url'),
+    body: JSON.stringify({
+      original_filename: file.name || 'upload',
+      content_type: contentType,
+      checksum_sha256: checksum,
+    }),
   })
-  if (!resp.ok) {
-    await readAgentError(resp)
+  if (!uploadResp.ok) await readAgentError(uploadResp)
+  const upload = await readJsonResponse(uploadResp)
+
+  const putResp = await fetch(upload.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  })
+  if (!putResp.ok) {
+    throw new Error(`Upload failed: HTTP ${putResp.status}`)
   }
-  return resp.json()
+
+  const completeResp = await fetch(`${FILE_BASE}/${upload.file_uuid}/complete/`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-complete'),
+    body: JSON.stringify({ checksum_sha256: checksum }),
+  })
+  if (!completeResp.ok) await readAgentError(completeResp)
+  const completed = await readJsonResponse(completeResp)
+
+  let downloadUrl = ''
+  if (contentType.startsWith('image/')) {
+    try {
+      const download = await getFileDownloadUrl(upload.file_uuid)
+      downloadUrl = download.download_url
+    } catch {
+      downloadUrl = ''
+    }
+  }
+
+  return {
+    ...completed,
+    filename: completed.original_filename,
+    mode: assetMode(file.name || '', contentType),
+    download_url: downloadUrl,
+  }
+}
+
+function assetMode(filename, contentType) {
+  const lower = filename.toLowerCase()
+  if (contentType.startsWith('image/')) return 'image'
+  if (
+    lower.endsWith('.csv')
+    || lower.endsWith('.xlsx')
+    || lower.endsWith('.xls')
+    || lower.endsWith('.pdf')
+    || lower.endsWith('.doc')
+    || lower.endsWith('.docx')
+    || lower.endsWith('.txt')
+    || lower.endsWith('.md')
+  ) return 'data'
+  return 'file'
 }
 
 /**
- * 上传结构化数据文件（.csv / .xlsx / .xls）并落盘到 data_agent 可读的 workspace
- * @param {File} file
- * @param {string} sessionId
- * @returns {Promise<{filename: string, ref: string, size: number, ext: string,
- *   row_count: number|null, columns: Array<{name:string,dtype:string}>,
- *   preview_md: string, preview_error: string, mode: string}>}
+ * 获取文件下载 URL。
+ * @param {string} fileUuid
  */
-export async function attachData(file, sessionId) {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('session_id', sessionId)
-  const resp = await fetch(`${BASE}/attach/data`, {
-    method: 'POST',
-    headers: buildAuthHeaders(),
-    body: form,
-  })
-  if (!resp.ok) {
-    await readAgentError(resp)
-  }
-  return resp.json()
-}
-
-/** 给一个会话内的图片 ref（形如 `{session_id}/{filename}`）构造前端可访问的 URL */
-export function imageUrl(ref) {
-  if (!ref) return ''
-  if (/^https?:\/\//i.test(ref)) return ref
-  return `${BASE}/images/${ref}`
-}
-
-/**
- * 列出当前会话的附件（不含文本内容）
- * @param {string} sessionId
- * @returns {Promise<Array<{filename: string, char_count: number, mode: string, uploaded_at: number}>>}
- */
-export async function listAttachments(sessionId) {
-  const resp = await fetch(`${BASE}/attachments/${sessionId}`, {
-    headers: buildAuthHeaders(),
+export async function getFileDownloadUrl(fileUuid) {
+  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/download-url/`, {
+    headers: mergeAgentAuthHeaders({}, 'files-download-url'),
   })
   if (!resp.ok) await readAgentError(resp)
-  return resp.json()
+  return readJsonResponse(resp)
 }
 
 /**
- * 删除指定附件
- * @param {string} sessionId
- * @param {string} filename
+ * 删除文件资产。
+ * @param {string} fileUuid
  */
-export async function removeAttachment(sessionId, filename) {
-  const resp = await fetch(
-    `${BASE}/attachments/${sessionId}/${encodeURIComponent(filename)}`,
-    { method: 'DELETE', headers: buildAuthHeaders() },
-  )
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-  return resp.json()
+export async function deleteFileAsset(fileUuid) {
+  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/`, {
+    method: 'DELETE',
+    headers: mergeAgentAuthHeaders({}, 'files-delete'),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Transcribe microphone audio via backend Z.AI GLM-ASR proxy.
+ * @param {Blob} audioBlob
+ * @param {{ language?: string, signal?: AbortSignal, filename?: string }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function transcribeSpeech(audioBlob, opts = {}) {
+  const { language = '', signal, filename = 'recording.webm' } = opts
+  const form = new FormData()
+  form.append('file', audioBlob, filename)
+  if (language) form.append('language', language)
+
+  const resp = await fetch(`${BASE}/transcribe`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({}, 'agent-transcribe'),
+    body: form,
+    cache: 'no-store',
+    signal,
+  })
+  const payload = await readJsonResponse(resp)
+  const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
+  return text
 }

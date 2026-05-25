@@ -9,10 +9,15 @@ class AuthSettings(DomainSettings):
     icore_base_url: str = ""
     icore_secret: str = ""
     auth_enabled: bool = False
+    jwt_secret: str = "dev-icore-jwt-secret-change-me-32-bytes"
+    jwt_issuer: str = "icore-agent"
+    jwt_audience: str = "icore-gateway"
+    jwt_ttl_seconds: int = 86400
 
-    # Control Plane 数据存储路径（用户、额度、组织、线索等）
+    # Control Plane 数据存储路径（组织、项目、验证码、线索等非用户数据）
     # 警告：默认 /tmp 路径在系统重启后会清空，生产环境务必改为持久化路径
     control_plane_store_path: str = "/tmp/icore-control-plane.json"
+    import_json_users_on_startup: bool = True
 
     # ── 邮件服务（Resend）────────────────────────────────
     # 从 resend.com 获取 API Key，留空则仅打印到日志（开发模式）

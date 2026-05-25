@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { createJsonClient, readJsonResponse } from '../src/api/client.js'
+import { fetchAllSessions, searchSessions } from '../src/api/agent.js'
 import {
   WORKSPACE_ONBOARDING_KEY,
   WORKSPACE_RECENT_SESSIONS_KEY,
@@ -64,4 +65,103 @@ test('workspace store persists onboarding flag and recent sessions', () => {
   setRecentSessions(storage, [{ sessionId: 's1' }])
   assert.deepEqual(getRecentSessions(storage), [{ sessionId: 's1' }])
   assert.equal(storage.getItem(WORKSPACE_RECENT_SESSIONS_KEY), JSON.stringify([{ sessionId: 's1' }]))
+})
+
+test('fetchAllSessions loads every page ordered by updated_at desc', async () => {
+  const calls = []
+  global.fetch = async (url) => {
+    calls.push(String(url))
+    if (url.includes('offset=0')) {
+      return new Response(
+        JSON.stringify({
+          code: 200,
+          message: '操作成功',
+          data: {
+            sessions: [
+              { public_id: 's1', title: 'First', updated_at: 2, message_count: 3 },
+              { public_id: 's2', title: 'Second', updated_at: 1, message_count: 1 },
+            ],
+            total: 3,
+            limit: 100,
+            offset: 0,
+          },
+          timestamp: '2026-05-21T00:00:00+00:00',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    return new Response(
+      JSON.stringify({
+        code: 200,
+        message: '操作成功',
+        data: {
+          sessions: [{ public_id: 's3', title: 'Third', updated_at: 0, message_count: 5 }],
+          total: 3,
+          limit: 100,
+          offset: 2,
+        },
+        timestamp: '2026-05-21T00:00:00+00:00',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const { sessions, total } = await fetchAllSessions()
+
+  assert.equal(total, 3)
+  assert.equal(sessions.length, 3)
+  assert.equal(calls.length, 2)
+  assert.ok(calls[0].includes('/api/v1/agent/sessions?limit=100&offset=0'))
+  assert.ok(calls[1].includes('offset=2'))
+})
+
+test('searchSessions calls the full-text search endpoint', async () => {
+  const calls = []
+  global.fetch = async (url) => {
+    calls.push(String(url))
+    return new Response(
+      JSON.stringify({
+        code: 200,
+        message: '操作成功',
+        data: {
+          query: 'budget',
+          sessions: [
+            {
+              public_id: 's1',
+              title: 'Weekly Review',
+              updated_at: 10,
+              rank: 0.42,
+              snippet: 'Review the <mark>budget</mark> forecast',
+            },
+          ],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        },
+        timestamp: '2026-05-21T00:00:00+00:00',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const payload = await searchSessions('budget')
+
+  assert.equal(payload.total, 1)
+  assert.equal(payload.sessions[0].snippet.includes('<mark>budget</mark>'), true)
+  assert.ok(calls[0].includes('/api/v1/agent/sessions/search?q=budget&limit=20&offset=0'))
+})
+
+test('searchSessions returns empty payload for blank query', async () => {
+  global.fetch = async () => {
+    throw new Error('fetch should not run for blank query')
+  }
+
+  const payload = await searchSessions('   ')
+  assert.deepEqual(payload, {
+    query: '',
+    sessions: [],
+    total: 0,
+    limit: 20,
+    offset: 0,
+  })
 })

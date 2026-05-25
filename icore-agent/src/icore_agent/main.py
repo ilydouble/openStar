@@ -1,31 +1,35 @@
 """FastAPI application entry point."""
 
 # ruff: noqa: E402,I001
+# autopep8: off
 
 # Split dotenv files must be loaded before LiteLLM/Strands import time.
 from .config.dotenv import load_domain_dotenvs
 
 load_domain_dotenvs()
 
-import litellm
-import structlog
-import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI
+
+import litellm
+import uvicorn
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .control_plane import current_runtime_user
-from .api.routers import agent as agent_router
-from .api.routers import account as account_router
-from .api.routers import health as health_router
-from .api.routers import knowledge as knowledge_router
-from .api.routers import payment as payment_router
-from .api.routers.account import get_current_user
-from .api.middleware.auth import AuthMiddleware
-from .api.dependencies import usage_service
+from .infrastructure.control_plane.json_store import control_plane_store
+from .interfaces.http.v1.dependencies import usage_service
+from .interfaces.http.v1.envelope import install_api_envelope
+from .interfaces.http.v1.router import include_api_routers
+from .shared.http.middleware import (
+    AuthMiddleware,
+    BackendRequestLoggingMiddleware,
+    RequestIdMiddleware,
+)
+from .shared.logging.app_logger import get_logger
+from .shared.runtime.user_context import current_runtime_user
 
-log = structlog.get_logger()
+
+log = get_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────
@@ -48,7 +52,7 @@ def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
     user = current_runtime_user()
     if user:
         usage_service.record_llm_usage(
-            user_id=user["id"],
+            user_id=user.public_id,
             session_id=str(kwargs.get("metadata", {}).get("session_id", "")),
             model=kwargs.get("model", "unknown"),
             prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
@@ -69,6 +73,12 @@ async def lifespan(_: FastAPI):
         debug=settings.debug,
         model=settings.model_id,
     )
+    if settings.import_json_users_on_startup:
+        from .infrastructure.persistence.users.json_import import import_legacy_users_from_store
+
+        imported = import_legacy_users_from_store(control_plane_store)
+        if imported:
+            log.info("json_users_imported", count=imported)
     try:
         yield
     finally:
@@ -89,6 +99,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    install_api_envelope(app)
+
     # ── CORS ──────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,
@@ -102,22 +114,11 @@ def create_app() -> FastAPI:
     if settings.auth_enabled:
         app.add_middleware(AuthMiddleware)
 
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(BackendRequestLoggingMiddleware)
+
     # ── Routers ───────────────────────────────────────────
-    app.include_router(health_router.router, tags=["health"])
-    app.include_router(account_router.router, prefix="/api/v1/account", tags=["account"])
-    app.include_router(agent_router.router, prefix="/api/v1/agent", tags=["agent"])
-    app.include_router(
-        knowledge_router.router,
-        prefix="/api/v1/knowledge",
-        tags=["knowledge"],
-        dependencies=[Depends(get_current_user)],
-    )
-    app.include_router(
-        payment_router.router,
-        prefix="/api/v1",
-        tags=["payment"],
-        dependencies=[Depends(get_current_user)],
-    )
+    include_api_routers(app)
 
     return app
 

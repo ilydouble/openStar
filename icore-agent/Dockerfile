@@ -40,7 +40,7 @@ WORKDIR /app
 
 # Runtime system deps (bash required by sequential agent)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash curl git \
+    bash curl ffmpeg git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency and application installs as separate cacheable layers.
@@ -58,11 +58,13 @@ USER icore
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f "http://localhost:${API_PORT:-11001}/health" || exit 1
 
-EXPOSE 8080
+EXPOSE 11001
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    API_HOST=0.0.0.0 \
+    API_PORT=11001
 
-CMD ["uvicorn", "icore_agent.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn icore_agent.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-11001}"]

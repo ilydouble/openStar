@@ -5,15 +5,18 @@ All LLM calls and external services are mocked.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
+from icore_agent.application.chat.orchestrator import create_orchestrator
+from icore_agent.application.chat.prompts import build_orchestrator_system_prompt
+from icore_agent.application.chat.routing import AgentHint
 from icore_agent.main import app
-from icore_agent.engine.orchestrator import create_orchestrator
-
 
 # ── TestClient (sync) ──────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def client():
@@ -28,12 +31,21 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
 
+def _api_data(resp):
+    """Return the ApiEnvelope data object from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["message"]
+    assert payload["timestamp"]
+    return payload["data"]
+
+
 # ── Health endpoints ───────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["status"] == "ok"
     assert "version" in data
 
@@ -41,41 +53,37 @@ def test_health_returns_ok(client):
 def test_ready_returns_ready(client):
     resp = client.get("/ready")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ready"
+    assert _api_data(resp)["status"] == "ready"
 
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.create_orchestrator")
-@patch("icore_agent.api.routers.agent.attachments")
-@patch("icore_agent.api.routers.agent.memory")
-def test_chat_non_streaming(mock_memory, mock_attachments, mock_create_orch, client):
+@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.memory")
+def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
-    mock_attachments.get_inline_text = AsyncMock(return_value="")
-    mock_attachments.has_rag_docs = AsyncMock(return_value=False)
-    mock_attachments.get_image_refs = AsyncMock(return_value=[])
-    mock_attachments.get_data_refs = AsyncMock(return_value=[])
 
     mock_agent = MagicMock(return_value="Hello from iCore Agent!")
     mock_create_orch.return_value = mock_agent
 
     resp = client.post(
         "/api/v1/agent/chat",
-        json={"message": "Hello", "stream": False, "session_id": "test-session"},
+        json={"message": "Hello", "stream": False,
+              "session_id": "test-session"},
         headers=_auth_headers(client),
     )
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["reply"] == "Hello from iCore Agent!"
     assert data["session_id"] == "test-session"
 
 
 # ── Sequential endpoint ────────────────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.SequentialAgent")
+@patch("icore_agent.interfaces.http.v1.agent.handlers.sequential.SequentialAgent")
 def test_sequential_endpoint_success(mock_seq_cls, client):
-    from icore_agent.engine.sequential.agent import SequentialResult
+    from icore_agent.application.chat.sequential.agent import SequentialResult
     mock_instance = MagicMock()
     mock_instance.run.return_value = SequentialResult(
         status="complete", output="Files listed.", steps=2
@@ -88,29 +96,27 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
         headers=_auth_headers(client),
     )
     assert resp.status_code == 200
-    data = resp.json()
+    data = _api_data(resp)
     assert data["status"] == "complete"
     assert data["steps"] == 2
 
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
-@patch("icore_agent.api.routers.agent.attachments")
-@patch("icore_agent.api.routers.agent.memory")
-def test_clear_session(mock_memory, mock_attachments, client):
+@patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
+def test_clear_session(mock_memory, client):
     mock_memory.clear = AsyncMock()
-    mock_attachments.clear = AsyncMock()
-    resp = client.delete("/api/v1/agent/session/my-session", headers=_auth_headers(client))
+    resp = client.delete("/api/v1/agent/session/my-session",
+                         headers=_auth_headers(client))
     assert resp.status_code == 200
-    assert resp.json()["cleared"] is True
+    assert _api_data(resp)["cleared"] is True
     mock_memory.clear.assert_awaited_once_with("my-session")
-    mock_attachments.clear.assert_awaited_once_with("my-session")
 
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.engine.orchestrator.LiteLLMModel")
-@patch("icore_agent.engine.orchestrator.Agent")
+@patch("icore_agent.application.chat.orchestrator.LiteLLMModel")
+@patch("icore_agent.application.chat.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
 
@@ -123,3 +129,31 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     # Verify 5 tools are registered
     _, kwargs = mock_agent_cls.call_args
     assert len(kwargs.get("tools", [])) == 5
+
+
+def test_orchestrator_prompt_builder_includes_chat_context():
+    """Application prompt policy should assemble all prepared chat context."""
+    prompt = build_orchestrator_system_prompt(
+        summary="Earlier summary",
+        attachments_text="Inline doc text",
+        image_attachments=[{"filename": "photo.png", "ref": "file-ref"}],
+        data_attachments=[
+            {
+                "filename": "data.csv",
+                "abs_path": "/tmp/data.csv",
+                "columns": [{"name": "amount", "dtype": "int64"}],
+                "row_count": 2,
+                "preview_md": "| amount |\n| --- |\n| 10 |",
+            }
+        ],
+        agent_hint=AgentHint.DATA,
+    )
+
+    assert "data_agent_tool" in prompt
+    assert "The user clicked the Data shortcut" in prompt
+    assert "Inline doc text" in prompt
+    assert "photo.png" in prompt
+    assert "file-ref" in prompt
+    assert "data.csv" in prompt
+    assert "amount(int64)" in prompt
+    assert "Earlier summary" in prompt

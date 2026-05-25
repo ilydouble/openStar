@@ -36,7 +36,7 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     dotenv_dir = tmp_path / "dotenv"
     dotenv_dir.mkdir()
     (dotenv_dir / ".env.app").write_text(
-        "APP_NAME=Split Env App\nBACKEND_PORT_BIND=10001:8080\n",
+        "APP_NAME=Split Env App\nAPI_PORT=11001\n",
         encoding="utf-8",
     )
     (dotenv_dir / ".env.database").write_text(
@@ -60,7 +60,7 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     monkeypatch.setenv("ICORE_AGENT_DOTENV_DIR", str(dotenv_dir))
     for key in (
         "APP_NAME",
-        "BACKEND_PORT_BIND",
+        "API_PORT",
         "DB_HOST",
         "DB_INTERNAL_PORT",
         "DB_HOST_PORT",
@@ -76,7 +76,7 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     split_settings = Settings()
 
     assert split_settings.app_name == "Split Env App"
-    assert split_settings.backend_port_bind == "10001:8080"
+    assert split_settings.api_port == 11001
     assert split_settings.db_host == "db.example"
     assert split_settings.db_internal_port == 15432
     assert split_settings.db_host_port == 25432

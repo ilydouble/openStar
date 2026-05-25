@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex h-screen min-h-0 bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
+    class="flex h-dvh min-h-0 overflow-x-hidden bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
     <OnboardingModal :show="showOnboarding" @select-scenario="handleOnboardingScenario" @close="showOnboarding = false" />
 
@@ -15,8 +15,15 @@
     <HomeSidebar
       class="fixed inset-y-0 left-0 z-40 max-lg:shadow-[4px_0_24px_-4px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-out lg:relative lg:z-auto lg:translate-x-0 lg:shadow-none lg:transition-none dark:max-lg:shadow-black/50"
       :class="sidebarMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+      :current-session-id="sessionId"
+      :recent-sessions="recentSessions"
+      :recent-projects="recentProjects"
+      :search-results="sessionSearchResults"
+      :search-loading="sessionSearchLoading"
       @new="onSidebarNew"
       @navigate="sidebarMobileOpen = false"
+      @search="onSessionSearch"
+      @delete-session="onDeleteSession"
     />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col lg:min-w-0">
@@ -33,51 +40,77 @@
       </div>
 
       <header
-        class="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 py-4 sm:px-8"
+        class="relative z-10 flex w-full min-w-0 shrink-0 items-center gap-x-2 gap-y-2 px-3 py-3 sm:px-8 sm:py-4"
       >
-        <div class="hidden items-center gap-2 md:flex">
-          <div
-            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+        <div class="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+          <button
+            type="button"
+            class="-ml-0.5 flex min-h-[2.75rem] min-w-[2.75rem] shrink-0 items-center justify-center rounded-xl text-zinc-600 transition-colors hover:bg-zinc-200/80 hover:text-zinc-950 lg:hidden dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+            :aria-label="t('home.sidebar.openMenu')"
+            @click="sidebarMobileOpen = true"
           >
-            <span class="font-semibold text-zinc-900 dark:text-white">
-              {{ t('home.quota.planPrefix') }}
-            </span>
-            {{ planSummary?.label || '...' }}
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          <div class="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
+            <div
+              class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">
+                {{ t('home.quota.planPrefix') }}
+              </span>
+              {{ planSummary?.label || '...' }}
+            </div>
+            <div
+              v-for="item in quotaItems"
+              :key="item.label"
+              class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
+              {{ item.value }}
+            </div>
           </div>
+
           <div
-            v-for="item in quotaItems"
-            :key="item.label"
-            class="rounded-full border border-zinc-200/80 bg-white/85 px-3 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden"
           >
-            <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
-            {{ item.value }}
+            <div
+              class="shrink-0 rounded-full border border-zinc-200/80 bg-white/85 px-2.5 py-1 text-[11px] text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">
+                {{ t('home.quota.planPrefix') }}
+              </span>
+              {{ planSummary?.label || '…' }}
+            </div>
+            <div
+              v-for="item in quotaItems"
+              :key="'m-' + item.label"
+              class="shrink-0 whitespace-nowrap rounded-full border border-zinc-200/80 bg-white/85 px-2.5 py-1 text-[11px] text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+            >
+              <span class="font-semibold text-zinc-900 dark:text-white">{{ item.label }}</span>
+              {{ item.value }}
+            </div>
           </div>
         </div>
-        <!-- 移动端汉堡菜单按钮（桌面端隐藏） -->
-        <button
-          type="button"
-          class="-ml-1 mr-auto flex rounded-xl p-2 text-zinc-600 transition-colors hover:bg-zinc-200/80 hover:text-zinc-950 lg:hidden dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
-          :aria-label="t('home.sidebar.openMenu')"
-          @click="sidebarMobileOpen = true"
-        >
-          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          @click="goAccount"
-          class="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
-        >
-          {{ t('home.accountCenter') }}
-        </button>
-        <button
-          type="button"
-          @click="handleSignOut"
-          class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:shadow-black/30"
-        >
-          {{ t('home.signOut') }}
-        </button>
+
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            @click="goAccount"
+            class="inline-flex min-h-[2.75rem] max-w-[10.5rem] min-w-0 items-center justify-center truncate rounded-full px-3 py-2 text-xs font-medium text-zinc-700 transition-colors duration-300 hover:bg-zinc-200/80 hover:text-zinc-950 sm:max-w-none sm:px-4 sm:text-sm dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          >
+            {{ t('home.accountCenter') }}
+          </button>
+          <button
+            type="button"
+            @click="handleSignOut"
+            class="inline-flex min-h-[2.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-zinc-950 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-zinc-900/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] sm:px-4 sm:text-sm dark:bg-white dark:text-zinc-950 dark:shadow-black/30"
+          >
+            {{ t('home.signOut') }}
+          </button>
+        </div>
       </header>
 
       <main class="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -91,7 +124,7 @@
               <div
                 v-for="msg in messages"
                 :key="msg.id"
-                v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
+                v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
                 :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
               >
                 <div
@@ -105,7 +138,7 @@
                     'dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
                     userBubbleUsesAttachLayout(msg)
                       ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5'
-                      : 'max-w-[70%] px-4 py-3',
+                      : 'max-w-[min(88%,calc(100vw-2.5rem))] px-3 py-3 min-[390px]:px-4 sm:max-w-[70%]',
                   ]"
                 >
                   <template v-if="msg.type === 'image'">
@@ -142,19 +175,21 @@
                   <template v-else-if="msg.type === 'data'">
                     <div class="flex flex-col gap-1.5">
                       <div class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in (msg.dataAttachments || [])"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -186,19 +221,21 @@
                         </a>
                       </div>
                       <div v-if="msg.dataAttachments?.length" class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in msg.dataAttachments"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -212,7 +249,7 @@
                     {{ msg.content }}
                   </template>
                 </div>
-                <div v-else class="flex max-w-[80%] gap-3">
+                <div v-else class="flex max-w-[min(92%,calc(100vw-2.5rem))] gap-2 min-[390px]:max-w-[80%] sm:gap-3">
                   <div
                     class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
                   >
@@ -337,14 +374,14 @@
                 <div v-if="composerAttachments.length || uploading" class="mt-2 flex flex-wrap gap-2 justify-center">
                   <div
                     v-for="att in composerAttachments"
-                    :key="att.filename"
+                    :key="att.file_uuid"
                     class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                            border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                   >
                     <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
-                    <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                    <span class="max-w-[160px] truncate">{{ att.original_filename || att.filename }}</span>
                     <span :class="att.mode === 'rag'
                       ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                       : att.mode === 'data'
@@ -352,7 +389,7 @@
                       : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
                       {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                     </span>
-                    <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                    <button @click="deleteAttachment(att.file_uuid)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                       <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                   </div>
@@ -495,21 +532,21 @@
 
           <div
             v-if="isChatRoute"
-            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
+            class="relative z-30 shrink-0 border-t border-zinc-200 bg-zinc-100/85 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-all duration-500 ease-in-out dark:border-white/10 dark:bg-zinc-950 dark:backdrop-blur-none sm:px-8"
           >
             <!-- 附件列表（对话模式）：文档/RAG 等；图片与数据文件仅在气泡内展示 -->
             <div v-if="composerAttachments.length || uploading || uploadError" class="mx-auto max-w-3xl mb-2">
               <div v-if="composerAttachments.length || uploading" class="flex flex-wrap gap-2">
                 <div
                   v-for="att in composerAttachments"
-                  :key="att.filename"
+                  :key="att.file_uuid"
                   class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
                          border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300"
                 >
                   <svg class="h-3.5 w-3.5 shrink-0 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
-                  <span class="max-w-[160px] truncate">{{ att.filename }}</span>
+                  <span class="max-w-[160px] truncate">{{ att.original_filename || att.filename }}</span>
                   <span :class="att.mode === 'rag'
                     ? 'rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                     : att.mode === 'data'
@@ -517,7 +554,7 @@
                     : 'rounded bg-violet-100 px-1 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'">
                     {{ att.mode === 'rag' ? t('chat.attachmentRag') : att.mode === 'data' ? t('chat.attachmentData') : t('chat.attachmentInline') }}
                   </span>
-                  <button @click="deleteAttachment(att.filename)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
+                  <button @click="deleteAttachment(att.file_uuid)" class="ml-0.5 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400">
                     <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
                   </button>
                 </div>
@@ -559,26 +596,33 @@ import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   chatStream,
+  clearSession,
+  deleteFileAsset,
+  fetchAllSessions,
   getSessionState,
+  getFileDownloadUrl,
   newSessionId,
-  attachFile,
-  attachImage,
-  attachData,
-  imageUrl,
-  listAttachments,
-  removeAttachment,
+  uploadFileAsset,
+  searchSessions,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
 import {
-  getRecentSessions,
   getWorkspaceOnboardingComplete,
-  setRecentSessions,
   setWorkspaceOnboardingComplete,
 } from '../stores/workspace.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import SearchBar from '../components/SearchBar.vue'
+import DocumentFileIcon from '../components/DocumentFileIcon.vue'
+import {
+  hydrateSessionMessages,
+  refreshHydratedImageUrls,
+} from '../utils/sessionMessageHydration.js'
+import {
+  composeScenarioPrompt,
+  resolveTemplateBubbleText,
+} from '../utils/scenarioPrompt.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -621,6 +665,31 @@ function imageItemAlt(filename) {
   return t('chat.imageUploadedAltGeneric')
 }
 
+/** Build the hover title for one document attachment chip. */
+function documentChipTitle(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${name} — ${t('chat.openDocumentFile')}`
+}
+
+/** Build the aria label for one document attachment chip. */
+function documentChipAria(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${t('chat.openDocumentFile')}: ${name}`
+}
+
+/** Open one uploaded document in a new browser tab. */
+async function openDocumentAttachment(row) {
+  const fileUuid = String(row?.file_uuid || '').trim()
+  if (!fileUuid) return
+  try {
+    const payload = await getFileDownloadUrl(fileUuid)
+    const url = payload?.download_url
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (err) {
+    console.error('Failed to open document attachment:', err)
+  }
+}
+
 /** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string, type?: string }} msg */
 function userImageList(msg) {
   if (msg?.images?.length) return msg.images
@@ -628,6 +697,19 @@ function userImageList(msg) {
     return [{ content: msg.content, filename: msg.filename }]
   }
   return []
+}
+
+/** Return true when a user bubble should stay visible without plain text content. */
+function userMessageVisible(msg) {
+  if (msg?.role !== 'user') return false
+  if (msg.type === 'image') return userImageList(msg).length > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'composite') {
+    return userImageList(msg).length > 0
+      || (msg.dataAttachments?.length ?? 0) > 0
+      || Boolean(msg.caption?.trim())
+  }
+  return Boolean(msg?.content?.trim())
 }
 
 /** 用户气泡是否采用「附件」紧凑布局（图片 / 数据文件 / 混合） */
@@ -699,7 +781,12 @@ const attachmentList = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
 const planSummary = ref(null)
+const QUOTA_STREAM_POLL_MS = 30_000
+let quotaPollTimer = null
 const recentSessions = ref([])
+const sessionSearchResults = ref([])
+const sessionSearchLoading = ref(false)
+let sessionSearchRequestId = 0
 const projectRecords = ref([])
 const recentProjects = computed(() => {
   return projectRecords.value.map((project) => ({
@@ -711,15 +798,36 @@ const recentProjects = computed(() => {
   }))
 })
 
-/** 输入区只展示文档等非图片、非数据会话附件；图片与数据文件仅在对话气泡中展示 */
+/** 输入区只展示 RAG 等会话级附件；图片与非图片文件均在 SearchBar 预览或气泡内展示 */
 const composerAttachments = computed(() =>
-  attachmentList.value.filter((a) => a.mode !== 'image' && a.mode !== 'data'),
+  attachmentList.value.filter((a) => a.mode === 'rag'),
 )
 
-async function refreshAttachments() {
+async function loadPlanSummary() {
   try {
-    attachmentList.value = await listAttachments(sessionId.value)
-  } catch { /* 静默失败 */ }
+    planSummary.value = await fetchPlan()
+  } catch {
+    planSummary.value = null
+  }
+}
+
+/** Poll plan quota while a chat stream is active so token usage stays current. */
+function startQuotaPolling() {
+  stopQuotaPolling()
+  quotaPollTimer = setInterval(() => {
+    loadPlanSummary()
+  }, QUOTA_STREAM_POLL_MS)
+}
+
+function stopQuotaPolling() {
+  if (quotaPollTimer) {
+    clearInterval(quotaPollTimer)
+    quotaPollTimer = null
+  }
+}
+
+async function refreshAttachments() {
+  // 文件资产由当前会话前端状态持有，旧 session-scoped attachment API 已移除。
 }
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
@@ -731,33 +839,37 @@ function extOf(name) {
 
 async function handleFileSelected(file) {
   if (loading.value || uploading.value) return
+  const ext = extOf(file.name)
+  if (!IMAGE_EXTS.has(ext)) return
   uploading.value = true
   uploadError.value = ''
   try {
-    const ext = extOf(file.name)
-    if (IMAGE_EXTS.has(ext)) {
-      const { ref: imageRef, filename: savedName } = await attachImage(file, sessionId.value)
-      await refreshAttachments()
-      const url = imageUrl(imageRef)
-      if (url) {
-        messages.value.push({
-          id: `${Date.now()}-u`,
-          role: 'user',
-          type: 'image',
-          images: [{ content: url, filename: savedName || file.name }],
+    const uploaded = await uploadFileAsset(file)
+    attachmentList.value = [...attachmentList.value, uploaded]
+    const url = uploaded.download_url || URL.createObjectURL(file)
+    if (url) {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'image',
+        images: [{
+          file_uuid: uploaded.file_uuid,
+          content: url,
+          filename: uploaded.original_filename || file.name,
+        }],
+      })
+      ensureChatRoute()
+      await scrollBottom()
+      const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+      if (!loading.value) {
+        await sendUserMessage(t('chat.imageReplyPrompt'), hint, {
+          skipUserBubble: true,
+          turnFileUuids: [uploaded.file_uuid],
         })
-        ensureChatRoute()
-        await scrollBottom()
-        const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-        if (!loading.value) {
-          await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
-        }
       }
-    } else {
-      await attachFile(file, sessionId.value)
-      await refreshAttachments()
     }
-    saveRecentSession()
+    await loadSessions()
+    await loadPlanSummary()
     await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
@@ -766,11 +878,12 @@ async function handleFileSelected(file) {
   }
 }
 
-async function deleteAttachment(filename) {
+async function deleteAttachment(fileUuid) {
   try {
-    await removeAttachment(sessionId.value, filename)
-    await refreshAttachments()
-    saveRecentSession()
+    await deleteFileAsset(fileUuid)
+    attachmentList.value = attachmentList.value.filter((item) => item.file_uuid !== fileUuid)
+    await loadPlanSummary()
+    await loadSessions()
     await syncCurrentProject()
   } catch (err) {
     uploadError.value = err.message || t('chat.deleteFailed')
@@ -855,6 +968,10 @@ const activeShortcut = computed(
 const activeScenarioTemplate = computed(
   () => scenarioTemplates.value.find((it) => it.id === activeShortcutId.value) || null,
 )
+
+const templateLabelById = computed(() =>
+  Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label])),
+)
 const activeShortcutPill = computed(() => {
   const it = activeShortcut.value
   if (!it) return null
@@ -868,28 +985,32 @@ const activeShortcutPill = computed(() => {
 const quotaItems = computed(() => {
   const usage = planSummary.value?.usage || {}
   const limits = planSummary.value?.limits || {}
-  return [
-    { label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` },
+  const items = [
     { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
     { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
   ]
+  if (limits.messages !== null && limits.messages !== undefined) {
+    items.unshift({ label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` })
+  }
+  return items
 })
 
 function syncTheme() {
   dark.value = isDarkFn()
 }
 
-onMounted(() => {
+onMounted(async () => {
   syncTheme()
   window.addEventListener('icore-theme-change', syncTheme)
-  hydrateRecentSessions()
+  await loadSessions()
   loadPlanSummary()
   loadProjects()
-  hydrateCurrentSession()
+  await hydrateCurrentSession()
 })
 
 onUnmounted(() => {
   window.removeEventListener('icore-theme-change', syncTheme)
+  stopQuotaPolling()
 })
 
 watch(
@@ -904,6 +1025,7 @@ watch(
     attachmentList.value = []
     uploadError.value = ''
     activeShortcutId.value = ''
+    await loadPlanSummary()
     await hydrateCurrentSession()
     await nextTick()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
@@ -925,51 +1047,85 @@ const SHORTCUT_HINT = {
   data: 'data',
 }
 
-function hydrateRecentSessions() {
-  recentSessions.value = getRecentSessions()
+function mapSessionSummary(item) {
+  const count = Number(item.message_count ?? 0)
+  return {
+    sessionId: item.public_id,
+    title: (item.title || '').trim() || t('home.heroTitle'),
+    subtitle: t('home.recent.messages', { count }),
+    updatedAt: item.updated_at,
+    messageCount: count,
+  }
+}
+
+async function loadSessions() {
+  try {
+    const { sessions } = await fetchAllSessions()
+    recentSessions.value = sessions.map(mapSessionSummary)
+  } catch {
+    recentSessions.value = []
+  }
+}
+
+async function onDeleteSession(deletedSessionId) {
+  try {
+    await clearSession(deletedSessionId)
+    recentSessions.value = recentSessions.value.filter(
+      (s) => s.sessionId !== deletedSessionId,
+    )
+    sessionSearchResults.value = sessionSearchResults.value.filter(
+      (s) => s.sessionId !== deletedSessionId,
+    )
+    if (deletedSessionId === sessionId.value) {
+      resetConversationState()
+      await router.push({ name: 'workspace' })
+    }
+  } catch (err) {
+    console.error('Failed to delete session:', err)
+  }
+}
+
+function mapSearchResult(item) {
+  return {
+    sessionId: item.public_id,
+    title: (item.title || '').trim() || t('home.heroTitle'),
+    snippet: item.snippet || '',
+    updatedAt: item.updated_at,
+    rank: item.rank,
+  }
+}
+
+/** Run sidebar session search against the backend full-text index. */
+async function onSessionSearch(query) {
+  const trimmed = String(query || '').trim()
+  if (!trimmed) {
+    sessionSearchResults.value = []
+    sessionSearchLoading.value = false
+    return
+  }
+  sessionSearchLoading.value = true
+  const requestId = ++sessionSearchRequestId
+  try {
+    const payload = await searchSessions(trimmed)
+    if (requestId !== sessionSearchRequestId) return
+    sessionSearchResults.value = (payload.sessions || []).map(mapSearchResult)
+  } catch {
+    if (requestId !== sessionSearchRequestId) return
+    sessionSearchResults.value = []
+  } finally {
+    if (requestId === sessionSearchRequestId) {
+      sessionSearchLoading.value = false
+    }
+  }
 }
 
 async function loadProjects() {
   try {
     const payload = await fetchProjects()
     projectRecords.value = payload.projects || []
-    if (Array.isArray(payload.recent_sessions) && payload.recent_sessions.length) {
-      recentSessions.value = payload.recent_sessions.map((item) => ({
-        sessionId: item.session_id,
-        title: item.title,
-        subtitle: item.subtitle,
-        scenarioId: item.scenario_id || '',
-        projectId: item.project_id,
-        projectTitle: item.project_title,
-        attachmentCount: item.attachment_count || 0,
-        updatedAt: item.updated_at,
-      }))
-      setRecentSessions(undefined, recentSessions.value)
-    }
   } catch {
     projectRecords.value = []
   }
-}
-
-function saveRecentSession(meta = {}) {
-  const template = activeScenarioTemplate.value
-  const title = meta.title || template?.title || t('home.heroTitle')
-  const subtitle = meta.subtitle || template?.description || t('home.subtitle')
-  const current = recentSessions.value.filter((item) => item.sessionId !== sessionId.value)
-  recentSessions.value = [
-    {
-      sessionId: sessionId.value,
-      title,
-      subtitle,
-      scenarioId: template?.id || meta.scenarioId || '',
-      projectId: meta.projectId || template?.id || 'general',
-      projectTitle: meta.projectTitle || template?.title || t('home.heroTitle'),
-      attachmentCount: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
-      updatedAt: Date.now(),
-    },
-    ...current,
-  ].slice(0, 8)
-  setRecentSessions(undefined, recentSessions.value)
 }
 
 async function syncCurrentProject(meta = {}) {
@@ -994,14 +1150,6 @@ async function syncCurrentProject(meta = {}) {
   }
 }
 
-async function loadPlanSummary() {
-  try {
-    planSummary.value = await fetchPlan()
-  } catch {
-    planSummary.value = null
-  }
-}
-
 async function hydrateCurrentSession() {
   const hasExplicitSession = typeof route.params.sessionId === 'string'
   if (!hasExplicitSession) {
@@ -1010,28 +1158,23 @@ async function hydrateCurrentSession() {
   }
   try {
     const state = await getSessionState(sessionId.value)
-    messages.value = (state.messages || []).map((msg, index) => ({
-      id: `${sessionId.value}-${index}-${msg.role}`,
-      role: msg.role,
-      content: msg.content || '',
-      steps: [],
-      stepsCollapsed: true,
-      streaming: false,
-    }))
+    messages.value = hydrateSessionMessages({
+      messages: state.messages || [],
+      attachments: state.attachments || [],
+      sessionId: sessionId.value,
+      templateLabels: templateLabelById.value,
+    })
+    await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
+    await loadSessions()
+    const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
     if (!activeShortcutId.value) {
-      const recent = recentSessions.value.find((item) => item.sessionId === sessionId.value)
-      const matched = scenarioTemplates.value.find((item) => item.title === recent?.title)
+      const matched = scenarioTemplates.value.find((item) => item.title === sessionEntry?.title)
       activeShortcutId.value = matched?.id || ''
     }
-    saveRecentSession({
-      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
-      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
-      attachmentCount: (state.attachments || []).length,
-    })
     await syncCurrentProject({
-      title: recentSessions.value.find((item) => item.sessionId === sessionId.value)?.title || t('home.heroTitle'),
-      subtitle: state.summary || recentSessions.value.find((item) => item.sessionId === sessionId.value)?.subtitle || t('home.subtitle'),
+      title: sessionEntry?.title || t('home.heroTitle'),
+      subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
   } catch {
@@ -1039,35 +1182,42 @@ async function hydrateCurrentSession() {
   }
 }
 
-function composeScenarioPrompt(message) {
+function buildTemplateSendPayload(userQuery) {
+  const query = String(userQuery || '').trim()
   const template = activeScenarioTemplate.value
-  if (!template) return message
-  const outputSections = (template.outputs || []).map((item) => `- ${item}`).join('\n')
-  const markdownSections = (template.sections || [])
-    .map((item) => `## ${item}\n- Keep this section concise and actionable.`)
-    .join('\n\n')
-  return [
-    message,
-    '',
-    '---',
-    'Please answer in markdown using this exact section order when it fits the task:',
-    markdownSections,
-    '',
-    'Checklist:',
-    outputSections,
-  ].join('\n')
+  if (!template) {
+    return {
+      bubbleText: query,
+      agentMessage: query,
+      templateId: '',
+    }
+  }
+  return {
+    bubbleText: resolveTemplateBubbleText(activeModeItem.value?.label, query),
+    agentMessage: composeScenarioPrompt(query, template),
+    templateId: activeShortcutId.value || template.id || '',
+  }
 }
 
-async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } = {}) {
+async function sendUserMessage(msg, agentHint = '', {
+  skipUserBubble = false,
+  displayCaption = '',
+  turnFileUuids = null,
+} = {}) {
   const text = String(msg ?? '').trim()
   if (!text || loading.value) return
-  const requestText = composeScenarioPrompt(text)
+  const { bubbleText, agentMessage, templateId } = buildTemplateSendPayload(text)
+  const captionForApi = String(displayCaption || '').trim()
+  const fileUuids = Array.isArray(turnFileUuids)
+    ? turnFileUuids.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
 
   if (!skipUserBubble) {
-    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: bubbleText })
     ensureChatRoute()
   }
   loading.value = true
+  startQuotaPolling()
   await scrollBottom()
 
   const assistant = {
@@ -1093,8 +1243,12 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   }
 
   try {
-    for await (const evt of chatStream(requestText, sessionId.value, agentHint, {
+    for await (const evt of chatStream(bubbleText, sessionId.value, agentHint, {
       signal: ac.signal,
+      fileUuids,
+      agentMessage: agentMessage !== bubbleText ? agentMessage : '',
+      templateId,
+      ...(captionForApi ? { displayCaption: captionForApi } : {}),
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1124,9 +1278,6 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
       if (errorMsg.includes('401')) {
         signOut()
         router.push({ name: 'auth' })
-      } else if (errorMsg.includes('402') || errorMsg.toLowerCase().includes('quota exceeded')) {
-        // 额度超限：跳转到账户页面查看配额
-        router.push({ name: 'account' })
       } else {
         commitAssistant({
           content: t('chat.requestFailed', { msg: errorMsg }),
@@ -1134,6 +1285,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
       }
     }
   } finally {
+    stopQuotaPolling()
     streamAbortController.value = null
     commitAssistant({
       streaming: false,
@@ -1142,10 +1294,7 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
     streamingMsg.value = null
     loading.value = false
     await loadPlanSummary()
-    saveRecentSession({
-      title: activeScenarioTemplate.value?.title || text.slice(0, 36),
-      subtitle: text.slice(0, 80),
-    })
+    await loadSessions()
     await syncCurrentProject({
       title: activeScenarioTemplate.value?.title || text.slice(0, 36),
       subtitle: text.slice(0, 80),
@@ -1173,16 +1322,27 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
   try {
     const uploadedImages = []
     for (const imageFile of imgs) {
-      const { ref: imageRef, filename: savedName } = await attachImage(imageFile, sessionId.value)
-      const url = imageUrl(imageRef)
-      if (url) uploadedImages.push({ content: url, filename: savedName || imageFile.name })
+      const uploaded = await uploadFileAsset(imageFile)
+      attachmentList.value = [...attachmentList.value, uploaded]
+      const url = uploaded.download_url || URL.createObjectURL(imageFile)
+      if (url) {
+        uploadedImages.push({
+          file_uuid: uploaded.file_uuid,
+          content: url,
+          filename: uploaded.original_filename || imageFile.name,
+        })
+      }
     }
     const uploadedDataMeta = []
     for (const df of datas) {
-      const meta = await attachData(df, sessionId.value)
-      uploadedDataMeta.push({ filename: meta.filename || df.name })
+      const meta = await uploadFileAsset(df)
+      attachmentList.value = [...attachmentList.value, meta]
+      uploadedDataMeta.push({
+        file_uuid: meta.file_uuid,
+        filename: meta.original_filename || df.name,
+      })
     }
-    await refreshAttachments()
+    await loadPlanSummary()
 
     const hasImages = uploadedImages.length > 0
     const hasData = uploadedDataMeta.length > 0
@@ -1229,7 +1389,15 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
           uploadedDataMeta.length > 1 ? t('chat.dataReplyPromptMulti') : t('chat.dataReplyPrompt')
       }
     }
-    await sendUserMessage(apiText, hint, { skipUserBubble: true })
+    const turnFileUuids = [
+      ...uploadedImages.map((item) => item.file_uuid),
+      ...uploadedDataMeta.map((item) => item.file_uuid),
+    ].filter(Boolean)
+    await sendUserMessage(apiText, hint, {
+      skipUserBubble: true,
+      turnFileUuids,
+      ...(text ? { displayCaption: text } : {}),
+    })
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
   } finally {
@@ -1280,10 +1448,6 @@ function onSidebarNew() {
   uploadError.value = ''
   activeShortcutId.value = ''
   router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
-  saveRecentSession({
-    title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
-    subtitle: t('home.subtitle'),
-  })
   syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),

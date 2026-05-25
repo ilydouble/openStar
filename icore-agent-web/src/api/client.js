@@ -1,4 +1,5 @@
-import { buildAuthHeaders } from '../auth/session.js'
+import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
+import { authTrace } from '../auth/trace.js'
 
 /**
  * Read a fetch response as JSON when possible and surface backend error detail consistently.
@@ -25,16 +26,28 @@ export async function readJsonResponse(resp) {
   if (!resp.ok) {
     throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
   }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    Object.prototype.hasOwnProperty.call(payload, 'code') &&
+    Object.prototype.hasOwnProperty.call(payload, 'message') &&
+    Object.prototype.hasOwnProperty.call(payload, 'data') &&
+    Object.prototype.hasOwnProperty.call(payload, 'timestamp')
+  ) {
+    return payload.data
+  }
   return payload
 }
 
 /**
  * Build a tiny JSON-first HTTP client so domain API modules stop duplicating fetch boilerplate.
+ * Sends `Authorization: Bearer <token>` using {@link getAccessToken} from session storage unless
+ * `getAccessToken` is overridden (e.g. in tests).
  * @param {{ getAccessToken?: () => string, fetchImpl?: typeof fetch }} [options]
  */
 export function createJsonClient(options = {}) {
   const fetchImpl = options.fetchImpl || fetch
-  const getAccessToken = options.getAccessToken || (() => '')
+  const readToken = options.getAccessToken ?? getAccessToken
 
   async function request(path, init = {}) {
     const headers = buildAuthHeaders(
@@ -42,8 +55,15 @@ export function createJsonClient(options = {}) {
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         ...(init.headers || {}),
       },
-      getAccessToken,
+      readToken,
     )
+    const method = (init.method || 'GET').toUpperCase()
+    const tokenViaReader = typeof readToken === 'function' ? readToken() : ''
+    authTrace(`${method} JSON client`, {
+      url: typeof path === 'string' ? path : String(path),
+      authorizationScheme: headers.Authorization ? 'Bearer' : '(missing)',
+      tokenLengthFromReader: typeof tokenViaReader === 'string' ? tokenViaReader.length : -1,
+    })
     const resp = await fetchImpl(path, {
       ...init,
       headers,

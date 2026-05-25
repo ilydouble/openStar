@@ -1,0 +1,64 @@
+services:
+  icore-agent:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      target: runtime
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        PIP_INDEX_URL: ${BUILD_PIP_INDEX_URL:-}
+        PIP_EXTRA_INDEX_URL: ${BUILD_PIP_EXTRA_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${BUILD_PIP_TRUSTED_HOST:-}
+        PIP_TIMEOUT: ${BUILD_PIP_TIMEOUT:-120}
+    image: icore-agent:dev
+    container_name: icore-agent
+    restart: unless-stopped
+    env_file:
+      - ../../../dotenv/.env.app
+      - ../../../dotenv/.env.database
+      - ../../../dotenv/.env.llm
+      - ../../../dotenv/.env.sequential
+      - ../../../dotenv/.env.memory
+      - ../../../dotenv/.env.auth
+      - ../../../dotenv/.env.rag
+      - ../../../dotenv/.env.tools
+      - ../../../dotenv/.env.media
+      - ../../../dotenv/.env.storage
+    environment:
+      STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://storage-service:8090}
+      STORAGE_SERVICE_TOKEN: ${STORAGE_SERVICE_TOKEN:-dev-storage-service-token}
+      STORAGE_SERVICE_TIMEOUT: ${STORAGE_SERVICE_TIMEOUT:-30}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
+      LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
+    expose:
+      - '${API_PORT:-11001}'
+    volumes:
+      - ../../../src:/app/src:ro
+      - seq-workspace:/tmp/icore-seq-workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      storage-service:
+        condition: service_healthy
+      logging-service:
+        condition: service_healthy
+    networks:
+      - icore-net
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f "http://localhost:$${API_PORT:-11001}/health"']
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 5

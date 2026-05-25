@@ -1,0 +1,21 @@
+name: icore-agent
+
+networks:
+  icore-net:
+    driver: bridge
+
+volumes:
+  icore_db:
+    driver: local
+  redis-data:
+    driver: local
+  seq-workspace:
+    driver: local
+  minio-data:
+    driver: local
+  kafka-data:
+    driver: local
+  logging-service-data:
+    driver: local
+  clickhouse-data:
+    driver: local

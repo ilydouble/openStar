@@ -21,7 +21,10 @@
           <a href="#solutions" class="transition hover:text-zinc-950 dark:hover:text-white">{{ t('landing.footer.links.solutions') }}</a>
           <a href="#plans" class="transition hover:text-zinc-950 dark:hover:text-white">{{ t('landing.footer.links.plans') }}</a>
           <button type="button" class="text-left transition hover:text-zinc-950 dark:hover:text-white" @click="toggleLocale">
-            {{ t('landing.footer.language') }}: {{ currentLocale === 'zh-CN' ? 'English' : '中文' }}
+            {{ t('landing.footer.language') }}:
+            {{
+              currentLocale === 'zh-CN' ? t('common.localeNameEnglish') : t('common.localeNameChinese')
+            }}
           </button>
           <RouterLink to="/auth" class="transition hover:text-zinc-950 dark:hover:text-white">{{ t('landing.footer.links.signIn') }}</RouterLink>
         </div>

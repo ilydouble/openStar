@@ -9,6 +9,7 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
+from icore_agent.application.usage import UsageService
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -47,6 +48,7 @@ class ChatTurnService:
         file_service: FileAssetService,
         conversation_memory: ConversationMemory,
         orchestrator_factory: OrchestratorFactory,
+        usage_service: UsageService | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
     ) -> None:
         """Create a chat turn service with its application dependencies."""
@@ -54,10 +56,29 @@ class ChatTurnService:
         self._file_service = file_service
         self._conversation_memory = conversation_memory
         self._orchestrator_factory = orchestrator_factory
+        self._usage_service = usage_service
         self._wall_budget_sec = wall_budget_sec
+
+    def _check_token_quota(self, command: ChatTurnCommand) -> None:
+        """Raise PermissionError if the user's token quota is exhausted.
+
+        Called before any LLM work begins so we never charge users for
+        a request that would be denied anyway.  If no usage_service is
+        wired (e.g. tests) quota enforcement is skipped.
+        """
+        if self._usage_service is None:
+            return
+        allowed, reason = self._usage_service.check_quota(
+            command.user_id, "tokens"
+        )
+        if not allowed:
+            raise PermissionError(
+                f"token_quota_exceeded:{reason or 'token quota exhausted'}"
+            )
 
     async def run(self, command: ChatTurnCommand) -> ChatTurnResult:
         """Execute one non-streaming chat turn."""
+        self._check_token_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments
@@ -87,6 +108,7 @@ class ChatTurnService:
         command: ChatTurnCommand,
     ) -> AsyncIterator[ChatStreamEvent]:
         """Prepare one streaming chat turn and return its application event stream."""
+        self._check_token_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
         enable_tools = route.enable_tools or context.has_attachments

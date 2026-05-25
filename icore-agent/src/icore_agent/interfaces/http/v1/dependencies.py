@@ -119,12 +119,18 @@ def get_chat_history_service() -> ChatHistoryService:
 
 
 def get_chat_turn_service() -> ChatTurnService:
-    """Return an application service for one HTTP chat turn."""
+    """Return an application service for one HTTP chat turn.
+
+    usage_service is injected so that every chat turn enforces token quota
+    before invoking the LLM.  The LiteLLM success callback in main.py then
+    records actual usage and decrements the quota counter after the reply.
+    """
     return ChatTurnService(
         chat_history=chat_history_service,
         file_service=file_asset_service,
         conversation_memory=memory,
         orchestrator_factory=create_orchestrator,
+        usage_service=usage_service,
     )
 
 

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from icore_agent.application.chat import ChatTurnCommand, ChatTurnService
 from icore_agent.application.chat.routing import AgentHint
+from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_chat_turn_service, get_current_user
 from ...streaming import sse_response
 from ..schemas.chat import ChatRequest, ChatResponse
+
+_UPGRADE_URL = "/pricing"
 
 
 async def chat(
@@ -26,7 +30,24 @@ async def chat(
             return sse_response(events, session_id=req.session_id)
         result = await chat_turn_service.run(command)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        msg = str(exc)
+        # Quota-exhausted errors start with "token_quota_exceeded:" prefix.
+        # Return 402 so the frontend can distinguish "upgrade needed" from
+        # regular 403 access-denied errors and show an upgrade modal.
+        if msg.startswith("token_quota_exceeded:"):
+            return JSONResponse(
+                status_code=402,
+                content={
+                    "code": 402,
+                    "error_code": "quota_exceeded",
+                    "message": "您的 Token 配额已用尽，请升级套餐继续使用。",
+                    "data": {
+                        "upgrade_url": _UPGRADE_URL,
+                        "current_plan": user.plan,
+                    },
+                },
+            )
+        raise HTTPException(status_code=403, detail=msg) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

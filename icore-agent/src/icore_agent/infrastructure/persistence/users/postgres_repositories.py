@@ -14,6 +14,7 @@ from icore_agent.application.usage.policy import (
     next_quota_reset,
     plan_or_free,
 )
+from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
 
 from ..sqlalchemy.sync_session import sync_session_scope
@@ -91,7 +92,10 @@ class PostgresRegistrationRepository:
                 return existing, token
 
             now = current_timestamp()
-            plan = plan_or_free("free")
+            # New accounts start on the TRIAL plan — a one-time gift of
+            # 50 000 tokens (~30-50 AI conversations). When the trial quota
+            # is exhausted the user is prompted to upgrade to a paid plan.
+            plan = Plan.TRIAL
             user = repo.save(
                 UserProfile(
                     public_id=str(uuid.uuid4()),
@@ -100,7 +104,7 @@ class PostgresRegistrationRepository:
                     plan=plan.value,
                     plan_label=plan.limits.label,
                     organization_id=f"org_{uuid.uuid4().hex[:12]}",
-                    organization_name=f"{name.strip() or 'Free'} Team",
+                    organization_name=f"{name.strip() or 'Trial'} Team",
                     roles=["owner"],
                     byok=_default_byok(),
                     usage=default_usage(),

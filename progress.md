@@ -12,3 +12,4 @@
 - 已运行 `npm run build`，Vite 生产构建通过。
 - 尝试启动本地 dev server 时被沙箱拦截，用户表示会自行重启查看。
 - 已运行 `git diff --check`，未发现空白错误。
+- 已创建提交 `74eb530 Refine workspace role task entry points`。

@@ -10,7 +10,7 @@
 3. [complete] 修改前端文案和界面结构，使按钮表达为岗位职责和任务结果。
 4. [complete] 更新场景 prompt，使 AI 响应更像任务执行结果。
 5. [complete] 运行前端测试和构建验证。
-6. [in_progress] 按仓库要求提交 scoped git commit。
+6. [complete] 按仓库要求提交 scoped git commit。
 
 ## 关键决策
 

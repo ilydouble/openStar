@@ -18,8 +18,8 @@ def _user_profile(user_id: str = "u1") -> UserProfile:
         public_id=user_id,
         email=f"{user_id}@example.com",
         name="Usage User",
-        plan=Plan.FREE.value,
-        plan_label=Plan.FREE.limits.label,
+        plan=Plan.TRIAL.value,
+        plan_label=Plan.TRIAL.limits.label,
         roles=["owner"],
         byok={},
         usage=usage,
@@ -158,18 +158,18 @@ def test_trial_quota_allows_before_limit():
     assert (allowed, reason) == (True, None)
 
 
-def test_free_quota_resets_on_new_month():
-    """FREE plan must reset counters when the quota period is stale."""
+def test_paid_plan_quota_resets_on_new_month():
+    """Paid plans (TEAM/ENTERPRISE) must reset counters when the quota period is stale."""
     stale_period = 1704067200  # 2024-01-01 UTC — always in the past
     usage = default_usage()
     usage["quota_period_start"] = stale_period
-    usage["token_count"] = 9_500
+    usage["token_count"] = 500_000
     user = UserProfile(
-        public_id="f1",
-        email="f1@example.com",
-        name="Free User",
-        plan=Plan.FREE.value,
-        plan_label=Plan.FREE.limits.label,
+        public_id="p1",
+        email="p1@example.com",
+        name="Team User",
+        plan=Plan.TEAM.value,
+        plan_label=Plan.TEAM.limits.label,
         roles=["owner"],
         byok={},
         usage=usage,
@@ -177,7 +177,7 @@ def test_free_quota_resets_on_new_month():
         updated_at=1,
     )
     _, refreshed_usage, should_save = ensure_current_usage(user)
-    assert should_save is True, "FREE usage should be persisted after reset"
+    assert should_save is True, "TEAM usage should be persisted after monthly reset"
     assert refreshed_usage["token_count"] == 0, (
-        "FREE token_count must be zeroed at the start of a new month"
+        "TEAM token_count must be zeroed at the start of a new month"
     )

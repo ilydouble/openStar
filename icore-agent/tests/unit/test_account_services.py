@@ -11,8 +11,8 @@ def _user(user_id: str = "u1", email: str = "trial@example.com") -> UserProfile:
         public_id=user_id,
         email=email,
         name="Trial User",
-        plan=Plan.FREE.value,
-        plan_label=Plan.FREE.limits.label,
+        plan=Plan.TRIAL.value,
+        plan_label=Plan.TRIAL.limits.label,
         roles=["owner"],
         byok={},
         usage={},
@@ -143,7 +143,7 @@ class FakeBillingSummaryRepository:
     def get_plan_summary(self, user_id: str) -> dict:
         """Record plan summary calls."""
         self.calls.append(("get_plan_summary", (user_id,), {}))
-        return {"user_id": user_id, "plan": "free"}
+        return {"user_id": user_id, "plan": "trial"}
 
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str) -> dict:
         """Record BYOK update calls."""

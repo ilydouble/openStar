@@ -8,7 +8,7 @@ from typing import Any
 from icore_agent.application.usage.policy import (
     current_timestamp,
     default_usage,
-    plan_or_free,
+    plan_or_trial,
 )
 from icore_agent.domain.user import UserProfile, UserRepository
 
@@ -32,7 +32,7 @@ class LegacyUserImportService:
         if not public_id or not email:
             return None
 
-        plan = plan_or_free(str(profile.get("plan") or "free"))
+        plan = plan_or_trial(str(profile.get("plan") or "trial"))
         now = current_timestamp()
         user = UserProfile(
             public_id=public_id,

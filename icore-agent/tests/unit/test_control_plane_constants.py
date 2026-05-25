@@ -24,12 +24,12 @@ def test_control_plane_constants_only_expose_dataclass_api():
 
 def test_plan_limits_are_available_as_enum_attributes():
     """Verify plan limits can be referenced without dictionary key lookups."""
-    assert Plan.FREE.value == "free"
-    assert isinstance(Plan.FREE.limits, PlanLimits)
-    assert Plan.FREE.limits.message_limit is None
-    # FREE plan: 10_000 tokens/month — enough for 6-10 conversations, nudges upgrade.
-    assert Plan.FREE.limits.token_limit == 10_000
-    # TRIAL plan: 50_000 tokens one-time gift on registration (~30-50 conversations).
+    # FREE plan has been removed; the minimal entry point is TRIAL.
+    assert not hasattr(Plan, "FREE"), "Plan.FREE must not exist after removal"
+    # TRIAL: 50,000 tokens one-time gift on registration (~30-50 conversations).
+    assert Plan.TRIAL.value == "trial"
+    assert isinstance(Plan.TRIAL.limits, PlanLimits)
+    assert Plan.TRIAL.limits.message_limit is None
     assert Plan.TRIAL.limits.token_limit == 50_000
     assert Plan.TRIAL.limits.image_limit == 5
     assert Plan.TRIAL.limits.attachment_limit == 10

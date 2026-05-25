@@ -16,12 +16,16 @@ def default_usage() -> dict[str, int]:
     return asdict(Usage())
 
 
-def plan_or_free(value: str) -> Plan:
-    """Resolve a persisted plan string, defaulting unknown legacy values to free."""
+def plan_or_trial(value: str) -> Plan:
+    """Resolve a persisted plan string, defaulting unknown/legacy values to TRIAL.
+
+    Legacy DB rows that still carry 'free' will be treated as TRIAL so they
+    continue to receive quota enforcement without a hard migration.
+    """
     try:
         return Plan(value)
     except ValueError:
-        return Plan.FREE
+        return Plan.TRIAL
 
 
 def ensure_current_usage(
@@ -35,7 +39,7 @@ def ensure_current_usage(
     """
     usage = dict(user.usage or default_usage())
     should_save = False
-    plan = plan_or_free(user.plan)
+    plan = plan_or_trial(user.plan)
     is_monthly = plan != Plan.TRIAL
     if is_monthly and should_reset_quota(int(usage.get("quota_period_start", 0) or 0)):
         usage = default_usage()
@@ -55,7 +59,7 @@ def check_quota(
     amount: int = 1,
 ) -> tuple[bool, str | None]:
     """Return whether the user can consume from one quota bucket."""
-    limits = plan_or_free(user.plan).limits
+    limits = plan_or_trial(user.plan).limits
     limit, used = quota_limit_and_usage(limits, usage, resource)
     if limit and used + amount > limit:
         return False, f"{resource} quota exceeded for {user.plan}"

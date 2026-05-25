@@ -656,7 +656,7 @@ class ControlPlaneStore:
                     "trial": sum(
                         1
                         for user in user_payloads
-                        if user.get("plan") in ("trial", "free")
+                        if user.get("plan") == "trial"
                     ),
                     "byok_enabled": sum(
                         1

@@ -26,8 +26,8 @@ def test_sqlalchemy_user_repository_persists_user_profile():
                 public_id=public_id,
                 email=email,
                 name="Trial User",
-                plan=Plan.FREE.value,
-                plan_label=Plan.FREE.limits.label,
+                plan=Plan.TRIAL.value,
+                plan_label=Plan.TRIAL.limits.label,
                 organization_id="org_test",
                 organization_name="Trial Team",
                 roles=["owner"],
@@ -42,6 +42,6 @@ def test_sqlalchemy_user_repository_persists_user_profile():
     assert loaded is not None
     assert loaded.public_id == saved.public_id
     assert loaded.email == email
-    assert loaded.plan == "free"
-    assert loaded.plan_label == Plan.FREE.limits.label
+    assert loaded.plan == "trial"
+    assert loaded.plan_label == Plan.TRIAL.limits.label
     assert loaded.organization_id == "org_test"

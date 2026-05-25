@@ -42,20 +42,6 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
         ),
     )
 
-    # Free: monthly allowance after trial expires.
-    # Just enough to remind users the product exists (6-10 conversations/month)
-    # and create a clear upgrade nudge without being completely useless.
-    FREE = (
-        "free",
-        PlanLimits(
-            message_limit=None,
-            token_limit=10_000,
-            image_limit=1,
-            attachment_limit=2,
-            label="Free",
-        ),
-    )
-
     # Team: paid tier (~¥99/month), 600-1000 conversations/month.
     TEAM = (
         "team",

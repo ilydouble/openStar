@@ -12,7 +12,7 @@ from icore_agent.application.usage.policy import (
     default_usage,
     ensure_current_usage,
     next_quota_reset,
-    plan_or_free,
+    plan_or_trial,
 )
 from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
@@ -137,7 +137,7 @@ class PostgresBillingSummaryRepository:
             user, usage, should_save = ensure_current_usage(user)
             if should_save:
                 user = repo.save(user)
-            plan = plan_or_free(user.plan)
+            plan = plan_or_trial(user.plan)
             limits = plan.limits
             return {
                 "plan": plan.value,
@@ -195,7 +195,7 @@ class PostgresBillingRepository:
     def update_user_plan(self, **payload: Any) -> dict[str, Any]:
         """Update one user's billing plan."""
         user_id = str(payload["user_id"])
-        plan = plan_or_free(str(payload["new_plan"]))
+        plan = plan_or_trial(str(payload["new_plan"]))
         byok = {
             "enabled": bool(payload.get("byok_enabled")),
             "api_key": str(payload.get("byok_api_key") or "").strip(),

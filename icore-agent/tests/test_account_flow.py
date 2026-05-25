@@ -70,7 +70,7 @@ def test_register_trial_and_fetch_account_profile(client: TestClient):
     email = f"trial-{uuid4().hex[:8]}@example.com"
     payload = _register_trial_direct(client, email=email)
     assert payload["access_token"]
-    assert payload["user"]["plan"] == "free"
+    assert payload["user"]["plan"] == "trial"
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {payload['access_token']}"})
@@ -230,7 +230,7 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     plan = client.get("/api/v1/account/billing/plan", headers=headers)
     assert plan.status_code == 200
     payload = _api_data(plan)
-    assert payload["plan"] == "free"
+    assert payload["plan"] == "trial"
     assert payload["byok"]["enabled"] is True
 
 

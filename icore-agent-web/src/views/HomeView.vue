@@ -336,7 +336,7 @@
             v-else-if="isHomeRoute"
             class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
           >
-            <div class="flex w-full max-w-3xl flex-col items-center text-center">
+            <div class="flex w-full max-w-5xl flex-col items-center text-center">
               <div class="flex flex-col items-center gap-4 animate-home-hero-in">
                 <p
                   class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400"
@@ -349,13 +349,13 @@
                   {{ t('home.heroTitle') }}
                 </h1>
                 <p
-                  class="max-w-md text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400"
+                  class="max-w-2xl text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400"
                 >
                   {{ t('home.subtitle') }}
                 </p>
               </div>
 
-              <div class="mt-6 w-full">
+              <div class="mt-6 w-full max-w-3xl">
                 <SearchBar
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
@@ -411,9 +411,7 @@
                 </div>
               </div>
 
-              <div
-                class="mt-6 flex max-w-3xl flex-wrap items-start justify-center gap-x-4 gap-y-6 sm:gap-x-6 sm:gap-y-8"
-              >
+              <div class="mt-7 grid w-full gap-3 text-left sm:grid-cols-2 xl:grid-cols-3">
                 <button
                   v-for="item in shortcutItems"
                   :key="item.id"
@@ -421,28 +419,43 @@
                   :disabled="loading"
                   :aria-pressed="activeShortcutId === item.id"
                   @click="toggleShortcut(item.id)"
-                  class="group flex w-[4.5rem] flex-col items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 disabled:opacity-50 dark:focus-visible:ring-violet-400/40 dark:focus-visible:ring-offset-zinc-950 sm:w-[5.25rem]"
+                  :class="[
+                    'group flex min-h-[10.5rem] flex-col rounded-2xl border bg-white/82 p-4 shadow-sm ring-1 ring-black/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:bg-white hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.045] dark:ring-white/10 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+                    activeShortcutId === item.id
+                      ? 'border-zinc-950 bg-white shadow-md ring-2 ring-zinc-950/10 dark:border-white/40 dark:bg-white/[0.09] dark:ring-white/20'
+                      : 'border-zinc-200/80',
+                  ]"
                 >
-                  <span
-                    :class="[
-                      'flex h-12 w-12 items-center justify-center rounded-2xl border text-lg shadow-md ring-1 transition-all duration-300 ease-out group-hover:scale-110 group-hover:shadow-lg motion-reduce:transition-colors motion-reduce:group-hover:scale-100 sm:h-14 sm:w-14 sm:text-xl dark:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_16px_32px_-8px_rgba(0,0,0,0.55)]',
-                      item.panel,
-                      activeShortcutId === item.id
-                        ? 'scale-110 ring-2 ring-violet-500 ring-offset-2 ring-offset-zinc-100 dark:ring-violet-400 dark:ring-offset-zinc-950'
-                        : 'ring-black/5 group-hover:ring-black/10 dark:ring-white/10',
-                    ]"
-                  >
-                    {{ item.emoji }}
+                  <span class="flex items-start gap-3">
+                    <span
+                      :class="[
+                        'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg shadow-sm ring-1 transition-colors',
+                        item.panel,
+                        activeShortcutId === item.id ? 'ring-zinc-950/10 dark:ring-white/20' : 'ring-black/5 dark:ring-white/10',
+                      ]"
+                    >
+                      {{ item.emoji }}
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                        {{ item.role }}
+                      </span>
+                      <span class="mt-1 block text-base font-semibold text-zinc-950 dark:text-white">
+                        {{ item.label }}
+                      </span>
+                    </span>
                   </span>
-                  <span
-                    :class="[
-                      'max-w-[5.5rem] text-center text-[11px] font-medium leading-tight transition-colors duration-200 sm:text-xs',
-                      activeShortcutId === item.id
-                        ? 'text-violet-600 dark:text-violet-300'
-                        : 'text-zinc-600 group-hover:text-zinc-950 dark:text-zinc-400 dark:group-hover:text-zinc-200',
-                    ]"
-                  >
-                    {{ item.label }}
+                  <span class="mt-3 block text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                    {{ item.summary }}
+                  </span>
+                  <span class="mt-4 flex flex-wrap gap-2">
+                    <span
+                      v-for="task in item.taskPreviews"
+                      :key="task"
+                      class="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                    >
+                      {{ task }}
+                    </span>
                   </span>
                 </button>
               </div>
@@ -468,7 +481,7 @@
                   </div>
                 </div>
 
-                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <div class="mt-5 grid gap-4 md:grid-cols-3">
                   <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
                     <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                       {{ t('home.scenario.accepted') }}
@@ -489,6 +502,14 @@
                     </p>
                     <ul class="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
                       <li v-for="output in activeScenarioTemplate.outputs" :key="output">• {{ output }}</li>
+                    </ul>
+                  </div>
+                  <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                      {{ t('home.scenario.phases') }}
+                    </p>
+                    <ul class="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                      <li v-for="phase in activeScenarioTemplate.phases" :key="phase">• {{ phase }}</li>
                     </ul>
                   </div>
                 </div>
@@ -655,10 +676,9 @@ onMounted(() => {
 })
 
 function handleOnboardingScenario(agentHint) {
-  // 用户选择场景后，自动填充对应的 agent hint
-  const scenario = scenarios.value.find(s => s.agentHint === agentHint)
-  if (scenario) {
-    activeShortcutId.value = agentHint
+  const shortcutId = String(agentHint || '').trim()
+  if (shortcutItems.value.some((item) => item.id === shortcutId)) {
+    activeShortcutId.value = shortcutId
     searchRefHome.value?.focus?.()
   }
   setWorkspaceOnboardingComplete(undefined, true)
@@ -951,6 +971,9 @@ const shortcutItems = computed(() => {
     return {
       id,
       label: row.label,
+      role: row.role || row.label,
+      summary: row.summary || '',
+      taskPreviews: Array.isArray(row.taskPreviews) ? row.taskPreviews : [],
       placeholder: row.placeholder || '',
       emoji: ui.emoji,
       panel: ui.panel,
@@ -965,6 +988,7 @@ const scenarioTemplates = computed(() => {
   return raw.map((row) => ({
     ...row,
     label: labelById[row.id] || row.title,
+    phases: Array.isArray(row.phases) ? row.phases : [],
   }))
 })
 
@@ -1047,7 +1071,7 @@ async function scrollBottom() {
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
 const SHORTCUT_HINT = {
   research: 'research',
-  code: 'code',
+  code: 'chat',
   docs: 'knowledge',
   chat: 'chat',
   image: 'image',

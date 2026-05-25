@@ -1,5 +1,6 @@
 /** Marker appended by composeScenarioPrompt before template instructions. */
 export const SCENARIO_PROMPT_ENVELOPE_MARKERS = [
+  '\n---\nYou are acting as an AI operations assistant for a small cross-border business.',
   '\n---\nPlease answer in markdown using this exact section order when it fits the task:',
 ]
 
@@ -47,6 +48,7 @@ export function resolveUserMessageDisplayContent(rawMessage, templateLabels = {}
 export function composeScenarioPrompt(message, template) {
   if (!template) return String(message || '').trim()
   const outputSections = (template.outputs || []).map((item) => `- ${item}`).join('\n')
+  const phaseSections = (template.phases || []).map((item) => `- ${item}`).join('\n')
   const markdownSections = (template.sections || [])
     .map((item) => `## ${item}\n- Keep this section concise and actionable.`)
     .join('\n\n')
@@ -54,10 +56,16 @@ export function composeScenarioPrompt(message, template) {
     String(message || '').trim(),
     '',
     '---',
+    'You are acting as an AI operations assistant for a small cross-border business.',
+    'Treat this as a task execution draft: explain what you understood, produce structured deliverables, and clearly mark anything that needs human review before execution.',
+    '',
+    'Execution phases:',
+    phaseSections || '- Understand the task\n- Produce an auditable result\n- Recommend next actions',
+    '',
     'Please answer in markdown using this exact section order when it fits the task:',
     markdownSections,
     '',
-    'Checklist:',
+    'Deliverable checklist:',
     outputSections,
   ].join('\n')
 }

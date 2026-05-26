@@ -10,6 +10,12 @@ from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.usage import UsageService
+from icore_agent.application.usage.recording import (
+    begin_turn_usage_capture,
+    end_turn_usage_capture,
+    flush_turn_usage_capture,
+)
+from icore_agent.config import settings
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -48,7 +54,7 @@ class ChatTurnService:
         file_service: FileAssetService,
         conversation_memory: ConversationMemory,
         orchestrator_factory: OrchestratorFactory,
-        usage_service: UsageService | None = None,
+        usage_service: UsageService,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
     ) -> None:
         """Create a chat turn service with its application dependencies."""
@@ -80,6 +86,7 @@ class ChatTurnService:
         self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
+        self._record_turn_quota(command, context)
         enable_tools = route.enable_tools or context.has_attachments
         loop = asyncio.get_running_loop()
         try:
@@ -113,6 +120,7 @@ class ChatTurnService:
         self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
+        self._record_turn_quota(command, context)
         enable_tools = route.enable_tools or context.has_attachments
         return self._stream_prepared_turn(
             command=command,
@@ -183,7 +191,9 @@ class ChatTurnService:
         callback_handler: Callable[..., None] | None = None,
     ) -> Any:
         """Invoke the blocking orchestrator for one chat turn."""
+        capture_token = begin_turn_usage_capture()
         runtime_token = set_runtime_user(command.user)
+        result = None
         try:
             orchestrator = self._orchestrator_factory(
                 callback_handler=callback_handler,
@@ -194,12 +204,26 @@ class ChatTurnService:
                 enable_tools=enable_tools,
                 agent_hint=route.agent_hint.value if route.agent_hint else None,
                 session_id=command.session_id,
+                user_id=command.user_id,
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history
             agent_input = command.agent_message or command.message
-            return runner(agent_input)
+            result = runner(agent_input)
+            return result
         finally:
+            recorded = flush_turn_usage_capture(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                record_usage=self._usage_service.record_llm_usage,
+            )
+            if recorded == 0 and result is not None:
+                self._record_estimated_turn_usage(
+                    command,
+                    prompt=command.agent_message or command.message,
+                    reply=str(result),
+                )
+            end_turn_usage_capture(capture_token)
             clear_runtime_user(runtime_token)
 
     async def _stream_prepared_turn(
@@ -399,4 +423,88 @@ class ChatTurnService:
                 "assistant_message_persist_failed",
                 session_id=command.session_id,
                 error=str(exc),
+            )
+
+    def _record_turn_quota(self, command: ChatTurnCommand, context) -> None:
+        """Persist chat turn quota counters for messages and uploaded files."""
+        try:
+            self._usage_service.consume_quota(command.user_id, "messages")
+            image_count = len(context.image_attachments)
+            if image_count:
+                self._usage_service.consume_quota(
+                    command.user_id,
+                    "images",
+                    image_count,
+                )
+            attachment_count = len(context.data_attachments)
+            if context.attachments_text:
+                attachment_count += 1
+            if attachment_count:
+                self._usage_service.consume_quota(
+                    command.user_id,
+                    "attachments",
+                    attachment_count,
+                )
+        except KeyError:
+            log.warning(
+                "turn_quota_user_missing",
+                user_id=command.user_id,
+                session_id=command.session_id,
+            )
+
+    def _record_estimated_turn_usage(
+        self,
+        command: ChatTurnCommand,
+        *,
+        prompt: str,
+        reply: str,
+    ) -> None:
+        """Persist estimated token usage when LiteLLM callbacks did not fire for a turn."""
+        prompt_text = (prompt or "").strip()
+        reply_text = (reply or "").strip()
+        if not prompt_text and not reply_text:
+            return
+        try:
+            from litellm import token_counter
+        except Exception as exc:
+            log.warning("estimated_turn_usage_failed", error=str(exc))
+            return
+        model = settings.effective_model_id()
+        prompt_tokens = 0
+        if prompt_text:
+            try:
+                prompt_tokens = int(
+                    token_counter(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt_text}],
+                    )
+                    or 0
+                )
+            except Exception:
+                prompt_tokens = max(len(prompt_text) // 4, 1)
+        completion_tokens = 0
+        if reply_text:
+            try:
+                completion_tokens = int(
+                    token_counter(model=model, text=reply_text) or 0
+                )
+            except Exception:
+                completion_tokens = max(len(reply_text) // 4, 1)
+        total_tokens = prompt_tokens + completion_tokens
+        if total_tokens <= 0:
+            return
+        try:
+            self._usage_service.record_llm_usage(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+            )
+        except KeyError:
+            log.warning(
+                "estimated_turn_usage_user_missing",
+                user_id=command.user_id,
+                session_id=command.session_id,
             )

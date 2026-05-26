@@ -58,6 +58,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         file_service=_FakeFileService({}),
         conversation_memory=_NoopMemory(),
         orchestrator_factory=_StaticOrchestratorFactory("ok"),
+        usage_service=_NoopUsageService(),
     )
     command = ChatTurnCommand(
         message="Please answer based on the data file I uploaded.",
@@ -168,6 +169,16 @@ class _StaticOrchestratorFactory:
                 return reply
 
         return _Agent()
+
+
+class _NoopUsageService:
+    """Usage service fake that accepts quota calls without side effects."""
+
+    def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
+        """Accept quota consumption without persisting anything."""
+
+    def record_llm_usage(self, **payload: Any) -> None:
+        """Accept LLM usage recording without persisting anything."""
 
 
 class _FakeFileService:

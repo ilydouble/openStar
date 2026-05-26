@@ -37,11 +37,13 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     history = FakeHistory()
     memory = FakeMemory()
     factory = FakeOrchestratorFactory(reply="assistant reply")
+    usage = FakeUsageService()
     service = ChatTurnService(
         chat_history=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=usage,
     )
 
     result = await service.run(_command(stream=False, file_uuids=("f1", "f1")))
@@ -59,6 +61,10 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     ]
     assert factory.calls[0]["enable_tools"] is False
     assert factory.agent.messages == []
+    assert usage.calls == [("user-1", "messages", 1)]
+    assert len(usage.llm_calls) == 1
+    assert usage.llm_calls[0]["user_id"] == "user-1"
+    assert usage.llm_calls[0]["total_tokens"] > 0
 
 
 @pytest.mark.asyncio
@@ -72,6 +78,7 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
     )
 
     event_stream = await service.stream(_command(stream=True, agent_hint="research"))
@@ -124,6 +131,23 @@ def _auth_user() -> AuthenticatedUser:
         name="User One",
         roles=("owner",),
     )
+
+
+class FakeUsageService:
+    """Usage service fake that records quota consumption calls."""
+
+    def __init__(self) -> None:
+        """Create the fake usage service."""
+        self.calls: list[tuple[str, str, int]] = []
+        self.llm_calls: list[dict[str, Any]] = []
+
+    def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
+        """Record one quota consumption call."""
+        self.calls.append((user_id, resource, amount))
+
+    def record_llm_usage(self, **payload: Any) -> None:
+        """Record one LLM usage persistence call."""
+        self.llm_calls.append(dict(payload))
 
 
 class FakeMemory:

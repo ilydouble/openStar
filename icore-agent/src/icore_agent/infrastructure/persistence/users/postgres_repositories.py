@@ -8,11 +8,15 @@ from typing import Any
 
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.application.usage.policy import (
+    admin_usage_overview,
     current_timestamp,
     default_usage,
     ensure_current_usage,
     next_quota_reset,
-    plan_or_trial,
+
+    plan_or_free,
+    plan_usage_analytics,
+
 )
 from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
@@ -137,8 +141,12 @@ class PostgresBillingSummaryRepository:
             user, usage, should_save = ensure_current_usage(user)
             if should_save:
                 user = repo.save(user)
-            plan = plan_or_trial(user.plan)
+
+                usage = {**default_usage(), **dict(user.usage or {})}
+            plan = plan_or_free(user.plan)
+
             limits = plan.limits
+            analytics = plan_usage_analytics(usage)
             return {
                 "plan": plan.value,
                 "label": limits.label,
@@ -153,7 +161,12 @@ class PostgresBillingSummaryRepository:
                     "tokens": usage["token_count"],
                     "images": usage["image_count"],
                     "attachments": usage["attachment_count"],
+                    "estimated_cost": analytics["estimated_cost"],
+                    "model_calls": analytics["model_calls"],
+                    "active_models": analytics["active_models"],
                 },
+                "models_used": analytics["models_used"],
+                "by_model": analytics["by_model"],
                 "quota_period": {
                     "start": usage.get("quota_period_start", 0),
                     "next_reset": next_quota_reset(),
@@ -264,8 +277,13 @@ class PostgresUsageRepository:
         return self._store.usage_summary(user_id)
 
     def admin_overview(self, users: list[UserProfile]) -> dict[str, Any]:
-        """Return admin metrics combining PostgreSQL users and JSON usage events."""
-        return self._store.admin_overview(users)
+        """Return admin metrics from PostgreSQL usage plus JSON funnel metadata."""
+        funnel = self._store.account_funnel_meta()
+        return admin_usage_overview(
+            users,
+            new_trials_7d=int(funnel.get("new_trials_7d", 0) or 0),
+            leads=funnel.get("leads"),
+        )
 
 
 class PostgresTeamRepository:
@@ -306,3 +324,4 @@ class PostgresProjectRepository:
     def list_projects(self, user_id: str) -> dict[str, Any]:
         """List projects visible to the user's organization."""
         return self._workspace.list_projects(user_id)
+

@@ -87,6 +87,8 @@ def test_record_llm_usage_persists_cost_event_and_tracks_tokens():
     }
     # token_count is updated for cost reporting but does NOT gate further calls.
     assert store.users["u1"].usage["token_count"] == 150
+    assert store.users["u1"].usage["llm_call_count"] == 1
+    assert store.users["u1"].usage["by_model"]["demo-model"]["calls"] == 1
 
 
 def test_token_spend_never_blocks_a_request():

@@ -91,6 +91,7 @@ def create_orchestrator(
     enable_tools: bool = True,
     agent_hint: str | None = None,
     session_id: str = "",
+    user_id: str = "",
 ) -> Orchestrator:
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 
@@ -106,6 +107,7 @@ def create_orchestrator(
                            可节省 token 并彻底杜绝不必要的工具调用。
         agent_hint:        前端按钮传入的 agent 偏置（research/code/...）。
         session_id:        注入到 image_agent_tool 的会话 ID，用于生成图片存储路径。
+        user_id:           当前用户 public id，写入 LiteLLM metadata 以便 usage 回调记账。
     """
     # Pure-chat turns (enable_tools=False) go to the lighter fast model to
     # avoid paying glm-4.7's first-token latency for greetings and small talk.
@@ -119,8 +121,11 @@ def create_orchestrator(
         params={
             "max_tokens": settings.agent_max_tokens,
             "temperature": settings.agent_temperature,
-            "metadata": {"session_id": session_id},
-            **settings.litellm_kwargs(model_id=selected_model),
+            **settings.litellm_kwargs(
+                model_id=selected_model,
+                user_id=user_id,
+                session_id=session_id,
+            ),
         },
     )
 

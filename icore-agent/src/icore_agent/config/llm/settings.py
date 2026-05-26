@@ -36,7 +36,13 @@ class LLMSettings(DomainSettings):
         model = model_id.strip().lower()
         return model.startswith("zai/") or model.startswith("glm-")
 
-    def litellm_kwargs(self, model_id: str | None = None) -> dict:
+    def litellm_kwargs(
+        self,
+        model_id: str | None = None,
+        *,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> dict:
         """Return extra parameters passed through to LiteLLM/Strands models."""
         kwargs: dict = {}
         if self.model_api_base:
@@ -51,6 +57,24 @@ class LLMSettings(DomainSettings):
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         if self.model_id_fast and self.model_id_fast != self.model_id:
             kwargs["fallbacks"] = [self.model_id_fast]
+        metadata: dict[str, str] = {}
+        resolved_user = (user_id or "").strip()
+        if not resolved_user:
+            try:
+                from icore_agent.shared.runtime.user_context import current_runtime_user
+
+                runtime_user = current_runtime_user()
+                if runtime_user is not None:
+                    resolved_user = runtime_user.public_id
+            except Exception:
+                resolved_user = ""
+        if resolved_user:
+            metadata["user_id"] = resolved_user
+        if session_id:
+            metadata["session_id"] = session_id
+        if metadata:
+            kwargs["metadata"] = metadata
+        kwargs.setdefault("stream_options", {"include_usage": True})
         from icore_agent.shared.logging.app_logger import get_logger
 
         log = get_logger(__name__)

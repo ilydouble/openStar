@@ -174,7 +174,7 @@
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.plan.title') }}</p>
             <ul class="mt-5 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-              <li>{{ t('account.plan.messages') }}: {{ plan?.usage?.messages ?? 0 }} / {{ plan?.limits?.messages ?? 0 }}</li>
+              <li>{{ t('account.plan.messages') }}: {{ plan?.usage?.messages ?? 0 }} / {{ formatPlanLimit(plan?.limits?.messages) }}</li>
               <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }} / {{ plan?.limits?.tokens ?? 0 }}</li>
               <li>{{ t('account.plan.images') }}: {{ plan?.usage?.images ?? 0 }} / {{ plan?.limits?.images ?? 0 }}</li>
               <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ plan?.limits?.attachments ?? 0 }}</li>
@@ -190,7 +190,7 @@
               </article>
               <article class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{{ t('account.opsCards.models') }}</p>
-                <p class="mt-3 text-xl font-semibold">{{ modelRows.length }}</p>
+                <p class="mt-3 text-xl font-semibold">{{ activeModelCount }}</p>
               </article>
               <article class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{{ t('account.opsCards.byok') }}</p>
@@ -268,7 +268,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -277,7 +277,6 @@ import {
   fetchMe,
   fetchPlan,
   fetchTeam,
-  fetchUsageSummary,
   renameTeam,
   signOut,
   updateByok,
@@ -290,7 +289,6 @@ const router = useRouter()
 const loading = ref(true)
 const me = ref(null)
 const plan = ref(null)
-const usage = ref(null)
 const adminOverview = ref(null)
 const team = ref(null)
 const saved = ref(false)
@@ -307,19 +305,36 @@ const teamForm = reactive({
   member_role: 'viewer',
 })
 
+/** Render a plan quota limit, using ∞ when the backend marks it unlimited. */
+function formatPlanLimit(value) {
+  return value == null ? '∞' : value
+}
+
+/** Mirror backend UsageService estimated_cost from PostgreSQL token quota usage. */
+function estimatedCostFromTokenCount(tokenCount) {
+  const tokens = Number(tokenCount) || 0
+  return Math.round((tokens / 1_000_000) * 2.0 * 1_000_000) / 1_000_000
+}
+
+const planUsage = computed(() => plan.value?.usage || {})
+
 const usageCards = computed(() => {
-  const summary = usage.value || {}
-  const planUsage = plan.value?.usage || {}
+  const usage = planUsage.value
+  const tokenCount = Number(usage.tokens) || 0
+  const estimatedCost =
+    usage.estimated_cost != null
+      ? Number(usage.estimated_cost) || 0
+      : estimatedCostFromTokenCount(tokenCount)
   return [
-    { label: t('account.cards.totalTokens'), value: summary.total_tokens ?? 0, helper: t('account.plan.tokens') },
-    { label: t('account.cards.totalCost'), value: `$${(summary.total_cost ?? 0).toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.messages'), value: planUsage.messages ?? 0, helper: t('account.plan.messages') },
-    { label: t('account.cards.attachments'), value: planUsage.attachments ?? 0, helper: t('account.plan.attachments') },
+    { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
+    { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
+    { label: t('account.cards.messages'), value: usage.messages ?? 0, helper: t('account.plan.messages') },
+    { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
   ]
 })
 
 const modelRows = computed(() => {
-  const byModel = usage.value?.by_model || {}
+  const byModel = plan.value?.by_model || {}
   return Object.entries(byModel).map(([model, stats]) => ({
     model,
     calls: stats.calls,
@@ -328,9 +343,9 @@ const modelRows = computed(() => {
   }))
 })
 
-const totalCalls = computed(() =>
-  modelRows.value.reduce((sum, row) => sum + Number(row.calls || 0), 0),
-)
+const totalCalls = computed(() => Number(planUsage.value.model_calls) || 0)
+
+const activeModelCount = computed(() => Number(planUsage.value.active_models) || 0)
 
 const adminCards = computed(() => {
   const users = adminOverview.value?.users || {}
@@ -353,16 +368,20 @@ const byokBadgeClass = computed(() =>
     : 'bg-zinc-100 text-zinc-600 dark:bg-white/[0.06] dark:text-zinc-300',
 )
 
-async function loadAccount() {
-  loading.value = true
-  const [meResp, planResp, usageResp] = await Promise.all([
+const PLAN_POLL_MS = 10_000
+let planPollTimer = null
+
+async function loadAccount(options = {}) {
+  const silent = Boolean(options.silent)
+  if (!silent) {
+    loading.value = true
+  }
+  const [meResp, planResp] = await Promise.all([
     fetchMe(),
     fetchPlan(),
-    fetchUsageSummary(),
   ])
   me.value = meResp
   plan.value = planResp
-  usage.value = usageResp
   byokForm.api_key = planResp.byok?.api_key || ''
   byokForm.api_base = planResp.byok?.api_base || ''
   byokForm.model = planResp.byok?.model || ''
@@ -370,7 +389,31 @@ async function loadAccount() {
   team.value = await fetchTeam().catch(() => null)
   teamForm.organization_name = team.value?.organization?.name || ''
   teamForm.scope = team.value?.organization?.knowledge_scope || 'organization'
-  loading.value = false
+  if (!silent) {
+    loading.value = false
+  }
+}
+
+function startPlanPolling() {
+  stopPlanPolling()
+  planPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      loadAccount({ silent: true })
+    }
+  }, PLAN_POLL_MS)
+}
+
+function stopPlanPolling() {
+  if (planPollTimer) {
+    clearInterval(planPollTimer)
+    planPollTimer = null
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    loadAccount({ silent: true })
+  }
 }
 
 async function saveByok() {
@@ -407,6 +450,18 @@ function handleSignOut() {
 }
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   await loadAccount()
+  startPlanPolling()
+})
+
+onActivated(async () => {
+  await loadAccount({ silent: true })
+  startPlanPolling()
+})
+
+onUnmounted(() => {
+  stopPlanPolling()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>

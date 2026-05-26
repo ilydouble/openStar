@@ -6,7 +6,12 @@ from typing import Any, Protocol
 
 from icore_agent.domain.user import UserProfile
 
-from .policy import check_quota, consume_quota, ensure_current_usage
+from .policy import (
+    append_llm_usage_stats,
+    check_quota,
+    consume_quota,
+    ensure_current_usage,
+)
 
 
 class UsageStore(Protocol):
@@ -70,13 +75,30 @@ class UsageService:
             "estimated_cost": round(total_tokens / 1_000_000 * 2.0, 6),
         }
         self._store.record_usage_event(**payload)
-        if total_tokens > 0:
-            try:
-                # Track token spend internally; quota enforcement uses tasks.
-                self.consume_quota(user_id, "tokens", total_tokens)
-            except KeyError:
-                # Do not fail cost recording when a legacy row is missing.
-                return
+
+        if total_tokens <= 0:
+            return
+        try:
+            user = self._store.get_user_by_id(user_id)
+            if user is None:
+                raise KeyError(user_id)
+            user, usage, should_save = ensure_current_usage(user)
+            if should_save:
+                user = self._store.save_user(user)
+                usage = dict(user.usage or {})
+            user = consume_quota(user, usage, "tokens", total_tokens)
+            user = append_llm_usage_stats(
+                user,
+                dict(user.usage or {}),
+                model=model,
+                total_tokens=total_tokens,
+                estimated_cost=payload["estimated_cost"],
+            )
+            self._store.save_user(user)
+        except KeyError:
+            # Usage event persistence must not fail when a legacy token has no user row.
+            return
+
 
     def consume_task(self, user_id: str) -> None:
         """Deduct one task from the user's monthly quota.
@@ -123,3 +145,4 @@ class UsageService:
         if should_save:
             user = self._store.save_user(user)
         self._store.save_user(consume_quota(user, usage, resource, amount))
+

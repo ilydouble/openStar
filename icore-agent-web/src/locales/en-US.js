@@ -440,6 +440,7 @@ export default {
     ],
     quota: {
       title: 'Current quota',
+      tasks: 'Tasks',
       messages: 'Messages',
       tokens: 'Tokens',
       attachments: 'Attachments',
@@ -644,6 +645,7 @@ export default {
     },
     plan: {
       title: 'Plan and quota',
+      tasks: 'Tasks',
       messages: 'Messages',
       tokens: 'Tokens',
       images: 'Images',
@@ -657,6 +659,7 @@ export default {
     cards: {
       totalTokens: 'Total tokens',
       totalCost: 'Total cost',
+      tasks: 'Tasks',
       messages: 'Messages',
       attachments: 'Attachments',
       estimated: 'Estimated platform cost',

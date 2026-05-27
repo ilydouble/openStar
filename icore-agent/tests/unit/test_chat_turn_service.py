@@ -61,7 +61,7 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     ]
     assert factory.calls[0]["enable_tools"] is False
     assert factory.agent.messages == []
-    assert usage.calls == [("user-1", "messages", 1)]
+    assert usage.calls == [("user-1", "tasks", 1)]
     assert len(usage.llm_calls) == 1
     assert usage.llm_calls[0]["user_id"] == "user-1"
     assert usage.llm_calls[0]["total_tokens"] > 0
@@ -144,6 +144,14 @@ class FakeUsageService:
     def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
         """Record one quota consumption call."""
         self.calls.append((user_id, resource, amount))
+
+    def consume_task(self, user_id: str) -> None:
+        """Record one completed task quota consumption call."""
+        self.calls.append((user_id, "tasks", 1))
+
+    def check_quota(self, user_id: str, resource: str, amount: int = 1) -> tuple[bool, str | None]:
+        """Allow quota checks during chat turn tests."""
+        return True, None
 
     def record_llm_usage(self, **payload: Any) -> None:
         """Record one LLM usage persistence call."""

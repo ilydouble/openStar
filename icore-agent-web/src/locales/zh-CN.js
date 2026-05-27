@@ -440,6 +440,7 @@ export default {
     ],
     quota: {
       title: '当前额度',
+      tasks: '任务',
       messages: '消息',
       tokens: 'Tokens',
       attachments: '附件',
@@ -644,6 +645,7 @@ export default {
     },
     plan: {
       title: '套餐与额度',
+      tasks: '任务额度',
       messages: '消息额度',
       tokens: 'Token 额度',
       images: '图片额度',
@@ -657,6 +659,7 @@ export default {
     cards: {
       totalTokens: '累计 Token',
       totalCost: '累计成本',
+      tasks: '任务调用',
       messages: '消息调用',
       attachments: '附件上传',
       estimated: '预估平台成本',

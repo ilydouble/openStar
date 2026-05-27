@@ -26,6 +26,8 @@ class Usage:
     task_count: int = 0
     # Internal cost tracking only; not enforced as a hard quota.
     token_count: int = 0
+    # Attachments uploaded within the current quota period.
+    attachment_count: int = 0
     # Timestamp of the current quota period start (Unix seconds).
     quota_period_start: int = 0
 
@@ -40,6 +42,8 @@ class PlanLimits:
     label: str
     # Monthly price in USD (0 = free).
     price_usd: int = 0
+    # Maximum attachments per quota period; None = unlimited (BYOK).
+    attachment_limit: int | None = 100
 
 
 class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchanged.
@@ -49,31 +53,31 @@ class Plan(str, Enum):  # noqa: UP042 - keep the existing enum contract unchange
     # churned users can always come back and re-experience the product.
     TRIAL = (
         "trial",
-        PlanLimits(task_limit=10, label="Trial", price_usd=0),
+        PlanLimits(task_limit=10, label="Trial", price_usd=0, attachment_limit=10),
     )
 
     # Individual sellers, freelancers, solo creators.
     PRO = (
         "pro",
-        PlanLimits(task_limit=200, label="Pro", price_usd=29),
+        PlanLimits(task_limit=200, label="Pro", price_usd=29, attachment_limit=100),
     )
 
     # Small teams that collaborate on agent workflows.
     TEAM = (
         "team",
-        PlanLimits(task_limit=1_000, label="Team", price_usd=99),
+        PlanLimits(task_limit=1_000, label="Team", price_usd=99, attachment_limit=400),
     )
 
     # Power users who need platform integrations (Shopify, CRM, WhatsApp, …).
     PREMIUM = (
         "premium",
-        PlanLimits(task_limit=5_000, label="Premium", price_usd=299),
+        PlanLimits(task_limit=5_000, label="Premium", price_usd=299, attachment_limit=2000),
     )
 
     # User supplies their own LLM API key; platform charges infra fee only.
     BYOK = (
         "byok",
-        PlanLimits(task_limit=None, label="BYOK", price_usd=9),
+        PlanLimits(task_limit=None, label="BYOK", price_usd=9, attachment_limit=None),
     )
 
     def __new__(cls, value: str, limits: PlanLimits):

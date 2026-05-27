@@ -174,10 +174,9 @@
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.plan.title') }}</p>
             <ul class="mt-5 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-              <li>{{ t('account.plan.messages') }}: {{ plan?.usage?.messages ?? 0 }} / {{ formatPlanLimit(plan?.limits?.messages) }}</li>
-              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }} / {{ plan?.limits?.tokens ?? 0 }}</li>
-              <li>{{ t('account.plan.images') }}: {{ plan?.usage?.images ?? 0 }} / {{ plan?.limits?.images ?? 0 }}</li>
-              <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ plan?.limits?.attachments ?? 0 }}</li>
+              <li>{{ t('account.plan.tasks') }}: {{ plan?.usage?.tasks ?? 0 }} / {{ formatPlanLimit(plan?.limits?.tasks) }}</li>
+              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }}</li>
+              <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ formatPlanLimit(plan?.limits?.attachments) }}</li>
             </ul>
           </div>
 
@@ -328,7 +327,7 @@ const usageCards = computed(() => {
   return [
     { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
     { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.messages'), value: usage.messages ?? 0, helper: t('account.plan.messages') },
+    { label: t('account.cards.tasks'), value: usage.tasks ?? 0, helper: t('account.plan.tasks') },
     { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
   ]
 })

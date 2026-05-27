@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from icore_agent.application.usage.policy import (
     admin_usage_overview,
+    consume_quota,
     plan_usage_analytics,
+    usage_key,
 )
 from icore_agent.application.usage.recording import (
     active_turn_usage_events,
@@ -16,6 +18,34 @@ from icore_agent.application.usage.recording import (
 )
 from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
+
+
+def test_usage_key_maps_v2_quota_resources():
+    """Quota resource names must map to the v2 usage counter keys."""
+    assert usage_key("tasks") == "task_count"
+    assert usage_key("tokens") == "token_count"
+    assert usage_key("attachments") == "attachment_count"
+
+
+def test_consume_quota_increments_attachment_count():
+    """Attachment consumption must update attachment_count, not token_count."""
+    user = UserProfile(
+        public_id="u1",
+        email="one@example.com",
+        name="One",
+        plan=Plan.TRIAL.value,
+        plan_label=Plan.TRIAL.limits.label,
+        roles=["owner"],
+        byok={},
+        usage={"task_count": 0, "token_count": 0, "attachment_count": 1},
+        created_at=1,
+        updated_at=1,
+    )
+
+    updated = consume_quota(user, user.usage, "attachments", 2)
+
+    assert updated.usage["attachment_count"] == 3
+    assert updated.usage["token_count"] == 0
 
 
 def test_plan_usage_analytics_does_not_synthesize_legacy_unknown_model() -> None:

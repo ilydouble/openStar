@@ -1008,12 +1008,13 @@ const activeShortcutPill = computed(() => {
 const quotaItems = computed(() => {
   const usage = planSummary.value?.usage || {}
   const limits = planSummary.value?.limits || {}
+  const formatLimit = (value) => (value == null ? '∞' : value)
   const items = [
-    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
-    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
+    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}` },
+    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${formatLimit(limits.attachments)}` },
   ]
-  if (limits.messages !== null && limits.messages !== undefined) {
-    items.unshift({ label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` })
+  if (limits.tasks !== null && limits.tasks !== undefined) {
+    items.unshift({ label: t('home.quota.tasks'), value: `${usage.tasks ?? 0}/${formatLimit(limits.tasks)}` })
   }
   return items
 })

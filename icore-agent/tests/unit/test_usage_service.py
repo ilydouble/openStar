@@ -155,6 +155,15 @@ def test_consume_task_increments_task_count():
     assert store.users["t1"].usage["task_count"] == 4
 
 
+def test_consume_attachments_increments_attachment_count():
+    """Attachment uploads must increment attachment_count instead of token_count."""
+    store = FakeUsageStore(_trial_user())
+    service = UsageService(store)
+    service.consume_quota("t1", "attachments", 2)
+    assert store.users["t1"].usage["attachment_count"] == 2
+    assert store.users["t1"].usage["token_count"] == 0
+
+
 def test_byok_task_quota_is_unlimited():
     """BYOK users must never be blocked regardless of task count."""
     usage = default_usage()

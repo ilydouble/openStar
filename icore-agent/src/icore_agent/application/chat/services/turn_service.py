@@ -426,17 +426,12 @@ class ChatTurnService:
             )
 
     def _record_turn_quota(self, command: ChatTurnCommand, context) -> None:
-        """Persist chat turn quota counters for messages and uploaded files."""
+        """Persist attachment quota counters for files uploaded in this turn."""
         try:
-            self._usage_service.consume_quota(command.user_id, "messages")
-            image_count = len(context.image_attachments)
-            if image_count:
-                self._usage_service.consume_quota(
-                    command.user_id,
-                    "images",
-                    image_count,
-                )
-            attachment_count = len(context.data_attachments)
+            attachment_count = (
+                len(context.image_attachments)
+                + len(context.data_attachments)
+            )
             if context.attachments_text:
                 attachment_count += 1
             if attachment_count:

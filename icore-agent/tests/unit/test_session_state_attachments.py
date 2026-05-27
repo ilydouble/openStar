@@ -174,8 +174,15 @@ class _StaticOrchestratorFactory:
 class _NoopUsageService:
     """Usage service fake that accepts quota calls without side effects."""
 
+    def check_quota(self, user_id: str, resource: str, amount: int = 1) -> tuple[bool, str | None]:
+        """Allow quota checks during attachment-focused chat turn tests."""
+        return True, None
+
     def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
         """Accept quota consumption without persisting anything."""
+
+    def consume_task(self, user_id: str) -> None:
+        """Accept task quota consumption without persisting anything."""
 
     def record_llm_usage(self, **payload: Any) -> None:
         """Accept LLM usage recording without persisting anything."""

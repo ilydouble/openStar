@@ -14,7 +14,7 @@ from icore_agent.application.usage.policy import (
     ensure_current_usage,
     next_quota_reset,
 
-    plan_or_free,
+    plan_or_trial as plan_or_free,
     plan_usage_analytics,
 
 )
@@ -151,16 +151,13 @@ class PostgresBillingSummaryRepository:
                 "plan": plan.value,
                 "label": limits.label,
                 "limits": {
-                    "messages": limits.message_limit,
-                    "tokens": limits.token_limit,
-                    "images": limits.image_limit,
+                    "tasks": limits.task_limit,
                     "attachments": limits.attachment_limit,
                 },
                 "usage": {
-                    "messages": usage["message_count"],
-                    "tokens": usage["token_count"],
-                    "images": usage["image_count"],
-                    "attachments": usage["attachment_count"],
+                    "tasks": usage.get("task_count", 0),
+                    "tokens": usage.get("token_count", 0),
+                    "attachments": usage.get("attachment_count", 0),
                     "estimated_cost": analytics["estimated_cost"],
                     "model_calls": analytics["model_calls"],
                     "active_models": analytics["active_models"],

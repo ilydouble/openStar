@@ -233,22 +233,34 @@ def quota_limit_and_usage(
     """Return the configured limit and current usage for one resource."""
     normalized = {**default_usage(), **dict(usage)}
     key = usage_key(resource)
+    used = int(normalized.get(key, 0) or 0)
 
+    if resource == "tasks":
+        return limits.task_limit, used
+    if resource == "attachments":
+        return limits.attachment_limit, used
+    if resource == "tokens":
+        return None, used
+    # Legacy v1 resource names fall back to attachment limits when present.
     if key == "message_count":
-        return limits.message_limit, int(normalized[key])
-    if key == "token_count":
-        return limits.token_limit, int(normalized[key])
+        return limits.task_limit, used
     if key == "image_count":
-        return limits.image_limit, int(normalized[key])
-    return limits.attachment_limit, int(normalized[key])
-
+        return limits.attachment_limit, used
+    return limits.attachment_limit, used
 
 
 def usage_key(resource: str) -> str:
     """Map a quota resource name to its usage counter key."""
     if resource == "tasks":
         return "task_count"
-    # 'tokens' maps to token_count for cost tracking.
+    if resource == "tokens":
+        return "token_count"
+    if resource == "attachments":
+        return "attachment_count"
+    if resource == "messages":
+        return "message_count"
+    if resource == "images":
+        return "image_count"
     return "token_count"
 
 

@@ -127,6 +127,18 @@ export async function updateByok(payload) {
   return client.post(`${BASE}/billing/byok`, payload)
 }
 
+export async function fetchMemory() {
+  return client.get(`${BASE}/memory`)
+}
+
+export async function updateMemoryFact(factId, value) {
+  return client.put(`${BASE}/memory/facts/${factId}`, { value })
+}
+
+export async function deleteMemoryFact(factId) {
+  return client.delete(`${BASE}/memory/facts/${factId}`)
+}
+
 export function signOut() {
   clearSession()
 }

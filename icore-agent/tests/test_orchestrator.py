@@ -103,14 +103,44 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.soft_delete_session")
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session._run_session_end_extract_from_context",
+    new_callable=AsyncMock,
+)
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session.resolve_session_extract_context",
+    new_callable=AsyncMock,
+)
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
-def test_clear_session(mock_memory, client):
+def test_clear_session(mock_memory, mock_resolve, mock_extract, _assert_owned, _soft_delete, client):
     mock_memory.clear = AsyncMock()
+    mock_resolve.return_value = ("summary", [{"role": "user", "content": "hello"}])
     resp = client.delete("/api/v1/agent/session/my-session",
                          headers=_auth_headers(client))
     assert resp.status_code == 200
     assert _api_data(resp)["cleared"] is True
+    mock_resolve.assert_awaited_once()
+    _soft_delete.assert_called_once()
     mock_memory.clear.assert_awaited_once_with("my-session")
+    mock_extract.assert_awaited_once()
+
+
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session._run_finalize_session_extract",
+    new_callable=AsyncMock,
+)
+def test_finalize_session(mock_extract, _assert_owned, client):
+    resp = client.post(
+        "/api/v1/agent/session/my-session/finalize",
+        headers=_auth_headers(client),
+    )
+    assert resp.status_code == 200
+    data = _api_data(resp)
+    assert data["finalized"] is True
+    mock_extract.assert_awaited_once()
 
 
 # ── Orchestrator factory ───────────────────────────────────────────────────

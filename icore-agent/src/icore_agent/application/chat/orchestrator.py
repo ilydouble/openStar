@@ -92,6 +92,7 @@ def create_orchestrator(
     agent_hint: str | None = None,
     session_id: str = "",
     user_id: str = "",
+    user_memory_prompt: str | None = None,
 ) -> Orchestrator:
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 
@@ -152,7 +153,12 @@ def create_orchestrator(
     orchestrator = Agent(
         model=model,
         system_prompt=build_orchestrator_system_prompt(
-            summary, attachments_text, image_attachments, data_attachments, agent_hint
+            summary,
+            attachments_text,
+            image_attachments,
+            data_attachments,
+            agent_hint,
+            user_memory_prompt,
         ),
         callback_handler=callback_handler,
         conversation_manager=conversation_manager,

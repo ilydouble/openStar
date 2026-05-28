@@ -608,6 +608,7 @@ import {
   clearSession,
   deleteFileAsset,
   fetchAllSessions,
+  finalizeSession,
   getSessionState,
   getFileDownloadUrl,
   newSessionId,
@@ -923,6 +924,14 @@ function resetConversationState() {
   })
 }
 
+/** Schedule durable memory extraction without blocking navigation. */
+function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
+  if (!messages.value.length) return
+  void finalizeSession(activeSessionId).catch((err) => {
+    console.error('Failed to finalize session memory:', err)
+  })
+}
+
 watch(
   () => route.name,
   (name) => {
@@ -1042,6 +1051,11 @@ watch(
   async (nextSessionId) => {
     const resolved = typeof nextSessionId === 'string' ? nextSessionId : newSessionId()
     if (resolved === sessionId.value) return
+    const previousSessionId = sessionId.value
+    const hadMessages = messages.value.length > 0
+    if (hadMessages) {
+      scheduleFinalizeSessionIfNeeded(previousSessionId)
+    }
     messages.value = []
     sessionId.value = resolved
     loading.value = false
@@ -1477,6 +1491,7 @@ function openRecentSession(targetSessionId) {
 }
 
 function onSidebarNew() {
+  scheduleFinalizeSessionIfNeeded()
   messages.value = []
   const nextSessionId = newSessionId()
   sessionId.value = nextSessionId

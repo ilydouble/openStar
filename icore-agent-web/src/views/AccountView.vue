@@ -90,6 +90,8 @@
             </form>
           </div>
 
+          <MemoryManagerSection />
+
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <div>
               <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.team.title') }}</p>
@@ -281,6 +283,7 @@ import {
   updateByok,
   updateKnowledgeScope,
 } from '../api/account.js'
+import MemoryManagerSection from '../components/MemoryManagerSection.vue'
 
 const { t } = useI18n()
 const router = useRouter()

@@ -83,6 +83,13 @@ export function createJsonClient(options = {}) {
         body: JSON.stringify(body),
       })
     },
+    put(path, body, init = {}) {
+      return request(path, {
+        ...init,
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    },
     delete(path, init = {}) {
       return request(path, {
         ...init,

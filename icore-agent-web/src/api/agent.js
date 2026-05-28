@@ -221,6 +221,18 @@ export async function runSequential(task, useDocker = false) {
 }
 
 /**
+ * Finalize a session so durable user memory can be extracted without deleting it.
+ */
+export async function finalizeSession(sessionId) {
+  const resp = await fetch(`${BASE}/session/${sessionId}/finalize`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders(),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
  * 清除会话记忆
  */
 export async function clearSession(sessionId) {

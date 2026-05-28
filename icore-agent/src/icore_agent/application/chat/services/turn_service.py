@@ -9,6 +9,7 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
+from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
 from icore_agent.application.usage.recording import (
     begin_turn_usage_capture,
@@ -55,6 +56,7 @@ class ChatTurnService:
         conversation_memory: ConversationMemory,
         orchestrator_factory: OrchestratorFactory,
         usage_service: UsageService,
+        user_memory_service: UserMemoryService | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
     ) -> None:
         """Create a chat turn service with its application dependencies."""
@@ -63,6 +65,7 @@ class ChatTurnService:
         self._conversation_memory = conversation_memory
         self._orchestrator_factory = orchestrator_factory
         self._usage_service = usage_service
+        self._user_memory_service = user_memory_service
         self._wall_budget_sec = wall_budget_sec
 
     def _check_task_quota(self, command: ChatTurnCommand) -> None:
@@ -105,11 +108,12 @@ class ChatTurnService:
             raise
 
         reply = str(result)
-        await self._append_memory_pair(command, reply)
+        session_compressed = await self._append_memory_pair(command, reply)
         self._save_assistant_message(command, reply)
         # Deduct one task after the turn is fully persisted.
         if self._usage_service is not None:
             self._usage_service.consume_task(command.user_id)
+        await self._maybe_extract_user_memory(command, session_compressed)
         return ChatTurnResult(session_id=command.session_id, reply=reply)
 
     async def stream(
@@ -176,9 +180,16 @@ class ChatTurnService:
             session_id=command.session_id,
             file_uuids=command.file_uuids,
             user_id=command.user_id,
+            user_message=command.message,
+            agent_hint=(
+                command.agent_hint.value
+                if command.agent_hint is not None
+                else None
+            ),
             file_service=self._file_service,
             chat_history=self._chat_history,
             conversation_memory=self._conversation_memory,
+            user_memory_service=self._user_memory_service,
         )
 
     def _invoke_agent(
@@ -205,6 +216,7 @@ class ChatTurnService:
                 agent_hint=route.agent_hint.value if route.agent_hint else None,
                 session_id=command.session_id,
                 user_id=command.user_id,
+                user_memory_prompt=context.user_memory_prompt,
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history
@@ -350,11 +362,13 @@ class ChatTurnService:
             )
 
         reply = "".join(full_reply)
-        await self._append_memory_pair(command, reply)
+        session_compressed = await self._append_memory_pair(command, reply)
         self._save_assistant_message(command, reply)
         # Deduct one task only on clean completion (not on error or timeout).
         if not timed_out and self._usage_service is not None:
             self._usage_service.consume_task(command.user_id)
+        if not timed_out:
+            await self._maybe_extract_user_memory(command, session_compressed)
         yield ChatStreamEvent.done()
 
     def _initial_status_event(
@@ -393,18 +407,62 @@ class ChatTurnService:
         self,
         command: ChatTurnCommand,
         reply: str,
-    ) -> None:
+    ) -> bool:
         """Append completed turn messages to the conversation cache."""
-        await self._conversation_memory.append_message(
+        compressed_user = await self._conversation_memory.append_message(
             command.session_id,
             "user",
             command.message,
         )
-        await self._conversation_memory.append_message(
+        compressed_assistant = await self._conversation_memory.append_message(
             command.session_id,
             "assistant",
             reply,
         )
+        return compressed_user or compressed_assistant
+
+    async def _maybe_extract_user_memory(
+        self,
+        command: ChatTurnCommand,
+        session_compressed: bool,
+    ) -> None:
+        """Run durable memory extraction when Redis compression rolls older turns."""
+        if self._user_memory_service is None:
+            log.warning(
+                "user_memory_extract_skipped",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                reason="service_not_wired",
+            )
+            return
+        if not self._user_memory_service.should_extract_on_compression(
+            session_compressed=session_compressed,
+        ):
+            return
+        try:
+            log.info(
+                "user_memory_extract_scheduled",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                reason="session_compressed",
+                session_compressed=session_compressed,
+            )
+            summary, messages = await self._conversation_memory.get_context(
+                command.session_id,
+            )
+            await self._user_memory_service.extract_from_session(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                session_summary=summary,
+                recent_messages=messages,
+            )
+        except Exception as exc:
+            log.warning(
+                "user_memory_extract_schedule_failed",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                error=str(exc),
+            )
 
     def _save_assistant_message(
         self,

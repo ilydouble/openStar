@@ -151,8 +151,8 @@ class _NoopMemory:
     async def get_context(self, session_id: str) -> tuple[str | None, list[dict[str, Any]]]:
         return None, []
 
-    async def append_message(self, session_id: str, role: str, content: str) -> None:
-        return None
+    async def append_message(self, session_id: str, role: str, content: str) -> bool:
+        return False
 
 
 class _StaticOrchestratorFactory:

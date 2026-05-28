@@ -55,10 +55,20 @@ def get_sync_sessionmaker() -> sessionmaker[Session]:
     return _sessionmaker
 
 
+def reset_sync_engine() -> None:
+    """Reset the lazy sync engine so tests can point at a fresh database."""
+    global _engine, _sessionmaker
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _sessionmaker = None
+
+
 def ensure_user_schema() -> None:
     """Create account and file tables when running against ephemeral test databases."""
     if os.getenv("ICORE_TEST_SYNC_DATABASE_URL", "").strip():
         from ..files.models import FileAssetRecord  # noqa: F401
+        from ..memory.models import UserMemoryFactRecord, UserMemoryProfileRecord  # noqa: F401
         from ..organizations.models import Organization, OrgMember  # noqa: F401
         from ..projects.models import Project, ProjectSession  # noqa: F401
         from ..sessions.models import ChatMessage, ChatSession  # noqa: F401

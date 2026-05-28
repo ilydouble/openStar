@@ -708,6 +708,13 @@ export default {
     sendMessage: 'Send message',
     stopGenerating: 'Stop generating',
     stopHint: 'Stop the current response',
+    incognito: {
+      active: 'Incognito — this chat is not saved to history',
+      enable: 'Enable incognito mode',
+      disable: 'Disable incognito mode',
+      enableHint: 'Start a private chat that is not saved to history',
+      disableHint: 'Return to normal chat and start a new saved session',
+    },
     thinking: 'Thinking...',
     attachFile: 'Attach file (PDF / DOCX / TXT / MD)',
     dropUploadRelease: 'Release mouse to upload (PDF / DOCX / TXT / MD)',

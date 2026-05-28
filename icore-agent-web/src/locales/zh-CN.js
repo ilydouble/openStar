@@ -708,6 +708,13 @@ export default {
     sendMessage: '发送消息',
     stopGenerating: '停止生成',
     stopHint: '停止当前回复',
+    incognito: {
+      active: '无痕模式 — 此对话不会保存到历史记录',
+      enable: '开启无痕模式',
+      disable: '关闭无痕模式',
+      enableHint: '开始私密对话，不会写入历史记录',
+      disableHint: '返回普通对话并开始新的已保存会话',
+    },
     thinking: '思考中...',
     attachFile: '上传文件（PDF / DOCX / TXT / MD）',
     dropUploadRelease: '松开鼠标上传文件（PDF / DOCX / TXT / MD）',

@@ -364,11 +364,13 @@
                   :active-mode-id="activeShortcutId"
                   :streaming="loading"
                   :send-blocked="uploading"
+                  :incognito="incognitoMode"
                   @submit="handleSubmit"
                   @stop="stopAssistantStream"
                   @file-selected="handleFileSelected"
                   @clear-mode="clearShortcut"
                   @select-mode="setComposerMode"
+                  @toggle-incognito="toggleIncognitoMode"
                 />
 
                 <!-- 附件列表（首页）：会话中的文档/RAG 等；图片与数据文件仅在气泡内展示 -->
@@ -585,11 +587,13 @@
               :active-mode-id="activeShortcutId"
               :streaming="loading"
               :send-blocked="uploading"
+              :incognito="incognitoMode"
               @submit="handleSubmit"
               @stop="stopAssistantStream"
               @file-selected="handleFileSelected"
               @clear-mode="clearShortcut"
               @select-mode="setComposerMode"
+              @toggle-incognito="toggleIncognitoMode"
             />
           </div>
         </div>
@@ -786,6 +790,8 @@ function stopAssistantStream() {
   streamAbortController.value?.abort()
 }
 const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
+/** When true, chat is ephemeral: no history, memory injection, or session finalize. */
+const incognitoMode = ref(false)
 const scrollEl = ref(null)
 const searchRefHome = ref(null)
 const searchRefChat = ref(null)
@@ -909,6 +915,7 @@ function resetConversationState() {
   stopAssistantStream()
   messages.value = []
   sessionId.value = newSessionId()
+  incognitoMode.value = false
   loading.value = false
   streamingMsg.value = null
   attachmentList.value = []
@@ -926,10 +933,48 @@ function resetConversationState() {
 
 /** Schedule durable memory extraction without blocking navigation. */
 function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
+  if (incognitoMode.value) return
   if (!messages.value.length) return
   void finalizeSession(activeSessionId).catch((err) => {
     console.error('Failed to finalize session memory:', err)
   })
+}
+
+/** Start a fresh session; optionally enable or disable incognito mode. */
+function startFreshSession({ incognito = false, navigate = true } = {}) {
+  stopAssistantStream()
+  messages.value = []
+  const nextSessionId = newSessionId()
+  sessionId.value = nextSessionId
+  incognitoMode.value = incognito
+  loading.value = false
+  streamingMsg.value = null
+  attachmentList.value = []
+  uploadError.value = ''
+  activeShortcutId.value = ''
+  if (navigate) {
+    router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  }
+  nextTick(() => {
+    searchRefHome.value?.clearPendingImage?.()
+    searchRefChat.value?.clearPendingImage?.()
+    searchRefHome.value?.clearPendingDataFiles?.()
+    searchRefChat.value?.clearPendingDataFiles?.()
+    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  })
+}
+
+/** Toggle incognito mode; enabling starts a fresh ephemeral session immediately. */
+function toggleIncognitoMode() {
+  if (incognitoMode.value) {
+    startFreshSession({ incognito: false })
+    return
+  }
+  if (messages.value.length > 0) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: true })
 }
 
 watch(
@@ -1056,6 +1101,7 @@ watch(
     if (hadMessages) {
       scheduleFinalizeSessionIfNeeded(previousSessionId)
     }
+    incognitoMode.value = false
     messages.value = []
     sessionId.value = resolved
     loading.value = false
@@ -1287,6 +1333,7 @@ async function sendUserMessage(msg, agentHint = '', {
       agentMessage: agentMessage !== bubbleText ? agentMessage : '',
       templateId,
       ...(captionForApi ? { displayCaption: captionForApi } : {}),
+      incognito: incognitoMode.value,
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1491,23 +1538,13 @@ function openRecentSession(targetSessionId) {
 }
 
 function onSidebarNew() {
-  scheduleFinalizeSessionIfNeeded()
-  messages.value = []
-  const nextSessionId = newSessionId()
-  sessionId.value = nextSessionId
-  loading.value = false
-  streamingMsg.value = null
-  attachmentList.value = []
-  uploadError.value = ''
-  activeShortcutId.value = ''
-  router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  if (!incognitoMode.value) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: false })
   syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),
-  })
-  nextTick(() => {
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
 }
 

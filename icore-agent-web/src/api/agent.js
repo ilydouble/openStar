@@ -110,6 +110,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   const templateId = typeof options?.templateId === 'string'
     ? options.templateId.trim()
     : ''
+  const incognito = Boolean(options?.incognito)
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -122,6 +123,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       ...(displayCaption ? { display_caption: displayCaption } : {}),
       ...(agentMessage ? { agent_message: agentMessage } : {}),
       ...(templateId ? { template_id: templateId } : {}),
+      ...(incognito ? { incognito: true } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',

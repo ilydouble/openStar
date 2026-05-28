@@ -67,6 +67,7 @@ def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> ChatTurn
         display_caption=(req.display_caption or "").strip() or None,
         agent_message=(req.agent_message or "").strip() or None,
         template_id=(req.template_id or "").strip() or None,
+        incognito=req.incognito,
         user=user,
     )
 

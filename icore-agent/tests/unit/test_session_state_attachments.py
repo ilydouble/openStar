@@ -70,6 +70,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         display_caption="Hello please analysis these files",
         agent_message="Creative Brief\n\n---\nPlease answer in markdown",
         template_id="image",
+        incognito=False,
         user=_auth_user(),
     )
 

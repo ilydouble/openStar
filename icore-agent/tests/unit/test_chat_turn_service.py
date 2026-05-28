@@ -165,11 +165,67 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
     assert history.calls[-1] == ("assistant", "session-1", "user-1", "Hi")
 
 
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> None:
+    """Incognito turns should skip PostgreSQL persistence and memory extraction."""
+    history = FakeHistory()
+    memory_service = TrackingUserMemoryService()
+    conversation_memory = FakeMemory(compress_on_append=True)
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=history,
+        file_service=FakeFileService(),
+        conversation_memory=conversation_memory,
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert history.calls == []
+    assert conversation_memory.appended == [
+        ("session-1", "user", "Hello"),
+        ("session-1", "assistant", "assistant reply"),
+    ]
+    assert memory_service.compression_checks == []
+    assert memory_service.extract_calls == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
+    """Incognito turns should not inject durable user memory into the prompt."""
+    memory_service = TrackingUserMemoryService()
+
+    def _build_prompt(user_id: str, turn: Any) -> str:
+        memory_service.build_calls.append((user_id, turn))
+        return "remember this"
+
+    memory_service.build_calls = []
+    memory_service.build_memory_prompt = _build_prompt  # type: ignore[method-assign]
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert memory_service.build_calls == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
 def _command(
     *,
     stream: bool,
     agent_hint: str = "",
     file_uuids: tuple[str, ...] = (),
+    incognito: bool = False,
 ) -> ChatTurnCommand:
     """Build one chat command for tests."""
     return ChatTurnCommand(
@@ -182,6 +238,7 @@ def _command(
         display_caption=None,
         agent_message=None,
         template_id=None,
+        incognito=incognito,
         user=_auth_user(),
     )
 
@@ -301,6 +358,7 @@ class TrackingUserMemoryService:
         self.compression_checks: list[bool] = []
         self.extract_calls: list[dict[str, Any]] = []
         self.session_end_calls: list[dict[str, Any]] = []
+        self.build_calls: list[tuple[str, Any]] = []
 
     def build_memory_prompt(self, user_id: str, turn: Any) -> str | None:
         """Return no injected memory prompt during chat turn tests."""

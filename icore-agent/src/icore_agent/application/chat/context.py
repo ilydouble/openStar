@@ -143,6 +143,7 @@ async def load_chat_context(
     user_id: str,
     user_message: str = "",
     agent_hint: str | None = None,
+    incognito: bool = False,
     file_service: FileAssetService,
     chat_history: ChatHistoryService,
     conversation_memory: ConversationMemory,
@@ -156,7 +157,7 @@ async def load_chat_context(
                     session_id=session_id, error=str(exc))
         return _empty_context()
 
-    if not history:
+    if not history and not incognito:
         try:
             history = chat_history.load_messages(session_id, user_id)
         except (PermissionError, LookupError):
@@ -168,7 +169,7 @@ async def load_chat_context(
         file_service=file_service,
     )
     user_memory_prompt = None
-    if user_memory_service is not None:
+    if user_memory_service is not None and not incognito:
         user_memory_prompt = user_memory_service.build_memory_prompt(
             user_id,
             TurnMemoryContext(

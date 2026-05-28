@@ -139,27 +139,28 @@ class ChatTurnService:
     ) -> ChatRoutingDecision:
         """Persist the user turn and return its routing decision."""
         file_uuids = dedupe_file_uuids(command.file_uuids)
-        self._chat_history.ensure_owned_session(
-            command.session_id,
-            command.user_id,
-            title=command.message.strip()[:255],
-        )
-        metadata = None
-        if file_uuids:
-            metadata = {"file_uuids": list(file_uuids)}
-            caption = (command.display_caption or "").strip()
-            if caption:
-                metadata["display_caption"] = caption
-        template_id = (command.template_id or "").strip()
-        if template_id:
-            metadata = metadata or {}
-            metadata["template_id"] = template_id
-        self._chat_history.save_user_message(
-            command.session_id,
-            command.user_id,
-            command.message,
-            metadata=metadata,
-        )
+        if not command.incognito:
+            self._chat_history.ensure_owned_session(
+                command.session_id,
+                command.user_id,
+                title=command.message.strip()[:255],
+            )
+            metadata = None
+            if file_uuids:
+                metadata = {"file_uuids": list(file_uuids)}
+                caption = (command.display_caption or "").strip()
+                if caption:
+                    metadata["display_caption"] = caption
+            template_id = (command.template_id or "").strip()
+            if template_id:
+                metadata = metadata or {}
+                metadata["template_id"] = template_id
+            self._chat_history.save_user_message(
+                command.session_id,
+                command.user_id,
+                command.message,
+                metadata=metadata,
+            )
         route = resolve_routing(
             command.agent_message or command.message,
             command.agent_hint,
@@ -168,6 +169,7 @@ class ChatTurnService:
             "chat_request",
             session_id=command.session_id,
             stream=command.stream,
+            incognito=command.incognito,
             intent=route.intent.value,
             enable_tools=route.enable_tools,
             agent_hint=route.agent_hint.value if route.agent_hint else None,
@@ -186,6 +188,7 @@ class ChatTurnService:
                 if command.agent_hint is not None
                 else None
             ),
+            incognito=command.incognito,
             file_service=self._file_service,
             chat_history=self._chat_history,
             conversation_memory=self._conversation_memory,
@@ -427,6 +430,8 @@ class ChatTurnService:
         session_compressed: bool,
     ) -> None:
         """Run durable memory extraction when Redis compression rolls older turns."""
+        if command.incognito:
+            return
         if self._user_memory_service is None:
             log.warning(
                 "user_memory_extract_skipped",
@@ -470,6 +475,8 @@ class ChatTurnService:
         reply: str,
     ) -> None:
         """Persist assistant output without failing an already completed turn."""
+        if command.incognito:
+            return
         try:
             self._chat_history.save_assistant_message(
                 command.session_id,

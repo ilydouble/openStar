@@ -145,7 +145,7 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.application.chat.orchestrator.LiteLLMModel")
+@patch("icore_agent.application.chat.model_factory.LiteLLMModel")
 @patch("icore_agent.application.chat.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
@@ -153,8 +153,10 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     create_orchestrator()
     _, model_kwargs = mock_model_cls.call_args
     assert model_kwargs["model_id"] == settings.model_id
+    assert "client_args" in model_kwargs
     assert model_kwargs["params"]["max_tokens"] == settings.agent_max_tokens
     assert model_kwargs["params"]["temperature"] == settings.agent_temperature
+    assert "api_key" not in model_kwargs["params"]
     mock_agent_cls.assert_called_once()
     # Verify all built-in chat tools are registered.
     _, kwargs = mock_agent_cls.call_args

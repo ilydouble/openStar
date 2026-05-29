@@ -9,16 +9,16 @@ Exposed as a Strands @tool so the orchestrator can delegate to it.
 """
 
 from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings
+from ..callback_ctx import sub_agent_callback
+from ..model_factory import create_litellm_model
 from ..tools.fetch_webpage import fetch_webpage
 from ..tools.http_client import http_request
 from ..tools.web_search import web_search
-from ..callback_ctx import sub_agent_callback
 
 log = get_logger(__name__)
 
@@ -117,13 +117,10 @@ def _make_budgeted_tools() -> list:
 
 
 def _create_research_agent() -> Agent:
-    model = LiteLLMModel(
-        model_id=settings.effective_model_id(),
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": 0.2,
-            **settings.litellm_kwargs(model_id=settings.model_id),
-        },
+    """Create the specialist research agent with the configured chat model."""
+    model = create_litellm_model(
+        max_tokens=settings.agent_max_tokens,
+        temperature=0.2,
     )
     return Agent(
         model=model,

@@ -12,12 +12,12 @@ from strands import Agent, tool
 from strands.agent.conversation_manager.sliding_window_conversation_manager import (
     SlidingWindowConversationManager,
 )
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.config import settings
 from icore_agent.shared.logging.app_logger import get_logger
 
+from .model_factory import create_litellm_model
 from .prompts import build_orchestrator_system_prompt
 
 
@@ -120,17 +120,12 @@ def create_orchestrator(
     selected_model = primary_model if enable_tools else (
         settings.model_id_fast or primary_model
     )
-    model = LiteLLMModel(
+    model = create_litellm_model(
         model_id=selected_model,
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": settings.agent_temperature,
-            **settings.litellm_kwargs(
-                model_id=selected_model,
-                user_id=user_id,
-                session_id=session_id,
-            ),
-        },
+        max_tokens=settings.agent_max_tokens,
+        temperature=settings.agent_temperature,
+        user_id=user_id,
+        session_id=session_id,
     )
 
     # Window large enough to hold our pre-populated history (≤ memory_keep_recent=8)

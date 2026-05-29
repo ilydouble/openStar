@@ -1,7 +1,12 @@
 from .app import AppSettings
 from .auth import AuthSettings, auth_settings
 from .database import DatabaseSettings, database_settings
-from .llm import LLMSettings, llm_settings
+from .llm import (
+    LLMSettings,
+    LiteLLMProviderSpec,
+    ResolvedLiteLLMConfig,
+    llm_settings,
+)
 from .logging import LoggingSettings, logging_settings
 from .media import MediaSettings, media_settings
 from .memory import MemorySettings, memory_settings
@@ -17,9 +22,11 @@ __all__ = [
     "DatabaseSettings",
     "LoggingSettings",
     "LLMSettings",
+    "LiteLLMProviderSpec",
     "MediaSettings",
     "MemorySettings",
     "RagSettings",
+    "ResolvedLiteLLMConfig",
     "SequentialSettings",
     "Settings",
     "StorageSettings",

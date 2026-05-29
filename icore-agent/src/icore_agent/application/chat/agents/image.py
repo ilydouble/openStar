@@ -11,12 +11,13 @@ Exposed as a Strands @tool so the orchestrator can delegate to it.
 from __future__ import annotations
 
 from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.config import settings
-from ..tools.image_tools import understand_image, generate_image
+
 from ..callback_ctx import sub_agent_callback
+from ..model_factory import create_litellm_model
+from ..tools.image_tools import generate_image, understand_image
 
 _SYSTEM_PROMPT = """
 You are a multimodal image specialist. You have two capabilities:
@@ -54,13 +55,9 @@ def _create_image_agent(session_id: str = "") -> Agent:
         """
         return generate_image(prompt=prompt, size=size, session_id=session_id)
 
-    model = LiteLLMModel(
-        model_id=settings.effective_model_id(),
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": 0.3,
-            **settings.litellm_kwargs(model_id=settings.model_id),
-        },
+    model = create_litellm_model(
+        max_tokens=settings.agent_max_tokens,
+        temperature=0.3,
     )
     return Agent(
         model=model,

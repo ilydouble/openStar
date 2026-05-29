@@ -185,6 +185,9 @@ func (pipeline *Pipeline) emitLog(startTime time.Time, metadata *logging.AccessL
 		errorType := "upstream_error"
 		metadata.ErrorType = &errorType
 	}
+	if shouldSkipSuccessfulHealthProbeLog(metadata) {
+		return
+	}
 	if pipeline.deps.AccessLogger == nil {
 		return
 	}
@@ -202,4 +205,11 @@ func (pipeline *Pipeline) emitLog(startTime time.Time, metadata *logging.AccessL
 		TraceID:   metadata.RequestID,
 		Metadata:  *metadata,
 	})
+}
+
+// shouldSkipSuccessfulHealthProbeLog keeps routine local health probes out of access logs.
+func shouldSkipSuccessfulHealthProbeLog(metadata *logging.AccessLogMetadata) bool {
+	return metadata.Path == "/health" &&
+		metadata.UpstreamService == nil &&
+		metadata.FinalStatusCode < http.StatusBadRequest
 }

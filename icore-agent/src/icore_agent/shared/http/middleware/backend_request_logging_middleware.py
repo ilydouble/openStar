@@ -64,6 +64,9 @@ class BackendRequestLoggingMiddleware:
             )
             raise
 
+        if self._is_successful_health_probe(scope, status_code or 500):
+            return
+
         self._emit_request_event(
             scope,
             headers,
@@ -183,3 +186,8 @@ class BackendRequestLoggingMiddleware:
         if status_code >= 400:
             return LogLevel.WARNING
         return LogLevel.INFO
+
+    @staticmethod
+    def _is_successful_health_probe(scope: Scope, status_code: int) -> bool:
+        """Return true when a successful liveness/readiness probe should stay quiet."""
+        return scope.get("path") in {"/health", "/ready"} and status_code < 400

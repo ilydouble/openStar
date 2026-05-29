@@ -10,7 +10,9 @@ import pandas as pd
 
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
 from icore_agent.application.knowledge.parsers import parse_file
+from icore_agent.application.memory import UserMemoryService
 from icore_agent.domain.chat import ChatCompletionRole
+from icore_agent.domain.memory import TurnMemoryContext
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .services.history_service import ChatHistoryService
@@ -35,7 +37,7 @@ class ConversationMemory(Protocol):
         session_id: str,
         role: str,
         content: str,
-    ) -> None:
+    ) -> bool:
         """Append one message to the cached conversation."""
         ...
 
@@ -107,6 +109,7 @@ class ChatContext:
     has_rag: bool
     image_attachments: list[ChatImageAttachment]
     data_attachments: list[ChatDataAttachment]
+    user_memory_prompt: str | None = None
 
     @property
     def has_attachments(self) -> bool:
@@ -139,9 +142,13 @@ async def load_chat_context(
     session_id: str,
     file_uuids: tuple[str, ...],
     user_id: str,
+    user_message: str = "",
+    agent_hint: str | None = None,
+    incognito: bool = False,
     file_service: FileAssetService,
     chat_history: ChatHistoryService,
     conversation_memory: ConversationMemory,
+    user_memory_service: UserMemoryService | None = None,
 ) -> ChatContext:
     """Load cached history, durable history fallback, and UUID-addressed files."""
     try:
@@ -151,7 +158,7 @@ async def load_chat_context(
                     session_id=session_id, error=str(exc))
         return _empty_context()
 
-    if not history:
+    if not history and not incognito:
         try:
             history = chat_history.load_messages(session_id, user_id)
         except (PermissionError, LookupError):
@@ -162,6 +169,16 @@ async def load_chat_context(
         user_id=user_id,
         file_service=file_service,
     )
+    user_memory_prompt = None
+    if user_memory_service is not None and not incognito:
+        user_memory_prompt = user_memory_service.build_memory_prompt(
+            user_id,
+            TurnMemoryContext(
+                message=user_message,
+                session_summary=summary or None,
+                agent_hint=agent_hint,
+            ),
+        )
     return ChatContext(
         summary=summary or None,
         strands_history=to_strands_messages(history),
@@ -169,6 +186,7 @@ async def load_chat_context(
         has_rag=False,
         image_attachments=image_refs,
         data_attachments=data_refs,
+        user_memory_prompt=user_memory_prompt,
     )
 
 
@@ -314,4 +332,5 @@ def _empty_context() -> ChatContext:
         has_rag=False,
         image_attachments=[],
         data_attachments=[],
+        user_memory_prompt=None,
     )

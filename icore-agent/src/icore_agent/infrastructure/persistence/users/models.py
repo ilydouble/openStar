@@ -30,9 +30,9 @@ class User(Base):
         String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     plan: Mapped[str] = mapped_column(
-        String(40), nullable=False, default="free")
+        String(40), nullable=False, default="trial")
     plan_label: Mapped[str] = mapped_column(
-        String(80), nullable=False, default="Free")
+        String(80), nullable=False, default="Trial")
     organization_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True)
     organization_name: Mapped[str | None] = mapped_column(

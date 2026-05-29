@@ -5,6 +5,23 @@ import { readJsonResponse } from './client.js'
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
 
+/**
+ * Thrown when the backend returns 402 quota_exceeded.
+ * Carries the current plan and the upgrade URL so the UI can show
+ * an upgrade modal without needing extra API calls.
+ */
+export class QuotaExceededError extends Error {
+  /**
+   * @param {{ current_plan?: string, upgrade_url?: string }} [data]
+   */
+  constructor(data = {}) {
+    super('quota_exceeded')
+    this.name = 'QuotaExceededError'
+    this.currentPlan = data.current_plan || 'trial'
+    this.upgradeUrl = data.upgrade_url || '/pricing'
+  }
+}
+
 /** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
 function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
   const token = getAccessToken()
@@ -18,14 +35,32 @@ function mergeAgentAuthHeaders(extra = {}, label = 'agent-fetch') {
 }
 
 /**
- * Parse an agent API error response and preserve structured backend details when available.
+ * Parse an agent API error response.
+ *
+ * Returns 402 quota_exceeded as a typed QuotaExceededError so callers
+ * can show an upgrade modal instead of a generic error message.
+ * All other non-ok responses become a plain Error with HTTP status info.
  *
  * @param {Response} resp
  * @returns {Promise<never>}
  */
 export async function readAgentError(resp) {
-  await readJsonResponse(resp)
-  throw new Error(`HTTP ${resp.status}`)
+  let payload = null
+  try {
+    const ct = resp.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      payload = await resp.json()
+    }
+  } catch {
+    // ignore parse failures — fall through to generic error
+  }
+
+  if (resp.status === 402 && payload?.error_code === 'quota_exceeded') {
+    throw new QuotaExceededError(payload?.data || {})
+  }
+
+  const detail = String(payload?.detail || payload?.message || '').trim()
+  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
 }
 
 /**
@@ -66,6 +101,16 @@ function *yieldTokenChunks(text) {
 export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
   const signal = options && options.signal
   const fileUuids = Array.isArray(options?.fileUuids) ? options.fileUuids : []
+  const displayCaption = typeof options?.displayCaption === 'string'
+    ? options.displayCaption.trim()
+    : ''
+  const agentMessage = typeof options?.agentMessage === 'string'
+    ? options.agentMessage.trim()
+    : ''
+  const templateId = typeof options?.templateId === 'string'
+    ? options.templateId.trim()
+    : ''
+  const incognito = Boolean(options?.incognito)
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -75,6 +120,10 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       stream: true,
       agent_hint: agentHint || '',
       file_uuids: fileUuids,
+      ...(displayCaption ? { display_caption: displayCaption } : {}),
+      ...(agentMessage ? { agent_message: agentMessage } : {}),
+      ...(templateId ? { template_id: templateId } : {}),
+      ...(incognito ? { incognito: true } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -168,6 +217,18 @@ export async function runSequential(task, useDocker = false) {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Finalize a session so durable user memory can be extracted without deleting it.
+ */
+export async function finalizeSession(sessionId) {
+  const resp = await fetch(`${BASE}/session/${sessionId}/finalize`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
   return readJsonResponse(resp)
@@ -329,7 +390,16 @@ export async function uploadFileAsset(file) {
 function assetMode(filename, contentType) {
   const lower = filename.toLowerCase()
   if (contentType.startsWith('image/')) return 'image'
-  if (lower.endsWith('.csv') || lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'data'
+  if (
+    lower.endsWith('.csv')
+    || lower.endsWith('.xlsx')
+    || lower.endsWith('.xls')
+    || lower.endsWith('.pdf')
+    || lower.endsWith('.doc')
+    || lower.endsWith('.docx')
+    || lower.endsWith('.txt')
+    || lower.endsWith('.md')
+  ) return 'data'
   return 'file'
 }
 

@@ -19,6 +19,10 @@ class ChatTurnCommand:
     tenant_code: str
     agent_hint: AgentHint | None
     file_uuids: tuple[str, ...]
+    display_caption: str | None
+    agent_message: str | None
+    template_id: str | None
+    incognito: bool
     user: AuthenticatedUser
 
     @property

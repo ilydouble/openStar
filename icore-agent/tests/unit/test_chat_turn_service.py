@@ -38,11 +38,13 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     history = FakeHistory()
     memory = FakeMemory()
     factory = FakeOrchestratorFactory(reply="assistant reply")
+    usage = FakeUsageService()
     service = ChatTurnService(
         chat_history=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=usage,
     )
 
     result = await service.run(_command(stream=False, file_uuids=("f1", "f1")))
@@ -62,6 +64,10 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     assert len(factory.calls[0]["hooks"]) == 1
     assert isinstance(factory.calls[0]["hooks"][0], ChatToolCallRecorder)
     assert factory.agent.messages == []
+    assert usage.calls == [("user-1", "tasks", 1)]
+    assert len(usage.llm_calls) == 1
+    assert usage.llm_calls[0]["user_id"] == "user-1"
+    assert usage.llm_calls[0]["total_tokens"] > 0
 
 
 @pytest.mark.asyncio
@@ -76,6 +82,7 @@ async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
             reply="assistant reply",
             emit_tool_call=True,
         ),
+        usage_service=FakeUsageService(),
     )
 
     result = await service.run(_command(stream=False, agent_hint="research"))
@@ -90,6 +97,69 @@ async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_turn_run_skips_user_memory_without_compression() -> None:
+    """Normal turns should not trigger durable memory extraction."""
+    memory_service = TrackingUserMemoryService()
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False))
+
+    assert memory_service.compression_checks == [False]
+    assert memory_service.extract_calls == []
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_schedules_user_memory_extract_on_compression() -> None:
+    """Redis compression during a turn should trigger durable memory extraction."""
+    memory_service = TrackingUserMemoryService()
+    conversation_memory = FakeMemory(compress_on_append=True)
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=conversation_memory,
+        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False))
+
+    assert memory_service.compression_checks == [True]
+    assert len(memory_service.extract_calls) == 1
+    assert memory_service.extract_calls[0]["user_id"] == "user-1"
+    assert memory_service.extract_calls[0]["session_id"] == "session-1"
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
+    """Streaming turns should not extract durable memory unless compressed."""
+    memory_service = TrackingUserMemoryService()
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=FakeOrchestratorFactory(reply="", streaming=True),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    event_stream = await service.stream(_command(stream=True))
+    async for event in event_stream:
+        if event.kind is ChatStreamEventKind.DONE:
+            break
+
+    assert memory_service.compression_checks == [False]
+    assert memory_service.extract_calls == []
+
+
+@pytest.mark.asyncio
 async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
     """Streaming chat turns should expose typed application events."""
     history = FakeHistory()
@@ -100,6 +170,7 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
     )
 
     event_stream = await service.stream(_command(stream=True, agent_hint="research"))
@@ -178,11 +249,69 @@ def test_tool_call_recorder_persists_result_and_tool_message() -> None:
     assert recorder.tool_call_ids == ("tool-1",)
 
 
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> None:
+    """Incognito turns should skip PostgreSQL persistence and memory extraction."""
+    history = FakeHistory()
+    memory_service = TrackingUserMemoryService()
+    conversation_memory = FakeMemory(compress_on_append=True)
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=history,
+        file_service=FakeFileService(),
+        conversation_memory=conversation_memory,
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert history.calls == []
+    assert conversation_memory.appended == [
+        ("session-1", "user", "Hello"),
+        ("session-1", "assistant", "assistant reply"),
+    ]
+    assert memory_service.compression_checks == []
+    assert memory_service.extract_calls == []
+    assert factory.calls[0]["hooks"] == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
+    """Incognito turns should not inject durable user memory into the prompt."""
+    memory_service = TrackingUserMemoryService()
+
+    def _build_prompt(user_id: str, turn: Any) -> str:
+        memory_service.build_calls.append((user_id, turn))
+        return "remember this"
+
+    memory_service.build_calls = []
+    # type: ignore[method-assign]
+    memory_service.build_memory_prompt = _build_prompt
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert memory_service.build_calls == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
 def _command(
     *,
     stream: bool,
     agent_hint: str = "",
     file_uuids: tuple[str, ...] = (),
+    incognito: bool = False,
 ) -> ChatTurnCommand:
     """Build one chat command for tests."""
     return ChatTurnCommand(
@@ -192,6 +321,10 @@ def _command(
         tenant_code="",
         agent_hint=AgentHint(agent_hint) if agent_hint else None,
         file_uuids=file_uuids,
+        display_caption=None,
+        agent_message=None,
+        template_id=None,
+        incognito=incognito,
         user=_auth_user(),
     )
 
@@ -206,11 +339,42 @@ def _auth_user() -> AuthenticatedUser:
     )
 
 
+class FakeUsageService:
+    """Usage service fake that records quota consumption calls."""
+
+    def __init__(self) -> None:
+        """Create the fake usage service."""
+        self.calls: list[tuple[str, str, int]] = []
+        self.llm_calls: list[dict[str, Any]] = []
+
+    def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
+        """Record one quota consumption call."""
+        self.calls.append((user_id, resource, amount))
+
+    def consume_task(self, user_id: str) -> None:
+        """Record one completed task quota consumption call."""
+        self.calls.append((user_id, "tasks", 1))
+
+    def check_quota(
+        self,
+        user_id: str,
+        resource: str,
+        amount: int = 1,
+    ) -> tuple[bool, str | None]:
+        """Allow quota checks during chat turn tests."""
+        return True, None
+
+    def record_llm_usage(self, **payload: Any) -> None:
+        """Record one LLM usage persistence call."""
+        self.llm_calls.append(dict(payload))
+
+
 class FakeMemory:
     """In-memory conversation cache fake."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, compress_on_append: bool = False) -> None:
         """Create the fake memory store."""
+        self.compress_on_append = compress_on_append
         self.appended: list[tuple[str, str, str]] = []
 
     async def get_context(self, session_id: str) -> tuple[str | None, list[dict]]:
@@ -222,9 +386,10 @@ class FakeMemory:
         session_id: str,
         role: str,
         content: str,
-    ) -> None:
+    ) -> bool:
         """Record one appended cached message."""
         self.appended.append((session_id, role, content))
+        return self.compress_on_append
 
 
 class FakeHistory:
@@ -262,7 +427,7 @@ class FakeHistory:
         content: str,
         *,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> int:
         """Record assistant message persistence."""
         self.calls.append(("assistant", public_id, user_id, content))
         return 99
@@ -344,6 +509,58 @@ class FakeHistory:
 
 class FakeFileService:
     """Unused file service fake for chat turn tests."""
+
+
+class TrackingUserMemoryService:
+    """Track compression checks and scheduled extraction calls."""
+
+    def __init__(self) -> None:
+        """Create a fake user memory service."""
+        self.compression_checks: list[bool] = []
+        self.extract_calls: list[dict[str, Any]] = []
+        self.session_end_calls: list[dict[str, Any]] = []
+        self.build_calls: list[tuple[str, Any]] = []
+
+    def build_memory_prompt(self, user_id: str, turn: Any) -> str | None:
+        """Return no injected memory prompt during chat turn tests."""
+        return None
+
+    def should_extract_on_compression(self, *, session_compressed: bool) -> bool:
+        """Mirror production compression-only extraction rules."""
+        self.compression_checks.append(session_compressed)
+        return session_compressed
+
+    async def extract_from_session(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        session_summary: str | None,
+        recent_messages: list[dict[str, str]],
+    ) -> None:
+        """Record one compression-triggered extraction call."""
+        self.extract_calls.append({
+            "user_id": user_id,
+            "session_id": session_id,
+            "session_summary": session_summary,
+            "recent_messages": recent_messages,
+        })
+
+    async def extract_on_session_end(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        session_summary: str | None,
+        recent_messages: list[dict[str, str]],
+    ) -> None:
+        """Record one session-end extraction call."""
+        self.session_end_calls.append({
+            "user_id": user_id,
+            "session_id": session_id,
+            "session_summary": session_summary,
+            "recent_messages": recent_messages,
+        })
 
 
 @dataclass

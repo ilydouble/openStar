@@ -3,6 +3,7 @@
     class="flex h-dvh min-h-0 overflow-x-hidden bg-zinc-100 text-zinc-950 antialiased transition-colors duration-300 ease-out dark:bg-zinc-950 dark:text-zinc-100"
   >
     <OnboardingModal :show="showOnboarding" @select-scenario="handleOnboardingScenario" @close="showOnboarding = false" />
+    <QuotaExceededModal :show="showQuotaModal" :current-plan="quotaExceededPlan" @dismiss="showQuotaModal = false" />
 
     <!-- 移动端侧边栏遮罩层 -->
     <div
@@ -23,6 +24,7 @@
       @new="onSidebarNew"
       @navigate="sidebarMobileOpen = false"
       @search="onSessionSearch"
+      @delete-session="onDeleteSession"
     />
 
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col lg:min-w-0">
@@ -123,7 +125,7 @@
               <div
                 v-for="msg in messages"
                 :key="msg.id"
-                v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
+                v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
                 :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
               >
                 <div
@@ -174,19 +176,21 @@
                   <template v-else-if="msg.type === 'data'">
                     <div class="flex flex-col gap-1.5">
                       <div class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in (msg.dataAttachments || [])"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -218,19 +222,21 @@
                         </a>
                       </div>
                       <div v-if="msg.dataAttachments?.length" class="flex flex-wrap items-end gap-1.5">
-                        <div
+                        <button
                           v-for="(row, idx) in msg.dataAttachments"
                           :key="(row.filename || 'data') + '-' + idx"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                          :title="row.filename"
+                          type="button"
+                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
+                          :disabled="!row.file_uuid"
+                          :title="documentChipTitle(row)"
+                          :aria-label="documentChipAria(row)"
+                          @click="openDocumentAttachment(row)"
                         >
-                          <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                          <DocumentFileIcon :filename="row.filename" />
                           <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
                             {{ row.filename }}
                           </span>
-                        </div>
+                        </button>
                       </div>
                       <p
                         v-if="msg.caption"
@@ -330,7 +336,7 @@
             v-else-if="isHomeRoute"
             class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
           >
-            <div class="flex w-full max-w-3xl flex-col items-center text-center">
+            <div class="flex w-full max-w-5xl flex-col items-center text-center">
               <div class="flex flex-col items-center gap-4 animate-home-hero-in">
                 <p
                   class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400"
@@ -343,13 +349,13 @@
                   {{ t('home.heroTitle') }}
                 </h1>
                 <p
-                  class="max-w-md text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400"
+                  class="max-w-2xl text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400"
                 >
                   {{ t('home.subtitle') }}
                 </p>
               </div>
 
-              <div class="mt-6 w-full">
+              <div class="mt-6 w-full max-w-3xl">
                 <SearchBar
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
@@ -358,11 +364,13 @@
                   :active-mode-id="activeShortcutId"
                   :streaming="loading"
                   :send-blocked="uploading"
+                  :incognito="incognitoMode"
                   @submit="handleSubmit"
                   @stop="stopAssistantStream"
                   @file-selected="handleFileSelected"
                   @clear-mode="clearShortcut"
                   @select-mode="setComposerMode"
+                  @toggle-incognito="toggleIncognitoMode"
                 />
 
                 <!-- 附件列表（首页）：会话中的文档/RAG 等；图片与数据文件仅在气泡内展示 -->
@@ -405,45 +413,63 @@
                 </div>
               </div>
 
-              <div
-                class="mt-6 flex max-w-3xl flex-wrap items-start justify-center gap-x-4 gap-y-6 sm:gap-x-6 sm:gap-y-8"
-              >
-                <button
-                  v-for="item in shortcutItems"
+              <div class="mt-7 grid w-full max-w-4xl gap-3 text-left sm:grid-cols-2">
+                <div
+                  v-for="item in homeShortcutItems"
                   :key="item.id"
-                  type="button"
-                  :disabled="loading"
-                  :aria-pressed="activeShortcutId === item.id"
-                  @click="toggleShortcut(item.id)"
-                  class="group flex w-[4.5rem] flex-col items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 disabled:opacity-50 dark:focus-visible:ring-violet-400/40 dark:focus-visible:ring-offset-zinc-950 sm:w-[5.25rem]"
+                  :class="[
+                    'rounded-2xl border bg-white/82 p-4 shadow-sm ring-1 ring-black/5 transition-all duration-200 dark:border-white/10 dark:bg-white/[0.045] dark:ring-white/10',
+                    activeShortcutId === item.id
+                      ? 'border-zinc-950 bg-white shadow-md ring-2 ring-zinc-950/10 dark:border-white/40 dark:bg-white/[0.09] dark:ring-white/20'
+                      : 'border-zinc-200/80',
+                  ]"
                 >
-                  <span
-                    :class="[
-                      'flex h-12 w-12 items-center justify-center rounded-2xl border text-lg shadow-md ring-1 transition-all duration-300 ease-out group-hover:scale-110 group-hover:shadow-lg motion-reduce:transition-colors motion-reduce:group-hover:scale-100 sm:h-14 sm:w-14 sm:text-xl dark:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_16px_32px_-8px_rgba(0,0,0,0.55)]',
-                      item.panel,
-                      activeShortcutId === item.id
-                        ? 'scale-110 ring-2 ring-violet-500 ring-offset-2 ring-offset-zinc-100 dark:ring-violet-400 dark:ring-offset-zinc-950'
-                        : 'ring-black/5 group-hover:ring-black/10 dark:ring-white/10',
-                    ]"
+                  <button
+                    type="button"
+                    :disabled="loading"
+                    :aria-pressed="activeShortcutId === item.id"
+                    class="group flex w-full items-start gap-3 rounded-xl text-left outline-none transition focus-visible:ring-2 focus-visible:ring-violet-500/50 disabled:opacity-50"
+                    @click="toggleShortcut(item.id)"
                   >
-                    {{ item.emoji }}
-                  </span>
-                  <span
-                    :class="[
-                      'max-w-[5.5rem] text-center text-[11px] font-medium leading-tight transition-colors duration-200 sm:text-xs',
-                      activeShortcutId === item.id
-                        ? 'text-violet-600 dark:text-violet-300'
-                        : 'text-zinc-600 group-hover:text-zinc-950 dark:text-zinc-400 dark:group-hover:text-zinc-200',
-                    ]"
-                  >
-                    {{ item.label }}
-                  </span>
-                </button>
+                    <span
+                      :class="[
+                        'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg shadow-sm ring-1 transition-colors',
+                        item.panel,
+                        activeShortcutId === item.id ? 'ring-zinc-950/10 dark:ring-white/20' : 'ring-black/5 dark:ring-white/10',
+                      ]"
+                    >
+                      {{ item.emoji }}
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                        {{ item.role }}
+                      </span>
+                      <span class="mt-1 block text-base font-semibold text-zinc-950 dark:text-white">
+                        {{ item.label }}
+                      </span>
+                      <span class="mt-2 block text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                        {{ item.summary }}
+                      </span>
+                    </span>
+                  </button>
+                  <div class="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      v-for="task in item.taskPreviews"
+                      :key="task"
+                      type="button"
+                      :disabled="loading"
+                      class="min-h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-950 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:border-white/20 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                      @click="startShortcutTask(item.id, task)"
+                    >
+                      {{ task }}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div
                 v-if="activeScenarioTemplate"
-                class="mt-8 w-full rounded-[1.75rem] border border-zinc-200/80 bg-white/80 p-5 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                class="mt-6 w-full max-w-4xl rounded-2xl border border-zinc-200/80 bg-white/80 p-5 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
               >
                 <div class="flex flex-wrap items-start justify-between gap-4">
                   <div>
@@ -462,45 +488,35 @@
                   </div>
                 </div>
 
-                <div class="mt-5 grid gap-4 md:grid-cols-2">
-                  <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                      {{ t('home.scenario.accepted') }}
-                    </p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                      <span
-                        v-for="input in activeScenarioTemplate.accepted"
-                        :key="input"
-                        class="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
-                      >
-                        {{ input }}
-                      </span>
-                    </div>
-                  </div>
-                  <div class="rounded-2xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                      {{ t('home.scenario.outputs') }}
-                    </p>
-                    <ul class="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
-                      <li v-for="output in activeScenarioTemplate.outputs" :key="output">• {{ output }}</li>
-                    </ul>
-                  </div>
-                </div>
-
                 <div class="mt-5">
                   <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                     {{ t('home.scenario.starters') }}
                   </p>
-                  <div class="mt-3 flex flex-wrap gap-2">
+                  <div class="mt-3 grid gap-2 sm:grid-cols-2">
                     <button
                       v-for="starter in activeScenarioTemplate.starters"
                       :key="starter"
                       type="button"
-                      class="rounded-full border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:text-white"
+                      class="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:text-white"
                       @click="applyStarter(starter)"
                     >
                       {{ starter }}
                     </button>
+                  </div>
+                </div>
+
+                <div class="mt-5 rounded-xl bg-zinc-50 p-4 dark:bg-white/[0.04]">
+                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                    {{ t('home.scenario.accepted') }}
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <span
+                      v-for="input in activeScenarioTemplate.accepted"
+                      :key="input"
+                      class="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300"
+                    >
+                      {{ input }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -571,11 +587,13 @@
               :active-mode-id="activeShortcutId"
               :streaming="loading"
               :send-blocked="uploading"
+              :incognito="incognitoMode"
               @submit="handleSubmit"
               @stop="stopAssistantStream"
               @file-selected="handleFileSelected"
               @clear-mode="clearShortcut"
               @select-mode="setComposerMode"
+              @toggle-incognito="toggleIncognitoMode"
             />
           </div>
         </div>
@@ -591,12 +609,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   chatStream,
+  clearSession,
   deleteFileAsset,
   fetchAllSessions,
+  finalizeSession,
   getSessionState,
+  getFileDownloadUrl,
   newSessionId,
   uploadFileAsset,
   searchSessions,
+  QuotaExceededError,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
@@ -606,7 +628,17 @@ import {
 } from '../stores/workspace.js'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
+import QuotaExceededModal from '../components/QuotaExceededModal.vue'
 import SearchBar from '../components/SearchBar.vue'
+import DocumentFileIcon from '../components/DocumentFileIcon.vue'
+import {
+  hydrateSessionMessages,
+  refreshHydratedImageUrls,
+} from '../utils/sessionMessageHydration.js'
+import {
+  composeScenarioPrompt,
+  resolveTemplateBubbleText,
+} from '../utils/scenarioPrompt.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -621,6 +653,10 @@ const sidebarMobileOpen = ref(false)
 // Onboarding: 首次访问时弹出场景选择引导
 const showOnboarding = ref(false)
 
+// Quota: 控制 Token 超限升级弹窗的显示
+const showQuotaModal = ref(false)
+const quotaExceededPlan = ref('trial')
+
 onMounted(() => {
   const completed = getWorkspaceOnboardingComplete()
   if (!completed && !route.params.sessionId) {
@@ -632,10 +668,9 @@ onMounted(() => {
 })
 
 function handleOnboardingScenario(agentHint) {
-  // 用户选择场景后，自动填充对应的 agent hint
-  const scenario = scenarios.value.find(s => s.agentHint === agentHint)
-  if (scenario) {
-    activeShortcutId.value = agentHint
+  const shortcutId = String(agentHint || '').trim()
+  if (shortcutItems.value.some((item) => item.id === shortcutId)) {
+    activeShortcutId.value = shortcutId
     searchRefHome.value?.focus?.()
   }
   setWorkspaceOnboardingComplete(undefined, true)
@@ -649,6 +684,31 @@ function imageItemAlt(filename) {
   return t('chat.imageUploadedAltGeneric')
 }
 
+/** Build the hover title for one document attachment chip. */
+function documentChipTitle(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${name} — ${t('chat.openDocumentFile')}`
+}
+
+/** Build the aria label for one document attachment chip. */
+function documentChipAria(row) {
+  const name = row?.filename || t('chat.documentUntitled')
+  return `${t('chat.openDocumentFile')}: ${name}`
+}
+
+/** Open one uploaded document in a new browser tab. */
+async function openDocumentAttachment(row) {
+  const fileUuid = String(row?.file_uuid || '').trim()
+  if (!fileUuid) return
+  try {
+    const payload = await getFileDownloadUrl(fileUuid)
+    const url = payload?.download_url
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (err) {
+    console.error('Failed to open document attachment:', err)
+  }
+}
+
 /** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string, type?: string }} msg */
 function userImageList(msg) {
   if (msg?.images?.length) return msg.images
@@ -656,6 +716,19 @@ function userImageList(msg) {
     return [{ content: msg.content, filename: msg.filename }]
   }
   return []
+}
+
+/** Return true when a user bubble should stay visible without plain text content. */
+function userMessageVisible(msg) {
+  if (msg?.role !== 'user') return false
+  if (msg.type === 'image') return userImageList(msg).length > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
+  if (msg.type === 'composite') {
+    return userImageList(msg).length > 0
+      || (msg.dataAttachments?.length ?? 0) > 0
+      || Boolean(msg.caption?.trim())
+  }
+  return Boolean(msg?.content?.trim())
 }
 
 /** 用户气泡是否采用「附件」紧凑布局（图片 / 数据文件 / 混合） */
@@ -717,6 +790,8 @@ function stopAssistantStream() {
   streamAbortController.value?.abort()
 }
 const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
+/** When true, chat is ephemeral: no history, memory injection, or session finalize. */
+const incognitoMode = ref(false)
 const scrollEl = ref(null)
 const searchRefHome = ref(null)
 const searchRefChat = ref(null)
@@ -744,9 +819,9 @@ const recentProjects = computed(() => {
   }))
 })
 
-/** 输入区只展示文档等非图片、非数据会话附件；图片与数据文件仅在对话气泡中展示 */
+/** 输入区只展示 RAG 等会话级附件；图片与非图片文件均在 SearchBar 预览或气泡内展示 */
 const composerAttachments = computed(() =>
-  attachmentList.value.filter((a) => a.mode !== 'image' && a.mode !== 'data'),
+  attachmentList.value.filter((a) => a.mode === 'rag'),
 )
 
 async function loadPlanSummary() {
@@ -785,31 +860,34 @@ function extOf(name) {
 
 async function handleFileSelected(file) {
   if (loading.value || uploading.value) return
+  const ext = extOf(file.name)
+  if (!IMAGE_EXTS.has(ext)) return
   uploading.value = true
   uploadError.value = ''
   try {
-    const ext = extOf(file.name)
-    if (IMAGE_EXTS.has(ext)) {
-      const uploaded = await uploadFileAsset(file)
-      attachmentList.value = [...attachmentList.value, uploaded]
-      const url = uploaded.download_url || URL.createObjectURL(file)
-      if (url) {
-        messages.value.push({
-          id: `${Date.now()}-u`,
-          role: 'user',
-          type: 'image',
-          images: [{ content: url, filename: uploaded.original_filename || file.name }],
+    const uploaded = await uploadFileAsset(file)
+    attachmentList.value = [...attachmentList.value, uploaded]
+    const url = uploaded.download_url || URL.createObjectURL(file)
+    if (url) {
+      messages.value.push({
+        id: `${Date.now()}-u`,
+        role: 'user',
+        type: 'image',
+        images: [{
+          file_uuid: uploaded.file_uuid,
+          content: url,
+          filename: uploaded.original_filename || file.name,
+        }],
+      })
+      ensureChatRoute()
+      await scrollBottom()
+      const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+      if (!loading.value) {
+        await sendUserMessage(t('chat.imageReplyPrompt'), hint, {
+          skipUserBubble: true,
+          turnFileUuids: [uploaded.file_uuid],
         })
-        ensureChatRoute()
-        await scrollBottom()
-        const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-        if (!loading.value) {
-          await sendUserMessage(t('chat.imageReplyPrompt'), hint, { skipUserBubble: true })
-        }
       }
-    } else {
-      const uploaded = await uploadFileAsset(file)
-      attachmentList.value = [...attachmentList.value, uploaded]
     }
     await loadSessions()
     await loadPlanSummary()
@@ -837,6 +915,7 @@ function resetConversationState() {
   stopAssistantStream()
   messages.value = []
   sessionId.value = newSessionId()
+  incognitoMode.value = false
   loading.value = false
   streamingMsg.value = null
   attachmentList.value = []
@@ -850,6 +929,52 @@ function resetConversationState() {
     ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
+}
+
+/** Schedule durable memory extraction without blocking navigation. */
+function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
+  if (incognitoMode.value) return
+  if (!messages.value.length) return
+  void finalizeSession(activeSessionId).catch((err) => {
+    console.error('Failed to finalize session memory:', err)
+  })
+}
+
+/** Start a fresh session; optionally enable or disable incognito mode. */
+function startFreshSession({ incognito = false, navigate = true } = {}) {
+  stopAssistantStream()
+  messages.value = []
+  const nextSessionId = newSessionId()
+  sessionId.value = nextSessionId
+  incognitoMode.value = incognito
+  loading.value = false
+  streamingMsg.value = null
+  attachmentList.value = []
+  uploadError.value = ''
+  activeShortcutId.value = ''
+  if (navigate) {
+    router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  }
+  nextTick(() => {
+    searchRefHome.value?.clearPendingImage?.()
+    searchRefChat.value?.clearPendingImage?.()
+    searchRefHome.value?.clearPendingDataFiles?.()
+    searchRefChat.value?.clearPendingDataFiles?.()
+    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  })
+}
+
+/** Toggle incognito mode; enabling starts a fresh ephemeral session immediately. */
+function toggleIncognitoMode() {
+  if (incognitoMode.value) {
+    startFreshSession({ incognito: false })
+    return
+  }
+  if (messages.value.length > 0) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: true })
 }
 
 watch(
@@ -887,12 +1012,20 @@ const shortcutItems = computed(() => {
     return {
       id,
       label: row.label,
+      role: row.role || row.label,
+      summary: row.summary || '',
+      taskPreviews: Array.isArray(row.taskPreviews) ? row.taskPreviews : [],
       placeholder: row.placeholder || '',
+      home: row.home !== false,
       emoji: ui.emoji,
       panel: ui.panel,
     }
   })
 })
+
+const homeShortcutItems = computed(() =>
+  shortcutItems.value.filter((item) => item.home !== false),
+)
 
 const scenarioTemplates = computed(() => {
   const raw = tm('home.templates')
@@ -901,6 +1034,7 @@ const scenarioTemplates = computed(() => {
   return raw.map((row) => ({
     ...row,
     label: labelById[row.id] || row.title,
+    phases: Array.isArray(row.phases) ? row.phases : [],
   }))
 })
 
@@ -910,6 +1044,10 @@ const activeShortcut = computed(
 )
 const activeScenarioTemplate = computed(
   () => scenarioTemplates.value.find((it) => it.id === activeShortcutId.value) || null,
+)
+
+const templateLabelById = computed(() =>
+  Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label])),
 )
 const activeShortcutPill = computed(() => {
   const it = activeShortcut.value
@@ -924,12 +1062,13 @@ const activeShortcutPill = computed(() => {
 const quotaItems = computed(() => {
   const usage = planSummary.value?.usage || {}
   const limits = planSummary.value?.limits || {}
+  const formatLimit = (value) => (value == null ? '∞' : value)
   const items = [
-    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
-    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
+    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}` },
+    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${formatLimit(limits.attachments)}` },
   ]
-  if (limits.messages !== null && limits.messages !== undefined) {
-    items.unshift({ label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` })
+  if (limits.tasks !== null && limits.tasks !== undefined) {
+    items.unshift({ label: t('home.quota.tasks'), value: `${usage.tasks ?? 0}/${formatLimit(limits.tasks)}` })
   }
   return items
 })
@@ -957,6 +1096,12 @@ watch(
   async (nextSessionId) => {
     const resolved = typeof nextSessionId === 'string' ? nextSessionId : newSessionId()
     if (resolved === sessionId.value) return
+    const previousSessionId = sessionId.value
+    const hadMessages = messages.value.length > 0
+    if (hadMessages) {
+      scheduleFinalizeSessionIfNeeded(previousSessionId)
+    }
+    incognitoMode.value = false
     messages.value = []
     sessionId.value = resolved
     loading.value = false
@@ -979,7 +1124,7 @@ async function scrollBottom() {
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
 const SHORTCUT_HINT = {
   research: 'research',
-  code: 'code',
+  code: 'chat',
   docs: 'knowledge',
   chat: 'chat',
   image: 'image',
@@ -1003,6 +1148,24 @@ async function loadSessions() {
     recentSessions.value = sessions.map(mapSessionSummary)
   } catch {
     recentSessions.value = []
+  }
+}
+
+async function onDeleteSession(deletedSessionId) {
+  try {
+    await clearSession(deletedSessionId)
+    recentSessions.value = recentSessions.value.filter(
+      (s) => s.sessionId !== deletedSessionId,
+    )
+    sessionSearchResults.value = sessionSearchResults.value.filter(
+      (s) => s.sessionId !== deletedSessionId,
+    )
+    if (deletedSessionId === sessionId.value) {
+      resetConversationState()
+      await router.push({ name: 'workspace' })
+    }
+  } catch (err) {
+    console.error('Failed to delete session:', err)
   }
 }
 
@@ -1079,14 +1242,13 @@ async function hydrateCurrentSession() {
   }
   try {
     const state = await getSessionState(sessionId.value)
-    messages.value = (state.messages || []).map((msg, index) => ({
-      id: `${sessionId.value}-${index}-${msg.role}`,
-      role: msg.role,
-      content: msg.content || '',
-      steps: [],
-      stepsCollapsed: true,
-      streaming: false,
-    }))
+    messages.value = hydrateSessionMessages({
+      messages: state.messages || [],
+      attachments: state.attachments || [],
+      sessionId: sessionId.value,
+      templateLabels: templateLabelById.value,
+    })
+    await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
     await loadSessions()
     const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
@@ -1104,32 +1266,38 @@ async function hydrateCurrentSession() {
   }
 }
 
-function composeScenarioPrompt(message) {
+function buildTemplateSendPayload(userQuery) {
+  const query = String(userQuery || '').trim()
   const template = activeScenarioTemplate.value
-  if (!template) return message
-  const outputSections = (template.outputs || []).map((item) => `- ${item}`).join('\n')
-  const markdownSections = (template.sections || [])
-    .map((item) => `## ${item}\n- Keep this section concise and actionable.`)
-    .join('\n\n')
-  return [
-    message,
-    '',
-    '---',
-    'Please answer in markdown using this exact section order when it fits the task:',
-    markdownSections,
-    '',
-    'Checklist:',
-    outputSections,
-  ].join('\n')
+  if (!template) {
+    return {
+      bubbleText: query,
+      agentMessage: query,
+      templateId: '',
+    }
+  }
+  return {
+    bubbleText: resolveTemplateBubbleText(activeModeItem.value?.label, query),
+    agentMessage: composeScenarioPrompt(query, template),
+    templateId: activeShortcutId.value || template.id || '',
+  }
 }
 
-async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } = {}) {
+async function sendUserMessage(msg, agentHint = '', {
+  skipUserBubble = false,
+  displayCaption = '',
+  turnFileUuids = null,
+} = {}) {
   const text = String(msg ?? '').trim()
   if (!text || loading.value) return
-  const requestText = composeScenarioPrompt(text)
+  const { bubbleText, agentMessage, templateId } = buildTemplateSendPayload(text)
+  const captionForApi = String(displayCaption || '').trim()
+  const fileUuids = Array.isArray(turnFileUuids)
+    ? turnFileUuids.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
 
   if (!skipUserBubble) {
-    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: text })
+    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: bubbleText })
     ensureChatRoute()
   }
   loading.value = true
@@ -1159,9 +1327,13 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   }
 
   try {
-    for await (const evt of chatStream(requestText, sessionId.value, agentHint, {
+    for await (const evt of chatStream(bubbleText, sessionId.value, agentHint, {
       signal: ac.signal,
-      fileUuids: attachmentList.value.map((item) => item.file_uuid).filter(Boolean),
+      fileUuids,
+      agentMessage: agentMessage !== bubbleText ? agentMessage : '',
+      templateId,
+      ...(captionForApi ? { displayCaption: captionForApi } : {}),
+      incognito: incognitoMode.value,
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1187,14 +1359,22 @@ async function sendUserMessage(msg, agentHint = '', { skipUserBubble = false } =
   } catch (e) {
     const aborted = typeof e?.name === 'string' && e.name === 'AbortError'
     if (!aborted) {
-      const errorMsg = String(e?.message || '')
-      if (errorMsg.includes('401')) {
-        signOut()
-        router.push({ name: 'auth' })
+      if (e instanceof QuotaExceededError) {
+        // 超出 Token 配额 → 显示升级弹窗，而不是报错
+        quotaExceededPlan.value = e.currentPlan
+        showQuotaModal.value = true
+        // 移除空的 assistant bubble
+        commitAssistant({ content: '', streaming: false, stepsCollapsed: true })
       } else {
-        commitAssistant({
-          content: t('chat.requestFailed', { msg: errorMsg }),
-        })
+        const errorMsg = String(e?.message || '')
+        if (errorMsg.includes('401')) {
+          signOut()
+          router.push({ name: 'auth' })
+        } else {
+          commitAssistant({
+            content: t('chat.requestFailed', { msg: errorMsg }),
+          })
+        }
       }
     }
   } finally {
@@ -1240,6 +1420,7 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
       const url = uploaded.download_url || URL.createObjectURL(imageFile)
       if (url) {
         uploadedImages.push({
+          file_uuid: uploaded.file_uuid,
           content: url,
           filename: uploaded.original_filename || imageFile.name,
         })
@@ -1249,7 +1430,10 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
     for (const df of datas) {
       const meta = await uploadFileAsset(df)
       attachmentList.value = [...attachmentList.value, meta]
-      uploadedDataMeta.push({ filename: meta.original_filename || df.name })
+      uploadedDataMeta.push({
+        file_uuid: meta.file_uuid,
+        filename: meta.original_filename || df.name,
+      })
     }
     await loadPlanSummary()
 
@@ -1298,7 +1482,15 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
           uploadedDataMeta.length > 1 ? t('chat.dataReplyPromptMulti') : t('chat.dataReplyPrompt')
       }
     }
-    await sendUserMessage(apiText, hint, { skipUserBubble: true })
+    const turnFileUuids = [
+      ...uploadedImages.map((item) => item.file_uuid),
+      ...uploadedDataMeta.map((item) => item.file_uuid),
+    ].filter(Boolean)
+    await sendUserMessage(apiText, hint, {
+      skipUserBubble: true,
+      turnFileUuids,
+      ...(text ? { displayCaption: text } : {}),
+    })
   } catch (err) {
     uploadError.value = err.message || t('chat.uploadFailed')
   } finally {
@@ -1335,27 +1527,24 @@ function applyStarter(starter) {
   sendUserMessage(starter, hint)
 }
 
+function startShortcutTask(id, task) {
+  activeShortcutId.value = id
+  const hint = SHORTCUT_HINT[id] || ''
+  sendUserMessage(task, hint)
+}
+
 function openRecentSession(targetSessionId) {
   router.push({ name: 'workspace-session', params: { sessionId: targetSessionId } })
 }
 
 function onSidebarNew() {
-  messages.value = []
-  const nextSessionId = newSessionId()
-  sessionId.value = nextSessionId
-  loading.value = false
-  streamingMsg.value = null
-  attachmentList.value = []
-  uploadError.value = ''
-  activeShortcutId.value = ''
-  router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  if (!incognitoMode.value) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: false })
   syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),
-  })
-  nextTick(() => {
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
 }
 

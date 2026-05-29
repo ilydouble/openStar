@@ -6,9 +6,11 @@ from ..envelope import ApiEnvelopeRoute
 from .handlers import (
     add_team_member,
     capture_lead,
+    delete_memory_fact,
     email_login,
     get_admin_overview,
     get_me,
+    get_memory,
     get_plan,
     get_team,
     get_usage_summary,
@@ -18,6 +20,7 @@ from .handlers import (
     send_verification_code,
     sync_project,
     update_byok,
+    update_memory_fact,
     update_team_knowledge_scope,
 )
 from .schemas import (
@@ -41,6 +44,9 @@ router.post("/register-trial",
             response_model=TrialRegistrationResponse)(register_trial)
 router.post("/leads")(capture_lead)
 router.get("/me")(get_me)
+router.get("/memory")(get_memory)
+router.put("/memory/facts/{fact_id}")(update_memory_fact)
+router.delete("/memory/facts/{fact_id}")(delete_memory_fact)
 router.get("/usage/summary")(get_usage_summary)
 router.get("/admin/overview")(get_admin_overview)
 router.get("/billing/plan")(get_plan)

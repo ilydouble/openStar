@@ -17,10 +17,13 @@
     <div
       :class="[
         'relative z-0 rounded-2xl border p-3 shadow-sm backdrop-blur-md transition-all duration-200',
-        'hover:shadow-md focus-within:border-zinc-300/90 focus-within:shadow-md',
-        isDragging
+        'hover:shadow-md focus-within:shadow-md',
+        incognito
+          ? 'border-zinc-400/90 bg-zinc-50/95 ring-2 ring-zinc-400/35 hover:shadow-md focus-within:border-zinc-500/90 focus-within:ring-zinc-400/45 dark:border-zinc-500/55 dark:bg-zinc-900/45 dark:ring-zinc-500/30 dark:focus-within:border-zinc-400/60'
+          : 'hover:shadow-md focus-within:border-zinc-300/90',
+        !incognito && (isDragging
           ? 'border-violet-400 bg-violet-50/80 shadow-md dark:border-violet-400/60 dark:bg-violet-900/20'
-          : 'border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl dark:focus-within:border-white/20',
+          : 'border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl dark:focus-within:border-white/20'),
       ]"
       @dragover.prevent="isDragging = true"
       @dragleave.self="isDragging = false"
@@ -32,6 +35,15 @@
         class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
       >
         <span class="text-sm font-medium text-violet-600 dark:text-violet-300">{{ t('home.chatInput.dropToUpload') }}</span>
+      </div>
+      <!-- 无痕模式提示 -->
+      <div
+        v-if="incognito"
+        class="mb-2 flex items-center gap-2 rounded-xl border border-zinc-300/80 bg-zinc-100/90 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-500/40 dark:bg-zinc-800/70 dark:text-zinc-200"
+        role="status"
+      >
+        <Lock class="h-3.5 w-3.5 shrink-0 text-zinc-600 dark:text-zinc-300" stroke-width="2" aria-hidden="true" />
+        <span class="min-w-0">{{ t('chat.incognito.active') }}</span>
       </div>
       <!-- 模式 pill -->
       <div v-if="modePill" class="mb-2 flex flex-wrap items-center gap-2">
@@ -86,7 +98,7 @@
           {{ t('chat.pendingImagesTrimmed', { n: pendingTrimmedCount, max: MAX_PENDING_IMAGES }) }}
         </p>
       </div>
-      <!-- 待发送数据文件（CSV / Excel）：与图片一致的「先发预览、发送后进气泡」 -->
+      <!-- 待发送非图片文件（Excel / PDF / Word / TXT 等）：与图片一致的「先发预览、发送后进气泡」 -->
       <div v-if="pendingDataFiles.length" class="mb-2 flex flex-col gap-1">
         <div class="flex flex-wrap items-center gap-1.5">
           <div
@@ -95,9 +107,7 @@
             :title="item.file.name"
             class="relative flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-800/80 dark:ring-white/10"
           >
-            <svg class="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            <DocumentFileIcon :filename="item.file.name" />
             <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
               {{ item.file.name }}
             </span>
@@ -143,7 +153,7 @@
               type="file"
               multiple
               class="hidden"
-              accept=".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
+              accept=".pdf,.doc,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.bmp,.gif,.csv,.xls,.xlsx"
               @change="handleFileSelect"
             />
 
@@ -263,6 +273,25 @@
         <div class="flex shrink-0 items-center gap-2">
           <button
             type="button"
+            class="relative flex h-9 w-9 items-center justify-center rounded-full border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30"
+            :class="[
+              incognito
+                ? 'border-zinc-400/90 bg-zinc-200/90 text-zinc-800 hover:bg-zinc-300/90 dark:border-zinc-500/60 dark:bg-zinc-700/80 dark:text-zinc-100 dark:hover:bg-zinc-600/80'
+                : 'border-transparent text-zinc-500 hover:bg-zinc-100/90 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white',
+              (streaming || sendBlocked) ? 'pointer-events-none opacity-35' : '',
+            ]"
+            :disabled="streaming || sendBlocked"
+            :aria-pressed="incognito"
+            :aria-label="incognito ? t('chat.incognito.disable') : t('chat.incognito.enable')"
+            :title="incognito ? t('chat.incognito.disableHint') : t('chat.incognito.enableHint')"
+            @click.stop="$emit('toggle-incognito')"
+          >
+            <Lock v-if="incognito" class="h-[1.125rem] w-[1.125rem]" stroke-width="2" aria-hidden="true" />
+            <LockOpen v-else class="h-[1.125rem] w-[1.125rem]" stroke-width="2" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
             class="relative flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-zinc-500 transition-colors duration-200 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
             :class="[
               isRecordingMic
@@ -328,9 +357,12 @@ import {
   SendHorizontal,
   LayoutGrid,
   ChevronLeft,
+  Lock,
+  LockOpen,
 } from 'lucide-vue-next'
 
 import { transcribeSpeech } from '../api/agent.js'
+import DocumentFileIcon from './DocumentFileIcon.vue'
 
 const TEXTAREA_MAX_HEIGHT = 200
 
@@ -346,8 +378,10 @@ const props = defineProps({
   streaming: { type: Boolean, default: false },
   /** 上传等场景下禁止发起新一轮发送（非流式阶段） */
   sendBlocked: { type: Boolean, default: false },
+  /** 无痕模式：不写入历史、不注入记忆 */
+  incognito: { type: Boolean, default: false },
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode'])
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito'])
 
 const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
@@ -678,7 +712,9 @@ const pendingDataTrimmedCount = ref(0)
 
 const hasComposerPayload = computed(
   () =>
-    !!input.value.trim() || pendingImages.value.length > 0 || pendingDataFiles.value.length > 0,
+    !!input.value.trim()
+    || pendingImages.value.length > 0
+    || pendingDataFiles.value.length > 0,
 )
 
 /** 流式输出时可点停止；录音中可点发送以结束录音并转写后发送；转写中禁用 */
@@ -736,13 +772,17 @@ function onPaste(e) {
 }
 
 const ACCEPTED_EXTS = new Set([
-  '.pdf', '.docx', '.txt', '.md',
+  '.pdf', '.doc', '.docx', '.txt', '.md',
   '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif',
   '.csv', '.xls', '.xlsx',
 ])
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
-const DATA_EXTS = new Set(['.csv', '.xls', '.xlsx'])
+/** 所有非图片的可上传扩展名（与 Excel 共用同一 pending 流程） */
+const DOCUMENT_EXTS = new Set([
+  '.pdf', '.doc', '.docx', '.txt', '.md',
+  '.csv', '.xls', '.xlsx',
+])
 
 function extOf(name) {
   const i = name.lastIndexOf('.')
@@ -802,7 +842,7 @@ function clearPendingImage() {
   if (fileInputEl.value) fileInputEl.value.value = ''
 }
 
-/** 待发送数据文件加入列表（总数不超过 MAX_PENDING_DATA_FILES） */
+/** 将非图片文件加入待发送列表（总数不超过 MAX_PENDING_DATA_FILES） */
 function addPendingDataFiles(files) {
   pendingDataTrimmedCount.value = 0
   const list = Array.isArray(files) ? files : [files]
@@ -815,7 +855,7 @@ function addPendingDataFiles(files) {
     }
     if (!file?.size) continue
     const ext = extOf(file.name)
-    if (!DATA_EXTS.has(ext)) continue
+    if (!DOCUMENT_EXTS.has(ext)) continue
     next.push({ id: makePendingId(), file })
   }
   pendingDataFiles.value = next
@@ -844,8 +884,8 @@ function handleDrop(e) {
     addPendingImageFiles(files)
     return
   }
-  const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
-  if (allData) {
+  const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
+  if (allDocuments) {
     addPendingDataFiles(files)
     return
   }
@@ -856,11 +896,9 @@ function handleDrop(e) {
     addPendingImageFiles([file])
     return
   }
-  if (DATA_EXTS.has(ext)) {
+  if (DOCUMENT_EXTS.has(ext)) {
     addPendingDataFiles([file])
-    return
   }
-  emit('file-selected', file)
 }
 
 const plusMenuItems = [
@@ -912,18 +950,16 @@ function handleFileSelect(e) {
   if (allImages) {
     addPendingImageFiles(files)
   } else {
-    const allData = files.length > 0 && files.every((f) => DATA_EXTS.has(extOf(f.name)))
-    if (allData) {
+    const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
+    if (allDocuments) {
       addPendingDataFiles(files)
     } else {
       const file = files[0]
       const ext = extOf(file.name)
       if (IMAGE_EXTS.has(ext)) {
         addPendingImageFiles([file])
-      } else if (DATA_EXTS.has(ext)) {
+      } else if (DOCUMENT_EXTS.has(ext)) {
         addPendingDataFiles([file])
-      } else {
-        emit('file-selected', file)
       }
     }
   }

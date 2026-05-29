@@ -9,6 +9,7 @@ from icore_agent.application.billing import BillingService
 from icore_agent.application.chat import ChatHistoryService, ChatTurnService
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
+from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
@@ -26,6 +27,7 @@ from icore_agent.infrastructure.memory.chroma_store import (
     get_collection,
     list_documents,
 )
+from icore_agent.infrastructure.persistence.memory import SqlAlchemyUserMemoryRepository
 from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,
@@ -51,6 +53,8 @@ billing_summary_repository = PostgresBillingSummaryRepository(
     control_plane_store)
 usage_store = PostgresUsageRepository(control_plane_store)
 usage_service = UsageService(usage_store)
+user_memory_repository = SqlAlchemyUserMemoryRepository()
+user_memory_service = UserMemoryService(user_memory_repository)
 billing_repository = PostgresBillingRepository(control_plane_store)
 
 account_service = AccountService(
@@ -103,6 +107,11 @@ def get_usage_service() -> UsageService:
     return usage_service
 
 
+def get_user_memory_service() -> UserMemoryService:
+    """Return the singleton user memory service used by chat workflows."""
+    return user_memory_service
+
+
 def get_knowledge_service() -> KnowledgeService:
     """Return the singleton knowledge service used by HTTP handlers."""
     return knowledge_service
@@ -119,12 +128,19 @@ def get_chat_history_service() -> ChatHistoryService:
 
 
 def get_chat_turn_service() -> ChatTurnService:
-    """Return an application service for one HTTP chat turn."""
+    """Return an application service for one HTTP chat turn.
+
+    usage_service is injected so that every chat turn enforces token quota
+    before invoking the LLM.  The LiteLLM success callback in main.py then
+    records actual usage and decrements the quota counter after the reply.
+    """
     return ChatTurnService(
         chat_history=chat_history_service,
         file_service=file_asset_service,
         conversation_memory=memory,
         orchestrator_factory=create_orchestrator,
+        usage_service=usage_service,
+        user_memory_service=user_memory_service,
     )
 
 

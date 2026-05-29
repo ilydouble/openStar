@@ -6,14 +6,44 @@
       <div
         v-for="msg in messages"
         :key="msg.id"
-        v-show="msg.role === 'user' || msg.content || (msg.steps && msg.steps.length)"
+        v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
         :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
       >
         <div
           v-if="msg.role === 'user'"
-          class="max-w-[70%] rounded-2xl rounded-tr-sm bg-white px-4 py-3 text-sm leading-relaxed text-zinc-900 shadow-md ring-1 ring-zinc-200/90 shadow-zinc-900/8 transition-colors duration-300 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10"
+          :class="[
+            'rounded-2xl rounded-tr-sm text-sm leading-relaxed text-zinc-900 shadow-md ring-1 ring-zinc-200/90 shadow-zinc-900/8 transition-colors duration-300 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10',
+            userBubbleUsesAttachLayout(msg)
+              ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] bg-white px-2 py-1.5 dark:bg-zinc-800'
+              : 'max-w-[70%] bg-white px-4 py-3 dark:bg-zinc-800',
+          ]"
         >
-          {{ msg.content }}
+          <template v-if="msg.type === 'file'">
+            <div class="flex flex-col gap-1.5">
+              <div class="flex flex-wrap items-end gap-1.5">
+                <div
+                  v-for="(row, idx) in (msg.fileAttachments || [])"
+                  :key="(row.filename || 'file') + '-' + idx"
+                  class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
+                  :title="row.filename"
+                >
+                  <DocumentFileIcon :filename="row.filename" />
+                  <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
+                    {{ row.filename }}
+                  </span>
+                </div>
+              </div>
+              <p
+                v-if="msg.caption"
+                class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
+              >
+                {{ msg.caption }}
+              </p>
+            </div>
+          </template>
+          <template v-else>
+            {{ msg.content }}
+          </template>
         </div>
         <div v-else class="flex max-w-[80%] gap-3">
           <div
@@ -184,7 +214,7 @@
         />
         <button
           @click="send"
-          :disabled="loading || !draft.trim()"
+          :disabled="loading || uploading || (!draft.trim() && !attachmentList.length)"
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-md transition-all duration-200 enabled:hover:scale-105 enabled:active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400 dark:bg-white dark:text-zinc-950 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -201,6 +231,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import { chatStream, newSessionId, deleteFileAsset, uploadFileAsset } from '../api/agent.js'
+import DocumentFileIcon from './DocumentFileIcon.vue'
 import { isDark as isDarkFn } from '../theme'
 
 const { t } = useI18n()
@@ -230,6 +261,57 @@ const uploadError = ref('')
 const isDraggingFile = ref(false)
 
 const ACCEPTED_EXTS = new Set(['.pdf', '.docx', '.txt', '.md'])
+
+/** Return true when a user bubble should remain visible without plain text content. */
+function userMessageVisible(msg) {
+  if (msg?.type === 'file') {
+    return (msg.fileAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
+  }
+  return Boolean(msg?.content?.trim())
+}
+
+/** Use compact attachment styling for user bubbles that include uploaded files. */
+function userBubbleUsesAttachLayout(msg) {
+  return msg?.role === 'user' && msg?.type === 'file' && (msg.fileAttachments?.length ?? 0) > 0
+}
+
+/** Build the API prompt when the user sends attachments without typing a message. */
+function defaultAttachmentPrompt(attachments) {
+  if (attachments.length > 1) return t('chat.fileReplyPromptMulti')
+  return t('chat.fileReplyPrompt')
+}
+
+function resetTextarea() {
+  nextTick(() => {
+    if (!textareaEl.value) return
+    textareaEl.value.style.height = 'auto'
+  })
+}
+
+function clearComposer() {
+  draft.value = ''
+  attachmentList.value = []
+  uploadError.value = ''
+  resetTextarea()
+}
+
+function pushUserMessage(text, attachments) {
+  const caption = text.trim()
+  if (attachments.length) {
+    messages.value.push({
+      id: Date.now(),
+      role: 'user',
+      type: 'file',
+      fileAttachments: attachments.map((item) => ({
+        filename: item.original_filename || item.filename || t('chat.imageUntitled'),
+        mode: item.mode,
+      })),
+      ...(caption ? { caption } : {}),
+    })
+    return
+  }
+  messages.value.push({ id: Date.now(), role: 'user', content: caption })
+}
 
 function handleDrop(e) {
   isDraggingFile.value = false
@@ -294,14 +376,19 @@ if (props.initialMessage) {
 }
 
 async function send() {
-  const msg = draft.value.trim()
-  if (!msg || loading.value) return
-  draft.value = ''
-  await sendMessage(msg)
+  if (loading.value || uploading.value) return
+  const text = draft.value.trim()
+  const pendingAttachments = [...attachmentList.value]
+  if (!text && !pendingAttachments.length) return
+
+  pushUserMessage(text, pendingAttachments)
+  clearComposer()
+
+  const apiText = text || defaultAttachmentPrompt(pendingAttachments)
+  await sendMessage(apiText, pendingAttachments)
 }
 
-async function sendMessage(msg) {
-  messages.value.push({ id: Date.now(), role: 'user', content: msg })
+async function sendMessage(msg, attachments = []) {
   loading.value = true
   await scrollBottom()
 
@@ -326,7 +413,7 @@ async function sendMessage(msg) {
 
   try {
     for await (const evt of chatStream(msg, sessionId.value, '', {
-      fileUuids: attachmentList.value.map((item) => item.file_uuid).filter(Boolean),
+      fileUuids: attachments.map((item) => item.file_uuid).filter(Boolean),
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {

@@ -67,9 +67,12 @@ def build_orchestrator_system_prompt(
     image_attachments: list[dict[str, Any]] | None = None,
     data_attachments: list[dict[str, Any]] | None = None,
     agent_hint: AgentHint | str | None = None,
+    user_memory_prompt: str | None = None,
 ) -> str:
     """Combine chat prompt policy with context prepared for one turn."""
     parts = [ORCHESTRATOR_SYSTEM_PROMPT_BASE]
+    if user_memory_prompt:
+        parts.append(user_memory_prompt)
     hint = _coerce_agent_hint(agent_hint)
     if hint is not None:
         parts.append("## Routing hint\n" + AGENT_HINT_DIRECTIVES[hint])

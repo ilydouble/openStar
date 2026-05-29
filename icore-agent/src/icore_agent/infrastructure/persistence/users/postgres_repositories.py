@@ -8,12 +8,17 @@ from typing import Any
 
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.application.usage.policy import (
+    admin_usage_overview,
     current_timestamp,
     default_usage,
     ensure_current_usage,
     next_quota_reset,
-    plan_or_free,
+
+    plan_or_trial as plan_or_free,
+    plan_usage_analytics,
+
 )
+from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
 
 from ..sqlalchemy.sync_session import sync_session_scope
@@ -91,7 +96,10 @@ class PostgresRegistrationRepository:
                 return existing, token
 
             now = current_timestamp()
-            plan = plan_or_free("free")
+            # New accounts start on the TRIAL plan — a one-time gift of
+            # 50 000 tokens (~30-50 AI conversations). When the trial quota
+            # is exhausted the user is prompted to upgrade to a paid plan.
+            plan = Plan.TRIAL
             user = repo.save(
                 UserProfile(
                     public_id=str(uuid.uuid4()),
@@ -100,7 +108,7 @@ class PostgresRegistrationRepository:
                     plan=plan.value,
                     plan_label=plan.limits.label,
                     organization_id=f"org_{uuid.uuid4().hex[:12]}",
-                    organization_name=f"{name.strip() or 'Free'} Team",
+                    organization_name=f"{name.strip() or 'Trial'} Team",
                     roles=["owner"],
                     byok=_default_byok(),
                     usage=default_usage(),
@@ -133,23 +141,29 @@ class PostgresBillingSummaryRepository:
             user, usage, should_save = ensure_current_usage(user)
             if should_save:
                 user = repo.save(user)
+
+                usage = {**default_usage(), **dict(user.usage or {})}
             plan = plan_or_free(user.plan)
+
             limits = plan.limits
+            analytics = plan_usage_analytics(usage)
             return {
                 "plan": plan.value,
                 "label": limits.label,
                 "limits": {
-                    "messages": limits.message_limit,
-                    "tokens": limits.token_limit,
-                    "images": limits.image_limit,
+                    "tasks": limits.task_limit,
                     "attachments": limits.attachment_limit,
                 },
                 "usage": {
-                    "messages": usage["message_count"],
-                    "tokens": usage["token_count"],
-                    "images": usage["image_count"],
-                    "attachments": usage["attachment_count"],
+                    "tasks": usage.get("task_count", 0),
+                    "tokens": usage.get("token_count", 0),
+                    "attachments": usage.get("attachment_count", 0),
+                    "estimated_cost": analytics["estimated_cost"],
+                    "model_calls": analytics["model_calls"],
+                    "active_models": analytics["active_models"],
                 },
+                "models_used": analytics["models_used"],
+                "by_model": analytics["by_model"],
                 "quota_period": {
                     "start": usage.get("quota_period_start", 0),
                     "next_reset": next_quota_reset(),
@@ -191,7 +205,7 @@ class PostgresBillingRepository:
     def update_user_plan(self, **payload: Any) -> dict[str, Any]:
         """Update one user's billing plan."""
         user_id = str(payload["user_id"])
-        plan = plan_or_free(str(payload["new_plan"]))
+        plan = plan_or_trial(str(payload["new_plan"]))
         byok = {
             "enabled": bool(payload.get("byok_enabled")),
             "api_key": str(payload.get("byok_api_key") or "").strip(),
@@ -260,8 +274,13 @@ class PostgresUsageRepository:
         return self._store.usage_summary(user_id)
 
     def admin_overview(self, users: list[UserProfile]) -> dict[str, Any]:
-        """Return admin metrics combining PostgreSQL users and JSON usage events."""
-        return self._store.admin_overview(users)
+        """Return admin metrics from PostgreSQL usage plus JSON funnel metadata."""
+        funnel = self._store.account_funnel_meta()
+        return admin_usage_overview(
+            users,
+            new_trials_7d=int(funnel.get("new_trials_7d", 0) or 0),
+            leads=funnel.get("leads"),
+        )
 
 
 class PostgresTeamRepository:

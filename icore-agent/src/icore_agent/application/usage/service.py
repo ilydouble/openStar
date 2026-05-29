@@ -6,7 +6,12 @@ from typing import Any, Protocol
 
 from icore_agent.domain.user import UserProfile
 
-from .policy import check_quota, consume_quota, ensure_current_usage
+from .policy import (
+    append_llm_usage_stats,
+    check_quota,
+    consume_quota,
+    ensure_current_usage,
+)
 
 
 class UsageStore(Protocol):
@@ -54,7 +59,12 @@ class UsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> None:
-        """Persist one LLM usage event and update token quota counters."""
+        """Persist one LLM cost event and update the internal token counter.
+
+        Tokens are recorded for cost reporting only and do NOT count against
+        the user's task quota.  Call consume_task() separately after each
+        successfully completed agent turn.
+        """
         payload = {
             "user_id": user_id,
             "session_id": session_id,
@@ -65,12 +75,42 @@ class UsageService:
             "estimated_cost": round(total_tokens / 1_000_000 * 2.0, 6),
         }
         self._store.record_usage_event(**payload)
-        if total_tokens > 0:
-            try:
-                self.consume_quota(user_id, "tokens", total_tokens)
-            except KeyError:
-                # Usage event persistence must not fail when a legacy token has no user row.
-                return
+
+        if total_tokens <= 0:
+            return
+        try:
+            user = self._store.get_user_by_id(user_id)
+            if user is None:
+                raise KeyError(user_id)
+            user, usage, should_save = ensure_current_usage(user)
+            if should_save:
+                user = self._store.save_user(user)
+                usage = dict(user.usage or {})
+            user = consume_quota(user, usage, "tokens", total_tokens)
+            user = append_llm_usage_stats(
+                user,
+                dict(user.usage or {}),
+                model=model,
+                total_tokens=total_tokens,
+                estimated_cost=payload["estimated_cost"],
+            )
+            self._store.save_user(user)
+        except KeyError:
+            # Usage event persistence must not fail when a legacy token has no user row.
+            return
+
+    def consume_task(self, user_id: str) -> None:
+        """Deduct one task from the user's monthly quota.
+
+        Call this once per successfully completed agent turn, after the reply
+        has been persisted.  Errors are swallowed so a missing user row never
+        crashes the response path.
+        """
+        try:
+            self.consume_quota(user_id, "tasks", 1)
+        except KeyError:
+            # Gracefully handle missing user rows (e.g. during local dev).
+            return
 
     def get_usage_summary(self, user_id: str) -> dict[str, Any]:
         """Load event-based usage metrics for one user."""

@@ -39,7 +39,7 @@ class ZhipuEmbeddingFunction(EmbeddingFunction):
     def __call__(self, input: list[str]) -> Embeddings:  # noqa: A002
         # embedding-3 supports batch up to 64 items; chunk if needed
         results: list[list[float]] = []
-        batch_size = 16
+        batch_size = 64
         for i in range(0, len(input), batch_size):
             batch = input[i: i + batch_size]
             resp = self._client.embeddings.create(

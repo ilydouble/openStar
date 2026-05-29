@@ -1,19 +1,74 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from icore_agent.main import app
 
 
+class ASGISyncTestClient:
+    """Tiny sync wrapper around httpx ASGITransport for API tests."""
+
+    def __init__(self, asgi_app) -> None:
+        """Create a test client bound to one ASGI app."""
+        self._app = asgi_app
+
+    def get(self, url: str, **kwargs):
+        """Issue a GET request against the in-process ASGI app."""
+        return self._request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        """Issue a POST request against the in-process ASGI app."""
+        return self._request("POST", url, **kwargs)
+
+    def delete(self, url: str, **kwargs):
+        """Issue a DELETE request against the in-process ASGI app."""
+        return self._request("DELETE", url, **kwargs)
+
+    def _request(self, method: str, url: str, **kwargs):
+        """Run one ASGI request without Starlette TestClient's thread portal."""
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(
+                self._async_request(method, url, **kwargs)
+            )
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    async def _async_request(self, method: str, url: str, **kwargs):
+        """Execute one request through httpx's async ASGI transport."""
+        transport = httpx.ASGITransport(app=self._app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            request = asyncio.create_task(
+                client.request(method, url, **kwargs))
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            while True:
+                if loop.time() - start > 30:
+                    request.cancel()
+                    raise TimeoutError(f"{method} {url} exceeded test timeout")
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.shield(request),
+                        timeout=1.0,
+                    )
+                except TimeoutError:
+                    continue
+
+
 @pytest.fixture()
 def client():
-    with TestClient(app) as c:
-        yield c
+    return ASGISyncTestClient(app)
 
 
 def _api_data(resp) -> dict:
@@ -33,7 +88,11 @@ def _api_message(resp) -> str:
     return payload["message"]
 
 
-def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
+def _register_trial_direct(
+    client: ASGISyncTestClient,
+    email: str | None = None,
+    name: str = "Trial User",
+) -> dict:
     """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
     from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
@@ -61,7 +120,7 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
     return _api_data(resp)
 
 
-def _trial_headers(client: TestClient) -> dict[str, str]:
+def _trial_headers(client: ASGISyncTestClient) -> dict[str, str]:
     payload = _register_trial_direct(client)
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
@@ -70,7 +129,7 @@ def test_register_trial_and_fetch_account_profile(client: TestClient):
     email = f"trial-{uuid4().hex[:8]}@example.com"
     payload = _register_trial_direct(client, email=email)
     assert payload["access_token"]
-    assert payload["user"]["plan"] == "free"
+    assert payload["user"]["plan"] == "trial"
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {payload['access_token']}"})
@@ -230,7 +289,7 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     plan = client.get("/api/v1/account/billing/plan", headers=headers)
     assert plan.status_code == 200
     payload = _api_data(plan)
-    assert payload["plan"] == "free"
+    assert payload["plan"] == "trial"
     assert payload["byok"]["enabled"] is True
 
 

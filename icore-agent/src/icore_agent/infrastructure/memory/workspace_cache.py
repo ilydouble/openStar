@@ -36,48 +36,72 @@ class WorkspaceCache:
 
     def get_team_profile(self, user_id: str) -> dict[str, Any] | None:
         """Return a cached team profile payload when present."""
-        raw = self._get_client().get(self._team_key(user_id))
+        try:
+            raw = self._get_client().get(self._team_key(user_id))
+        except redis.RedisError as exc:
+            log.warning("workspace_cache_unavailable",
+                        operation="get_team", error=str(exc))
+            return None
         if not raw:
             return None
         try:
             data = json.loads(raw)
             return data if isinstance(data, dict) else None
         except json.JSONDecodeError:
-            log.warning("workspace_cache_decode_error", kind="team", user_id=user_id)
+            log.warning("workspace_cache_decode_error",
+                        kind="team", user_id=user_id)
             return None
 
     def set_team_profile(self, user_id: str, payload: dict[str, Any]) -> None:
         """Cache one team profile payload."""
-        self._get_client().set(
-            self._team_key(user_id),
-            json.dumps(payload, ensure_ascii=False),
-            ex=settings.memory_ttl_seconds,
-        )
+        try:
+            self._get_client().set(
+                self._team_key(user_id),
+                json.dumps(payload, ensure_ascii=False),
+                ex=settings.memory_ttl_seconds,
+            )
+        except redis.RedisError as exc:
+            log.warning("workspace_cache_unavailable",
+                        operation="set_team", error=str(exc))
 
     def get_project_list(self, user_id: str) -> dict[str, Any] | None:
         """Return a cached project list payload when present."""
-        raw = self._get_client().get(self._projects_key(user_id))
+        try:
+            raw = self._get_client().get(self._projects_key(user_id))
+        except redis.RedisError as exc:
+            log.warning("workspace_cache_unavailable",
+                        operation="get_projects", error=str(exc))
+            return None
         if not raw:
             return None
         try:
             data = json.loads(raw)
             return data if isinstance(data, dict) else None
         except json.JSONDecodeError:
-            log.warning("workspace_cache_decode_error", kind="projects", user_id=user_id)
+            log.warning("workspace_cache_decode_error",
+                        kind="projects", user_id=user_id)
             return None
 
     def set_project_list(self, user_id: str, payload: dict[str, Any]) -> None:
         """Cache one project list payload."""
-        self._get_client().set(
-            self._projects_key(user_id),
-            json.dumps(payload, ensure_ascii=False),
-            ex=settings.memory_ttl_seconds,
-        )
+        try:
+            self._get_client().set(
+                self._projects_key(user_id),
+                json.dumps(payload, ensure_ascii=False),
+                ex=settings.memory_ttl_seconds,
+            )
+        except redis.RedisError as exc:
+            log.warning("workspace_cache_unavailable",
+                        operation="set_projects", error=str(exc))
 
     def invalidate_user(self, user_id: str) -> None:
         """Drop cached workspace payloads for one user."""
-        client = self._get_client()
-        client.delete(self._team_key(user_id), self._projects_key(user_id))
+        try:
+            client = self._get_client()
+            client.delete(self._team_key(user_id), self._projects_key(user_id))
+        except redis.RedisError as exc:
+            log.warning("workspace_cache_unavailable",
+                        operation="invalidate", error=str(exc))
 
 
 workspace_cache = WorkspaceCache()

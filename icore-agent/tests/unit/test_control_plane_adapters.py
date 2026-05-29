@@ -52,7 +52,7 @@ class FakePostgresRepository:
     def get_plan_summary(self, user_id: str):
         """Record plan summary delegation."""
         self._store.calls.append(("postgres_get_plan_summary", (user_id,), {}))
-        return {"plan": "free"}
+        return {"plan": "trial"}
 
     def update_user_plan(self, **payload):
         """Record billing plan update delegation."""
@@ -151,7 +151,7 @@ class FakeControlPlaneStore:
 
     def get_plan_summary(self, user_id: str):
         self.calls.append(("get_plan_summary", (user_id,), {}))
-        return {"plan": "free"}
+        return {"plan": "trial"}
 
     def update_byok(self, user_id: str, api_key: str, api_base: str, model: str):
         self.calls.append(

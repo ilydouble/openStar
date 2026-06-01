@@ -1,47 +1,172 @@
-import { computed, ref, unref } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, ref, unref, watch } from 'vue'
+
+const DEFAULT_ITEM_HEIGHT = 96
 
 /**
- * Windowed list helper that keeps only visible rows in the DOM.
+ * Windowed list helper for variable-height rows with measured caching.
  * @param {{
- *   items: import('vue').Ref<Array>,
- *   itemHeight: number | import('vue').Ref<number> | (() => number),
+ *   items: import('vue').Ref<Array> | Array,
+ *   getKey?: (item: unknown, index: number) => string | number,
+ *   estimateHeight?: (item: unknown, index: number) => number,
+ *   itemGap?: number,
  *   overscan?: number,
  * }} options
  */
 export function useVirtualList(options) {
   const scrollTop = ref(0)
-  const containerHeight = ref(240)
-  const overscan = options.overscan ?? 4
+  const containerHeight = ref(320)
+  const overscan = options.overscan ?? 3
+  const itemGap = options.itemGap ?? 24
+  const measuredHeights = ref(new Map())
+  const rowElements = new Map()
 
-  /** Resolve the current fixed row height from a number, ref, or getter. */
-  function resolveItemHeight() {
-    if (typeof options.itemHeight === 'function') {
-      return options.itemHeight()
-    }
-    return Number(unref(options.itemHeight) || 0)
+  /** Resolve the reactive list backing the virtual window. */
+  function resolveItems() {
+    const items = unref(options.items)
+    return Array.isArray(items) ? items : []
   }
 
-  const itemCount = computed(() => options.items.value.length)
-  const totalHeight = computed(() => itemCount.value * resolveItemHeight())
+  /** Resolve a stable cache key for one row. */
+  function getItemKey(item, index) {
+    if (typeof options.getKey === 'function') {
+      return options.getKey(item, index)
+    }
+    return index
+  }
+
+  /** Estimate row height before the row has been measured in the DOM. */
+  function estimateItemHeight(item, index) {
+    if (typeof options.estimateHeight === 'function') {
+      return Math.max(0, Number(options.estimateHeight(item, index)) || 0)
+    }
+    return DEFAULT_ITEM_HEIGHT
+  }
+
+  /** Return cached or estimated height for one row. */
+  function getRowHeight(item, index) {
+    const key = getItemKey(item, index)
+    const measured = measuredHeights.value.get(key)
+    if (measured != null && measured > 0) {
+      return measured
+    }
+    return estimateItemHeight(item, index)
+  }
+
+  const layout = computed(() => {
+    const items = resolveItems()
+    const offsets = []
+    const heights = []
+    let total = 0
+
+    for (let index = 0; index < items.length; index += 1) {
+      offsets.push(total)
+      const height = getRowHeight(items[index], index)
+      heights.push(height)
+      total += height
+      if (index < items.length - 1) {
+        total += itemGap
+      }
+    }
+
+    return { offsets, heights, total }
+  })
+
+  const totalHeight = computed(() => layout.value.total)
+
+  /** Find the first row intersecting a scroll offset. */
+  function findStartIndex(position) {
+    const { offsets, heights } = layout.value
+    if (!offsets.length) return 0
+
+    let low = 0
+    let high = offsets.length - 1
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2)
+      if (offsets[mid] <= position) {
+        low = mid
+      } else {
+        high = mid - 1
+      }
+    }
+
+    const startOffset = offsets[low]
+    const startHeight = heights[low]
+    if (position > startOffset + startHeight && low < offsets.length - 1) {
+      return low + 1
+    }
+    return low
+  }
 
   const startIndex = computed(() =>
-    Math.max(0, Math.floor(scrollTop.value / resolveItemHeight()) - overscan),
+    Math.max(0, findStartIndex(scrollTop.value) - overscan),
   )
 
   const endIndex = computed(() => {
-    const itemHeight = resolveItemHeight()
-    const visibleCount = Math.ceil(containerHeight.value / itemHeight) + overscan * 2
-    return Math.min(itemCount.value, startIndex.value + visibleCount)
+    const items = resolveItems()
+    const viewportBottom = scrollTop.value + containerHeight.value
+    const { offsets } = layout.value
+    let index = startIndex.value
+
+    while (index < items.length && offsets[index] <= viewportBottom) {
+      index += 1
+    }
+
+    return Math.min(items.length, index + overscan + 1)
   })
 
-  const visibleItems = computed(() =>
-    options.items.value.slice(startIndex.value, endIndex.value).map((item, index) => ({
+  const visibleItems = computed(() => {
+    const items = resolveItems()
+    return items.slice(startIndex.value, endIndex.value).map((item, sliceIndex) => ({
       item,
-      index: startIndex.value + index,
-    })),
-  )
+      index: startIndex.value + sliceIndex,
+    }))
+  })
 
-  const offsetY = computed(() => startIndex.value * resolveItemHeight())
+  const offsetY = computed(() => layout.value.offsets[startIndex.value] || 0)
+
+  let resizeObserver = null
+
+  /** Lazily create the shared ResizeObserver for measured rows. */
+  function ensureObserver() {
+    if (resizeObserver || typeof ResizeObserver === 'undefined') return
+    resizeObserver = new ResizeObserver((entries) => {
+      let changed = false
+      const next = new Map(measuredHeights.value)
+
+      for (const entry of entries) {
+        const key = entry.target.dataset.virtualKey
+        if (!key) continue
+        const height = Math.ceil(entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height)
+        if (height > 0 && next.get(key) !== height) {
+          next.set(key, height)
+          changed = true
+        }
+      }
+
+      if (changed) {
+        measuredHeights.value = next
+      }
+    })
+  }
+
+  /** Register or unregister one rendered row for height measurement. */
+  function setRowRef(el, item, index) {
+    ensureObserver()
+    const key = String(getItemKey(item, index))
+
+    if (!el) {
+      const prev = rowElements.get(key)
+      if (prev && resizeObserver) {
+        resizeObserver.unobserve(prev)
+      }
+      rowElements.delete(key)
+      return
+    }
+
+    el.dataset.virtualKey = key
+    rowElements.set(key, el)
+    resizeObserver?.observe(el)
+  }
 
   /** Sync scroll position and viewport size from the list container. */
   function syncContainer(el) {
@@ -50,10 +175,40 @@ export function useVirtualList(options) {
     containerHeight.value = el.clientHeight
   }
 
+  /** Clear cached measurements after the list shrinks or is replaced. */
+  function resetMeasurements() {
+    measuredHeights.value = new Map()
+  }
+
+  /** Disconnect observers created by this list instance. */
+  function destroy() {
+    resizeObserver?.disconnect()
+    resizeObserver = null
+    rowElements.clear()
+  }
+
+  watch(
+    () => resolveItems().length,
+    (next, prev) => {
+      if (next < prev) {
+        resetMeasurements()
+      }
+    },
+  )
+
+  if (getCurrentInstance()) {
+    onBeforeUnmount(() => {
+      destroy()
+    })
+  }
+
   return {
     visibleItems,
     totalHeight,
     offsetY,
     syncContainer,
+    setRowRef,
+    resetMeasurements,
+    destroy,
   }
 }

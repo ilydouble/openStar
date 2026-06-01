@@ -120,14 +120,24 @@
             v-if="isChatRoute && messages.length > 0"
             ref="scrollEl"
             class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6"
+            @scroll="onChatScroll"
           >
-            <div class="mx-auto w-full max-w-3xl space-y-6">
+            <div class="mx-auto w-full max-w-3xl">
               <div
-                v-for="msg in messages"
-                :key="msg.id"
-                v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
-                :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+                class="relative w-full"
+                :style="{ height: `${virtualTotalHeight}px` }"
               >
+                <div
+                  class="absolute left-0 right-0 top-0 will-change-transform"
+                  :style="{ transform: `translateY(${virtualOffsetY}px)` }"
+                >
+                  <div
+                    v-for="{ item: msg, index } in virtualVisibleItems"
+                    :key="msg.id"
+                    :ref="(el) => setVirtualRowRef(el, msg, index)"
+                    class="pb-6"
+                    :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+                  >
                 <div
                   v-if="msg.role === 'user'"
                   :class="[
@@ -294,15 +304,19 @@
                         dark ? 'prose-chat-dark' : 'prose-chat',
                         msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
                       ]"
-                      v-html="renderMarkdown(msg.content)"
-                    />
+                    >
+                      <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
+                      <span v-else v-html="assistantMessageHtml(msg)" />
+                    </div>
+                  </div>
+                </div>
                   </div>
                 </div>
               </div>
 
               <div
                 v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
-                class="flex justify-start gap-3"
+                class="flex justify-start gap-3 pt-2"
               >
                 <div
                   class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
@@ -639,6 +653,7 @@ import {
   resolveTemplateBubbleText,
 } from '../utils/scenarioPrompt.js'
 import { renderMarkdown } from '../utils/sanitizeHtml.js'
+import { useVirtualList } from '../composables/useVirtualList.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -740,6 +755,36 @@ function userBubbleUsesAttachLayout(msg) {
   return false
 }
 
+/** Render assistant markdown once after streaming completes; hydrate history on demand. */
+function assistantMessageHtml(msg) {
+  if (msg?.renderedHtml) return msg.renderedHtml
+  return renderMarkdown(msg?.content)
+}
+
+/** Return whether a chat row should occupy space in the virtual list. */
+function shouldShowChatMessage(msg) {
+  if (msg?.role === 'user') return userMessageVisible(msg)
+  return Boolean(msg.content || (msg.steps && msg.steps.length))
+}
+
+/** Rough row-height estimate before a message row is measured in the DOM. */
+function estimateMessageHeight(msg) {
+  if (msg?.role === 'user') {
+    if (msg.type === 'image' || msg.type === 'data' || msg.type === 'composite') {
+      return 96
+    }
+    const lines = Math.ceil(String(msg.content || '').length / 56)
+    return Math.max(56, lines * 22 + 28)
+  }
+
+  const contentLength = String(msg.content || '').length
+  const stepsExtra = (msg.steps?.length || 0) * 28
+  if (msg.streaming) {
+    return Math.max(88, Math.min(420, contentLength * 0.75 + stepsExtra + 56))
+  }
+  return Math.max(120, Math.min(960, contentLength * 0.45 + stepsExtra + 72))
+}
+
 const UI_BY_ID = {
   research: {
     emoji: '\u{1F50D}',
@@ -774,6 +819,21 @@ const UI_BY_ID = {
 }
 
 const messages = ref([])
+const chatListItems = computed(() => messages.value.filter(shouldShowChatMessage))
+const {
+  visibleItems: virtualVisibleItems,
+  totalHeight: virtualTotalHeight,
+  offsetY: virtualOffsetY,
+  syncContainer: syncVirtualContainer,
+  setRowRef: setVirtualRowRef,
+  resetMeasurements: resetVirtualMeasurements,
+} = useVirtualList({
+  items: chatListItems,
+  getKey: (msg) => msg.id,
+  estimateHeight: estimateMessageHeight,
+  itemGap: 24,
+  overscan: 3,
+})
 const loading = ref(false)
 /** 中止当前 /chat SSE（用户点击停止） */
 const streamAbortController = ref(null)
@@ -907,6 +967,7 @@ async function deleteAttachment(fileUuid) {
 function resetConversationState() {
   stopAssistantStream()
   messages.value = []
+  resetVirtualMeasurements()
   sessionId.value = newSessionId()
   incognitoMode.value = false
   loading.value = false
@@ -1096,6 +1157,7 @@ watch(
     }
     incognitoMode.value = false
     messages.value = []
+    resetVirtualMeasurements()
     sessionId.value = resolved
     loading.value = false
     streamingMsg.value = null
@@ -1104,14 +1166,45 @@ watch(
     activeShortcutId.value = ''
     await loadPlanSummary()
     await hydrateCurrentSession()
-    await nextTick()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  },
+)
+
+watch(
+  () => [virtualTotalHeight.value, loading.value],
+  () => {
+    if (loading.value) {
+      scrollBottom()
+    }
   },
 )
 
 async function scrollBottom() {
   await nextTick()
-  if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  if (messages.value.length > 0) {
+    await nextTick()
+  }
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      applyChatScrollBottom()
+      requestAnimationFrame(() => {
+        applyChatScrollBottom()
+        resolve()
+      })
+    })
+  })
+}
+
+/** Scroll the chat container to the latest message and sync the virtual window. */
+function applyChatScrollBottom() {
+  const el = scrollEl.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+  syncVirtualContainer(el)
+}
+
+/** Keep the virtual list window aligned with the chat scroll container. */
+function onChatScroll(event) {
+  syncVirtualContainer(event.target)
 }
 
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
@@ -1241,6 +1334,7 @@ async function hydrateCurrentSession() {
       sessionId: sessionId.value,
       templateLabels: templateLabelById.value,
     })
+    resetVirtualMeasurements()
     await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
     await loadSessions()
@@ -1254,6 +1348,9 @@ async function hydrateCurrentSession() {
       subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
+    if (messages.value.length > 0) {
+      await scrollBottom()
+    }
   } catch {
     await refreshAttachments()
   }
@@ -1373,9 +1470,11 @@ async function sendUserMessage(msg, agentHint = '', {
   } finally {
     stopQuotaPolling()
     streamAbortController.value = null
+    const cur = messages.value[replyIndex]
     commitAssistant({
       streaming: false,
       stepsCollapsed: true,
+      renderedHtml: renderMarkdown(cur?.content || ''),
     })
     streamingMsg.value = null
     loading.value = false

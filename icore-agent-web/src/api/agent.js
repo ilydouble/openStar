@@ -78,7 +78,7 @@ export async function readAgentError(resp) {
 function *yieldTokenChunks(text) {
   const t = String(text ?? '')
   if (!t) return
-  // 4–8 字：打字感好，marked 重跑成本可接受
+  // Chunk long token bursts so the UI can update incrementally during streaming.
   const SLICE = 6
   if (t.length <= SLICE) {
     yield { kind: 'token', text: t }

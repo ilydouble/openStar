@@ -89,8 +89,10 @@
                 dark ? 'prose-chat-dark' : 'prose-chat',
                 msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
               ]"
-              v-html="renderMarkdown(msg.content)"
-            />
+            >
+              <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
+              <span v-else v-html="assistantMessageHtml(msg)" />
+            </div>
           </div>
         </div>
       </div>
@@ -235,6 +237,12 @@ import { isDark as isDarkFn } from '../theme'
 import { renderMarkdown } from '../utils/sanitizeHtml.js'
 
 const { t } = useI18n()
+
+/** Render assistant markdown once after streaming completes; hydrate history on demand. */
+function assistantMessageHtml(msg) {
+  if (msg?.renderedHtml) return msg.renderedHtml
+  return renderMarkdown(msg?.content)
+}
 
 const props = defineProps({ sessionId: String, initialMessage: String })
 
@@ -435,9 +443,11 @@ async function sendMessage(msg, attachments = []) {
       content: t('chat.requestFailed', { msg: err }),
     })
   } finally {
+    const cur = messages.value[replyIndex]
     commitAssistant({
       streaming: false,
       stepsCollapsed: true,
+      renderedHtml: renderMarkdown(cur?.content || ''),
     })
     streamingMsg.value = null
     loading.value = false

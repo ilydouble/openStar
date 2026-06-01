@@ -85,6 +85,10 @@ class AccountService:
             raise LookupError(
                 "This email is not registered. Please sign up for a trial account first."
             )
+        if purpose == "register" and self._identity_repository.email_exists(normalized):
+            raise ValueError(
+                "This email is already registered. Please use email login instead."
+            )
         return self._verification_repository.send_verification_code(
             normalized,
             client_ip,

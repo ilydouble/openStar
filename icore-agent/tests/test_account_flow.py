@@ -254,6 +254,21 @@ def test_send_login_verification_code_allows_registered_email(client: TestClient
     assert _api_data(resp)["success"] is True
 
 
+def test_send_register_verification_code_rejects_registered_email(client: TestClient):
+    """Registration verification must fail before sending when the email is taken."""
+    email = f"existing-{uuid4().hex[:8]}@example.com"
+    _register_trial_direct(client, email=email)
+
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "register"},
+    )
+    assert resp.status_code == 400
+    assert _api_message(resp) == (
+        "This email is already registered. Please use email login instead."
+    )
+
+
 @patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
 @patch("icore_agent.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
 def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
@@ -310,13 +325,21 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
               "model": "openai/gpt-4o-mini"},
     )
     assert byok.status_code == 200
-    assert _api_data(byok)["enabled"] is True
+    byok_payload = _api_data(byok)
+    assert byok_payload["enabled"] is True
+    assert byok_payload["api_key"] == "****-key"
 
     plan = client.get("/api/v1/account/billing/plan", headers=headers)
     assert plan.status_code == 200
     payload = _api_data(plan)
     assert payload["plan"] == "trial"
     assert payload["byok"]["enabled"] is True
+    assert payload["byok"]["api_key"] == "****-key"
+
+    me = client.get("/api/v1/account/me", headers=headers)
+    assert me.status_code == 200
+    me_payload = _api_data(me)
+    assert me_payload["byok"]["api_key"] == "****-key"
 
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")

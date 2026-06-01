@@ -522,6 +522,8 @@ export default {
     failed: 'Registration failed, please try again',
     emailNotRegistered:
       'This email is not registered. Please sign up for a trial account first.',
+    emailAlreadyRegistered:
+      'This email is already registered. Please use email login instead.',
     trialLabel: 'Trial plan',
     trialSummary: 'You start with baseline message, attachment, and usage visibility limits. Every workspace request runs under an authenticated account instead of anonymous platform spend.',
     features: [
@@ -679,6 +681,7 @@ export default {
       enabled: 'Enabled',
       disabled: 'Disabled',
       apiKey: 'API key',
+      apiKeyPlaceholder: 'Enter a new API key to update',
       apiBase: 'API base',
       model: 'Model ID',
       save: 'Save BYOK',

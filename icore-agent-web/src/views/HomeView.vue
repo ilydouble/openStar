@@ -606,7 +606,6 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { marked } from 'marked'
 import {
   chatStream,
   clearSession,
@@ -639,6 +638,7 @@ import {
   composeScenarioPrompt,
   resolveTemplateBubbleText,
 } from '../utils/scenarioPrompt.js'
+import { renderMarkdown } from '../utils/sanitizeHtml.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -676,8 +676,6 @@ function handleOnboardingScenario(agentHint) {
   setWorkspaceOnboardingComplete(undefined, true)
   showOnboarding.value = false
 }
-
-marked.setOptions({ breaks: true, gfm: true })
 
 function imageItemAlt(filename) {
   if (filename) return t('chat.imageUploadedAlt', { name: filename })
@@ -740,11 +738,6 @@ function userBubbleUsesAttachLayout(msg) {
     return userImageList(msg).length > 0 || (msg.dataAttachments?.length ?? 0) > 0
   }
   return false
-}
-
-function renderMarkdown(text) {
-  if (!text) return '&nbsp;'
-  return marked.parse(text)
 }
 
 const UI_BY_ID = {

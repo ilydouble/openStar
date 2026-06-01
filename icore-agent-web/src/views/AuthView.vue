@@ -206,7 +206,11 @@ async function sendCode() {
     codeSent.value = true
     startCooldown(60)
   } catch (err) {
-    error.value = err.message || t('auth.failed')
+    if (!isLoginMode.value && err.status === 400) {
+      error.value = t('auth.emailAlreadyRegistered')
+    } else {
+      error.value = err.message || t('auth.failed')
+    }
   } finally {
     sending.value = false
   }

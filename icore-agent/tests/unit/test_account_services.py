@@ -304,7 +304,8 @@ def test_admin_overview_requires_platform_admin_role():
     except PermissionError as exc:
         assert "admin" in str(exc).lower()
     else:
-        raise AssertionError("expected owner-only user to be denied admin overview")
+        raise AssertionError(
+            "expected owner-only user to be denied admin overview")
 
     assert usage.calls == []
 
@@ -363,11 +364,12 @@ def test_account_service_sends_login_verification_for_registered_email():
     assert success is True
     assert message == "sent:trial@example.com:127.0.0.1"
     assert [call[0] for call in identity.calls] == ["email_exists"]
-    assert [call[0] for call in verification.calls] == ["send_verification_code"]
+    assert [call[0]
+            for call in verification.calls] == ["send_verification_code"]
 
 
-def test_account_service_register_verification_skips_email_existence_check():
-    """Registration verification should not require a pre-existing account."""
+def test_account_service_sends_register_verification_for_new_email():
+    """Registration verification should proceed only when the email is available."""
     identity = FakeIdentityRepository()
     verification = FakeVerificationRepository()
     service = _account_service(identity=identity, verification=verification)
@@ -379,5 +381,29 @@ def test_account_service_register_verification_skips_email_existence_check():
     )
 
     assert success is True
-    assert identity.calls == []
-    assert [call[0] for call in verification.calls] == ["send_verification_code"]
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert [call[0]
+            for call in verification.calls] == ["send_verification_code"]
+
+
+def test_account_service_rejects_register_verification_for_existing_email():
+    """Registration verification must fail fast when the email is already registered."""
+    identity = FakeIdentityRepository()
+    identity.registered_emails.add("trial@example.com")
+    verification = FakeVerificationRepository()
+    service = _account_service(identity=identity, verification=verification)
+
+    try:
+        service.send_verification_code(
+            "trial@example.com",
+            "127.0.0.1",
+            purpose="register",
+        )
+    except ValueError as exc:
+        assert "already registered" in str(exc)
+    else:
+        raise AssertionError(
+            "expected registered email to be rejected during register verification")
+
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert verification.calls == []

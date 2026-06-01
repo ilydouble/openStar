@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from icore_agent.application.workspace import WorkspaceMetadataService
+from icore_agent.application.account.byok import resolve_api_key_for_update
 from icore_agent.application.usage.policy import (
     admin_usage_overview,
     current_timestamp,
@@ -185,17 +186,19 @@ class PostgresBillingSummaryRepository:
         model: str,
     ) -> dict[str, Any]:
         """Persist BYOK settings for one user."""
-        byok = {
-            "enabled": bool(api_key),
-            "api_key": api_key.strip(),
-            "api_base": api_base.strip(),
-            "model": model.strip(),
-        }
         with sync_session_scope() as session:
             repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 raise KeyError(user_id)
+            existing_key = str((user.byok or {}).get("api_key") or "").strip()
+            resolved_key = resolve_api_key_for_update(api_key, existing_key)
+            byok = {
+                "enabled": bool(resolved_key),
+                "api_key": resolved_key,
+                "api_base": api_base.strip(),
+                "model": model.strip(),
+            }
             repo.save(replace(user, byok=byok, updated_at=current_timestamp()))
         self._store.append_event("byok_updated", user_id=user_id)
         return byok

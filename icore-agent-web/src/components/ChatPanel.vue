@@ -229,19 +229,12 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { marked } from 'marked'
 import { chatStream, newSessionId, deleteFileAsset, uploadFileAsset } from '../api/agent.js'
 import DocumentFileIcon from './DocumentFileIcon.vue'
 import { isDark as isDarkFn } from '../theme'
+import { renderMarkdown } from '../utils/sanitizeHtml.js'
 
 const { t } = useI18n()
-
-marked.setOptions({ breaks: true, gfm: true })
-
-function renderMarkdown(text) {
-  if (!text) return '&nbsp;'
-  return marked.parse(text)
-}
 
 const props = defineProps({ sessionId: String, initialMessage: String })
 

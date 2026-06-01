@@ -71,7 +71,12 @@
             <form class="mt-6 grid gap-4 md:grid-cols-2" @submit.prevent="saveByok">
               <label class="block md:col-span-2">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiKey') }}</span>
-                <input v-model="byokForm.api_key" type="password" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input
+                  v-model="byokForm.api_key"
+                  type="password"
+                  :placeholder="t('account.byok.apiKeyPlaceholder')"
+                  class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                />
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiBase') }}</span>
@@ -392,7 +397,6 @@ async function loadAccount(options = {}) {
   ])
   me.value = meResp
   plan.value = planResp
-  byokForm.api_key = planResp.byok?.api_key || ''
   byokForm.api_base = planResp.byok?.api_base || ''
   byokForm.model = planResp.byok?.model || ''
   adminOverview.value = isPlatformAdmin.value
@@ -430,7 +434,16 @@ function handleVisibilityChange() {
 
 async function saveByok() {
   saved.value = false
-  await updateByok(byokForm)
+  const payload = {
+    api_base: byokForm.api_base,
+    model: byokForm.model,
+  }
+  const nextApiKey = byokForm.api_key.trim()
+  if (nextApiKey) {
+    payload.api_key = nextApiKey
+  }
+  await updateByok(payload)
+  byokForm.api_key = ''
   await loadAccount()
   saved.value = true
 }

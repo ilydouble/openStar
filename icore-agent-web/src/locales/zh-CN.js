@@ -521,6 +521,7 @@ export default {
     loading: '创建中...',
     failed: '注册失败，请重试',
     emailNotRegistered: '该邮箱尚未注册，请先注册试用账号。',
+    emailAlreadyRegistered: '该邮箱已注册，请使用邮箱登录。',
     trialLabel: '试用方案',
     trialSummary: '默认提供基础消息额度、附件额度和使用统计。工作台所有请求都会带上登录态，不再匿名消耗平台 token。',
     features: [
@@ -678,6 +679,7 @@ export default {
       enabled: '已启用',
       disabled: '未启用',
       apiKey: '接入密钥',
+      apiKeyPlaceholder: '输入新的接入密钥以更新',
       apiBase: '接入端点',
       model: '模型标识',
       save: '保存配置',

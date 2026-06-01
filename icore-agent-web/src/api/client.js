@@ -1,5 +1,35 @@
 import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
 import { authTrace } from '../auth/trace.js'
+import i18n from '../i18n/index.js'
+
+/** HTTP statuses that always map to localized copy instead of backend detail. */
+const LOCALIZED_STATUS_CODES = new Set([401, 403, 404, 500])
+
+/**
+ * Build a user-facing API error message without an HTTP status prefix.
+ * @param {number} status
+ * @param {string} [detail]
+ * @param {string} [requestUrl]
+ * @returns {string}
+ */
+export function formatApiErrorMessage(status, detail = '', requestUrl = '') {
+  const t = i18n.global.t.bind(i18n.global)
+  if (LOCALIZED_STATUS_CODES.has(status)) {
+    if (status === 404 && String(requestUrl).includes('/api/v1/account/')) {
+      return t('auth.emailNotRegistered')
+    }
+    const keyByStatus = {
+      401: 'errors.http401',
+      403: 'errors.http403',
+      404: 'errors.http404',
+      500: 'errors.http500',
+    }
+    return t(keyByStatus[status])
+  }
+  const trimmed = String(detail || '').trim()
+  if (trimmed) return trimmed
+  return t('errors.generic')
+}
 
 /**
  * Read a fetch response as JSON when possible and surface backend error detail consistently.
@@ -24,7 +54,12 @@ export async function readJsonResponse(resp) {
   }
 
   if (!resp.ok) {
-    throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
+    const err = new Error(
+      formatApiErrorMessage(resp.status, detail, resp.url || ''),
+    )
+    err.status = resp.status
+    err.detail = detail
+    throw err
   }
   if (
     payload &&

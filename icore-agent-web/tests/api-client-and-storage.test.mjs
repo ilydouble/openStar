@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createJsonClient, readJsonResponse } from '../src/api/client.js'
+import { createJsonClient, formatApiErrorMessage, readJsonResponse } from '../src/api/client.js'
+import i18n from '../src/i18n/index.js'
 import { fetchAllSessions, searchSessions } from '../src/api/agent.js'
 import {
   WORKSPACE_ONBOARDING_KEY,
@@ -39,7 +40,49 @@ test('json client adds auth headers and preserves structured error detail', asyn
           headers: { 'Content-Type': 'application/json' },
         }),
       ),
-    /broken/,
+    (err) => {
+      assert.equal(err.message, 'broken')
+      assert.equal(err.status, 422)
+      assert.ok(!/^HTTP /.test(err.message))
+      return true
+    },
+  )
+})
+
+test('formatApiErrorMessage localizes common HTTP statuses without prefix', () => {
+  i18n.global.locale.value = 'en-US'
+  assert.equal(
+    formatApiErrorMessage(401, 'Unauthorized', '/api/v1/agent/chat'),
+    'Please sign in to continue.',
+  )
+  assert.equal(
+    formatApiErrorMessage(404, 'missing', '/api/v1/account/send-verification-code'),
+    'This email is not registered. Please sign up for a trial account first.',
+  )
+  assert.equal(
+    formatApiErrorMessage(404, 'missing', '/api/v1/agent/sessions/x'),
+    'The requested item was not found.',
+  )
+  assert.ok(!/^HTTP /.test(formatApiErrorMessage(500, 'boom', '/api/test')))
+})
+
+test('readJsonResponse surfaces localized 401 errors', async () => {
+  i18n.global.locale.value = 'en-US'
+  await assert.rejects(
+    () =>
+      readJsonResponse(
+        new Response(JSON.stringify({ detail: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+          url: 'http://localhost/api/v1/agent/chat',
+        }),
+      ),
+    (err) => {
+      assert.equal(err.message, 'Please sign in to continue.')
+      assert.equal(err.status, 401)
+      assert.ok(!/^HTTP /.test(err.message))
+      return true
+    },
   )
 })
 

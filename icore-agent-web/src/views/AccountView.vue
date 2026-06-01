@@ -113,7 +113,7 @@
             <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.knowledgeScope') }}</span>
-                <select v-model="teamForm.scope" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10">
+                <select v-model="teamForm.scope" class="form-select">
                   <option value="private">{{ t('account.team.private') }}</option>
                   <option value="organization">{{ t('account.team.organization') }}</option>
                 </select>
@@ -157,7 +157,7 @@
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.memberRole') }}</span>
-                <select v-model="teamForm.member_role" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10">
+                <select v-model="teamForm.member_role" class="form-select">
                   <option value="owner">{{ t('account.team.owner') }}</option>
                   <option value="editor">{{ t('account.team.editor') }}</option>
                   <option value="viewer">{{ t('account.team.viewer') }}</option>
@@ -223,7 +223,10 @@
             </div>
           </div>
 
-          <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+          <div
+            v-if="isPlatformAdmin"
+            class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+          >
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.adminOverview') }}</p>
             <div class="mt-5 grid gap-3 sm:grid-cols-2">
               <article
@@ -364,6 +367,11 @@ const adminCards = computed(() => {
 
 const heavyUsers = computed(() => adminOverview.value?.heavy_users || [])
 
+/** Platform operators with the admin role can view global usage metrics. */
+const isPlatformAdmin = computed(
+  () => Array.isArray(me.value?.roles) && me.value.roles.includes('admin'),
+)
+
 const byokBadgeClass = computed(() =>
   plan.value?.byok?.enabled
     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
@@ -387,7 +395,9 @@ async function loadAccount(options = {}) {
   byokForm.api_key = planResp.byok?.api_key || ''
   byokForm.api_base = planResp.byok?.api_base || ''
   byokForm.model = planResp.byok?.model || ''
-  adminOverview.value = await fetchAdminOverview().catch(() => null)
+  adminOverview.value = isPlatformAdmin.value
+    ? await fetchAdminOverview().catch(() => null)
+    : null
   team.value = await fetchTeam().catch(() => null)
   teamForm.organization_name = team.value?.organization?.name || ''
   teamForm.scope = team.value?.organization?.knowledge_scope || 'organization'

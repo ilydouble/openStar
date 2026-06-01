@@ -48,7 +48,7 @@
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('enterprise.teamSize') }}</span>
-                <select v-model="form.team_size" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-teal-300 dark:focus:ring-teal-500/10">
+                <select v-model="form.team_size" class="form-select form-select-teal">
                   <option value="1-10">1-10</option>
                   <option value="11-50">11-50</option>
                   <option value="51-200">51-200</option>
@@ -76,7 +76,7 @@
             <div class="grid gap-4 md:grid-cols-2">
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('enterprise.intent') }}</span>
-                <select v-model="form.intent" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-teal-300 dark:focus:ring-teal-500/10">
+                <select v-model="form.intent" class="form-select form-select-teal">
                   <option value="demo">{{ t('enterprise.intentOptions.demo') }}</option>
                   <option value="enterprise">{{ t('enterprise.intentOptions.enterprise') }}</option>
                   <option value="upgrade-team">{{ t('enterprise.intentOptions.team') }}</option>

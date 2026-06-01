@@ -27,8 +27,8 @@ function extractSessionFromAuthResponse(payload) {
   }
 }
 
-export async function sendVerificationCode({ email }) {
-  return client.post(`${BASE}/send-verification-code`, { email })
+export async function sendVerificationCode({ email, purpose = 'register' }) {
+  return client.post(`${BASE}/send-verification-code`, { email, purpose })
 }
 
 export async function registerTrial({ name, email, verification_code }) {

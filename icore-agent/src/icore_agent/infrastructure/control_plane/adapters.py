@@ -43,6 +43,10 @@ class ControlPlaneIdentityRepository:
         """Load a user by email address."""
         return self._postgres.get_user_by_email(email)
 
+    def email_exists(self, email: str) -> bool:
+        """Return whether an email is registered."""
+        return self._postgres.email_exists(email)
+
     def issue_token_for_user(self, user_id: str) -> str:
         """Issue a new access token for an existing user."""
         return self._postgres.issue_token_for_user(user_id)

@@ -198,7 +198,10 @@ async function sendCode() {
   sending.value = true
   error.value = ''
   try {
-    await sendVerificationCode({ email: form.email })
+    await sendVerificationCode({
+      email: form.email,
+      purpose: isLoginMode.value ? 'login' : 'register',
+    })
     step.value = 2
     codeSent.value = true
     startCooldown(60)

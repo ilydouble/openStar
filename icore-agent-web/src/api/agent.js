@@ -1,6 +1,6 @@
 import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
 import { authTrace } from '../auth/trace.js'
-import { readJsonResponse } from './client.js'
+import { formatApiErrorMessage, readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
@@ -60,7 +60,12 @@ export async function readAgentError(resp) {
   }
 
   const detail = String(payload?.detail || payload?.message || '').trim()
-  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
+  const err = new Error(
+    formatApiErrorMessage(resp.status, detail, resp.url || ''),
+  )
+  err.status = resp.status
+  err.detail = detail
+  throw err
 }
 
 /**
@@ -358,7 +363,7 @@ export async function uploadFileAsset(file) {
     body: file,
   })
   if (!putResp.ok) {
-    throw new Error(`Upload failed: HTTP ${putResp.status}`)
+    throw new Error(formatApiErrorMessage(putResp.status, '', putResp.url || ''))
   }
 
   const completeResp = await fetch(`${FILE_BASE}/${upload.file_uuid}/complete/`, {

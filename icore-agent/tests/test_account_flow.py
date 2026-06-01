@@ -228,6 +228,32 @@ def test_send_verification_code_endpoint(client: TestClient):
     assert _api_data(resp)["success"] is True
 
 
+def test_send_login_verification_code_rejects_unregistered_email(client: TestClient):
+    """Login verification must fail before sending when the email is unknown."""
+    email = f"missing-{uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "login"},
+    )
+    assert resp.status_code == 404
+    assert _api_message(resp) == (
+        "This email is not registered. Please sign up for a trial account first."
+    )
+
+
+def test_send_login_verification_code_allows_registered_email(client: TestClient):
+    """Registered users should receive login verification codes."""
+    email = f"login-{uuid4().hex[:8]}@example.com"
+    _register_trial_direct(client, email=email)
+
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "login"},
+    )
+    assert resp.status_code == 200
+    assert _api_data(resp)["success"] is True
+
+
 @patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
 @patch("icore_agent.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
 def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
@@ -323,14 +349,49 @@ def test_can_fetch_session_state(mock_memory, client: TestClient):
     assert payload["attachments"] == []
 
 
-def test_can_fetch_admin_overview(client: TestClient):
+def test_admin_overview_denied_for_owner_only_trial_user(client: TestClient):
+    """Trial users keep owner role but cannot access platform admin overview."""
     headers = _trial_headers(client)
     overview = client.get("/api/v1/account/admin/overview", headers=headers)
+    assert overview.status_code == 403
+
+
+def test_admin_overview_allowed_for_platform_admin(client: TestClient):
+    """Users granted the admin role can access platform admin overview."""
+    email = f"admin-{uuid4().hex[:8]}@example.com"
+    payload = _register_trial_direct(client, email=email)
+    _grant_platform_admin_role(email)
+
+    overview = client.get(
+        "/api/v1/account/admin/overview",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    )
     assert overview.status_code == 200
-    payload = _api_data(overview)
-    assert payload["users"]["total"] >= 1
-    assert "usage" in payload
-    assert "heavy_users" in payload
+    body = _api_data(overview)
+    assert body["users"]["total"] >= 1
+    assert "usage" in body
+    assert "heavy_users" in body
+
+
+def _grant_platform_admin_role(email: str) -> None:
+    """Append the platform admin role to one persisted user profile."""
+    from dataclasses import replace
+
+    from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
+        sync_session_scope,
+    )
+    from icore_agent.infrastructure.persistence.users.sqlalchemy_repository import (
+        SqlAlchemyUserRepository,
+    )
+
+    with sync_session_scope() as session:
+        repo = SqlAlchemyUserRepository(session)
+        user = repo.get_by_email(email)
+        assert user is not None
+        roles = list(user.roles or ["owner"])
+        if "admin" not in roles:
+            roles.append("admin")
+        repo.save(replace(user, roles=roles))
 
 
 def test_can_sync_and_list_projects(client: TestClient):

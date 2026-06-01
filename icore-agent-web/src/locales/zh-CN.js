@@ -9,6 +9,13 @@ export default {
     localeNameEnglish: 'English',
     localeNameChinese: '简体中文',
   },
+  errors: {
+    http401: '请先登录后再继续。',
+    http403: '您没有权限执行此操作。',
+    http404: '未找到请求的内容。',
+    http500: '服务器出现问题，请稍后再试。',
+    generic: '出现错误，请重试。',
+  },
   agents: {
     openLink: '打开',
   },
@@ -513,6 +520,7 @@ export default {
     submit: '完成注册',
     loading: '创建中...',
     failed: '注册失败，请重试',
+    emailNotRegistered: '该邮箱尚未注册，请先注册试用账号。',
     trialLabel: '试用方案',
     trialSummary: '默认提供基础消息额度、附件额度和使用统计。工作台所有请求都会带上登录态，不再匿名消耗平台 token。',
     features: [

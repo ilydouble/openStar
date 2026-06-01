@@ -63,6 +63,12 @@ class PostgresIdentityRepository:
                 return None
             return self._workspace.ensure_organization_for_user(user)
 
+    def email_exists(self, email: str) -> bool:
+        """Return whether an email is registered using a single indexed lookup."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyUserRepository(session)
+            return repo.email_exists(email)
+
     def issue_token_for_user(self, user_id: str) -> str:
         """Issue a legacy opaque token mapped to the user public id."""
         return self._store.issue_legacy_token(user_id)

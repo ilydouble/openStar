@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from icore_agent.domain.user import UserProfile
@@ -31,6 +31,15 @@ class SqlAlchemyUserRepository:
             select(User).where(User.email == normalized)
         )
         return _to_profile(result.scalar_one_or_none())
+
+    def email_exists(self, email: str) -> bool:
+        """Return whether a normalized email is registered (indexed lookup only)."""
+        normalized = email.strip().lower()
+        return bool(
+            self._session.scalar(
+                select(exists().where(User.email == normalized))
+            )
+        )
 
     def list_all(self) -> list[UserProfile]:
         """Return every persisted account profile."""

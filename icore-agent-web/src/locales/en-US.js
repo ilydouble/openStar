@@ -9,6 +9,13 @@ export default {
     localeNameEnglish: 'English',
     localeNameChinese: '简体中文',
   },
+  errors: {
+    http401: 'Please sign in to continue.',
+    http403: 'You do not have permission to perform this action.',
+    http404: 'The requested item was not found.',
+    http500: 'Something went wrong on our end. Please try again later.',
+    generic: 'Something went wrong. Please try again.',
+  },
   agents: {
     openLink: 'Open',
   },
@@ -513,6 +520,8 @@ export default {
     submit: 'Complete registration',
     loading: 'Creating account...',
     failed: 'Registration failed, please try again',
+    emailNotRegistered:
+      'This email is not registered. Please sign up for a trial account first.',
     trialLabel: 'Trial plan',
     trialSummary: 'You start with baseline message, attachment, and usage visibility limits. Every workspace request runs under an authenticated account instead of anonymous platform spend.',
     features: [

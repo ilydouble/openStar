@@ -1,19 +1,74 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from icore_agent.main import app
 
 
+class ASGISyncTestClient:
+    """Tiny sync wrapper around httpx ASGITransport for API tests."""
+
+    def __init__(self, asgi_app) -> None:
+        """Create a test client bound to one ASGI app."""
+        self._app = asgi_app
+
+    def get(self, url: str, **kwargs):
+        """Issue a GET request against the in-process ASGI app."""
+        return self._request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        """Issue a POST request against the in-process ASGI app."""
+        return self._request("POST", url, **kwargs)
+
+    def delete(self, url: str, **kwargs):
+        """Issue a DELETE request against the in-process ASGI app."""
+        return self._request("DELETE", url, **kwargs)
+
+    def _request(self, method: str, url: str, **kwargs):
+        """Run one ASGI request without Starlette TestClient's thread portal."""
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(
+                self._async_request(method, url, **kwargs)
+            )
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    async def _async_request(self, method: str, url: str, **kwargs):
+        """Execute one request through httpx's async ASGI transport."""
+        transport = httpx.ASGITransport(app=self._app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            request = asyncio.create_task(
+                client.request(method, url, **kwargs))
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            while True:
+                if loop.time() - start > 30:
+                    request.cancel()
+                    raise TimeoutError(f"{method} {url} exceeded test timeout")
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.shield(request),
+                        timeout=1.0,
+                    )
+                except TimeoutError:
+                    continue
+
+
 @pytest.fixture()
 def client():
-    with TestClient(app) as c:
-        yield c
+    return ASGISyncTestClient(app)
 
 
 def _api_data(resp) -> dict:
@@ -33,7 +88,11 @@ def _api_message(resp) -> str:
     return payload["message"]
 
 
-def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
+def _register_trial_direct(
+    client: ASGISyncTestClient,
+    email: str | None = None,
+    name: str = "Trial User",
+) -> dict:
     """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
     from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
@@ -61,7 +120,7 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
     return _api_data(resp)
 
 
-def _trial_headers(client: TestClient) -> dict[str, str]:
+def _trial_headers(client: ASGISyncTestClient) -> dict[str, str]:
     payload = _register_trial_direct(client)
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
@@ -169,6 +228,47 @@ def test_send_verification_code_endpoint(client: TestClient):
     assert _api_data(resp)["success"] is True
 
 
+def test_send_login_verification_code_rejects_unregistered_email(client: TestClient):
+    """Login verification must fail before sending when the email is unknown."""
+    email = f"missing-{uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "login"},
+    )
+    assert resp.status_code == 404
+    assert _api_message(resp) == (
+        "This email is not registered. Please sign up for a trial account first."
+    )
+
+
+def test_send_login_verification_code_allows_registered_email(client: TestClient):
+    """Registered users should receive login verification codes."""
+    email = f"login-{uuid4().hex[:8]}@example.com"
+    _register_trial_direct(client, email=email)
+
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "login"},
+    )
+    assert resp.status_code == 200
+    assert _api_data(resp)["success"] is True
+
+
+def test_send_register_verification_code_rejects_registered_email(client: TestClient):
+    """Registration verification must fail before sending when the email is taken."""
+    email = f"existing-{uuid4().hex[:8]}@example.com"
+    _register_trial_direct(client, email=email)
+
+    resp = client.post(
+        "/api/v1/account/send-verification-code",
+        json={"email": email, "purpose": "register"},
+    )
+    assert resp.status_code == 400
+    assert _api_message(resp) == (
+        "This email is already registered. Please use email login instead."
+    )
+
+
 @patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
 @patch("icore_agent.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
 def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
@@ -225,13 +325,21 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
               "model": "openai/gpt-4o-mini"},
     )
     assert byok.status_code == 200
-    assert _api_data(byok)["enabled"] is True
+    byok_payload = _api_data(byok)
+    assert byok_payload["enabled"] is True
+    assert byok_payload["api_key"] == "****-key"
 
     plan = client.get("/api/v1/account/billing/plan", headers=headers)
     assert plan.status_code == 200
     payload = _api_data(plan)
     assert payload["plan"] == "trial"
     assert payload["byok"]["enabled"] is True
+    assert payload["byok"]["api_key"] == "****-key"
+
+    me = client.get("/api/v1/account/me", headers=headers)
+    assert me.status_code == 200
+    me_payload = _api_data(me)
+    assert me_payload["byok"]["api_key"] == "****-key"
 
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
@@ -264,14 +372,49 @@ def test_can_fetch_session_state(mock_memory, client: TestClient):
     assert payload["attachments"] == []
 
 
-def test_can_fetch_admin_overview(client: TestClient):
+def test_admin_overview_denied_for_owner_only_trial_user(client: TestClient):
+    """Trial users keep owner role but cannot access platform admin overview."""
     headers = _trial_headers(client)
     overview = client.get("/api/v1/account/admin/overview", headers=headers)
+    assert overview.status_code == 403
+
+
+def test_admin_overview_allowed_for_platform_admin(client: TestClient):
+    """Users granted the admin role can access platform admin overview."""
+    email = f"admin-{uuid4().hex[:8]}@example.com"
+    payload = _register_trial_direct(client, email=email)
+    _grant_platform_admin_role(email)
+
+    overview = client.get(
+        "/api/v1/account/admin/overview",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    )
     assert overview.status_code == 200
-    payload = _api_data(overview)
-    assert payload["users"]["total"] >= 1
-    assert "usage" in payload
-    assert "heavy_users" in payload
+    body = _api_data(overview)
+    assert body["users"]["total"] >= 1
+    assert "usage" in body
+    assert "heavy_users" in body
+
+
+def _grant_platform_admin_role(email: str) -> None:
+    """Append the platform admin role to one persisted user profile."""
+    from dataclasses import replace
+
+    from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
+        sync_session_scope,
+    )
+    from icore_agent.infrastructure.persistence.users.sqlalchemy_repository import (
+        SqlAlchemyUserRepository,
+    )
+
+    with sync_session_scope() as session:
+        repo = SqlAlchemyUserRepository(session)
+        user = repo.get_by_email(email)
+        assert user is not None
+        roles = list(user.roles or ["owner"])
+        if "admin" not in roles:
+            roles.append("admin")
+        repo.save(replace(user, roles=roles))
 
 
 def test_can_sync_and_list_projects(client: TestClient):

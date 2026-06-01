@@ -41,7 +41,8 @@ class LegacyUserImportService:
             plan=plan.value,
             plan_label=str(profile.get("plan_label") or plan.limits.label),
             organization_id=_optional_string(profile.get("organization_id")),
-            organization_name=_optional_string(profile.get("organization_name")),
+            organization_name=_optional_string(
+                profile.get("organization_name")),
             roles=_roles(profile.get("roles")),
             byok=_mapping(profile.get("byok"), _default_byok()),
             usage=_mapping(profile.get("usage"), default_usage()),

@@ -152,11 +152,14 @@ def _wrap_success_response(request: Request, response: Response) -> Response:
     envelope = _envelope_for_payload(response.status_code, payload)
     if envelope is payload:
         return response
-    return JSONResponse(
+    wrapped = JSONResponse(
         envelope,
         status_code=response.status_code,
         headers=_copy_headers(response),
     )
+    if getattr(response, "background", None) is not None:
+        wrapped.background = response.background
+    return wrapped
 
 
 def _envelope_for_payload(status_code: int, payload: Any) -> dict[str, Any]:

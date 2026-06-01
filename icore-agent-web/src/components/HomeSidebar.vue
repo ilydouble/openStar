@@ -251,7 +251,7 @@
               <p
                 v-if="item.snippet"
                 class="search-snippet mt-1 line-clamp-3 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400"
-                v-html="item.snippet"
+                v-html="sanitizeHtml(item.snippet)"
               />
             </RouterLink>
           </div>
@@ -467,6 +467,7 @@ import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../stores/preferences.js'
 import { clearSession } from '../auth/session.js'
 import ThemeToggle from './ThemeToggle.vue'
+import { sanitizeHtml } from '../utils/sanitizeHtml.js'
 
 const emit = defineEmits(['new', 'navigate', 'search', 'delete-session'])
 

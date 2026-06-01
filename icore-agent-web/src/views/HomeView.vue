@@ -120,14 +120,24 @@
             v-if="isChatRoute && messages.length > 0"
             ref="scrollEl"
             class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6"
+            @scroll="onChatScroll"
           >
-            <div class="mx-auto w-full max-w-3xl space-y-6">
+            <div class="mx-auto w-full max-w-3xl">
               <div
-                v-for="msg in messages"
-                :key="msg.id"
-                v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
-                :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+                class="relative w-full"
+                :style="{ height: `${virtualTotalHeight}px` }"
               >
+                <div
+                  class="absolute left-0 right-0 top-0 will-change-transform"
+                  :style="{ transform: `translateY(${virtualOffsetY}px)` }"
+                >
+                  <div
+                    v-for="{ item: msg, index } in virtualVisibleItems"
+                    :key="msg.id"
+                    :ref="(el) => setVirtualRowRef(el, msg, index)"
+                    class="pb-6"
+                    :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+                  >
                 <div
                   v-if="msg.role === 'user'"
                   :class="[
@@ -294,15 +304,19 @@
                         dark ? 'prose-chat-dark' : 'prose-chat',
                         msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
                       ]"
-                      v-html="renderMarkdown(msg.content)"
-                    />
+                    >
+                      <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
+                      <span v-else v-html="assistantMessageHtml(msg)" />
+                    </div>
+                  </div>
+                </div>
                   </div>
                 </div>
               </div>
 
               <div
                 v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
-                class="flex justify-start gap-3"
+                class="flex justify-start gap-3 pt-2"
               >
                 <div
                   class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
@@ -364,11 +378,13 @@
                   :active-mode-id="activeShortcutId"
                   :streaming="loading"
                   :send-blocked="uploading"
+                  :incognito="incognitoMode"
                   @submit="handleSubmit"
                   @stop="stopAssistantStream"
                   @file-selected="handleFileSelected"
                   @clear-mode="clearShortcut"
                   @select-mode="setComposerMode"
+                  @toggle-incognito="toggleIncognitoMode"
                 />
 
                 <!-- 附件列表（首页）：会话中的文档/RAG 等；图片与数据文件仅在气泡内展示 -->
@@ -585,11 +601,13 @@
               :active-mode-id="activeShortcutId"
               :streaming="loading"
               :send-blocked="uploading"
+              :incognito="incognitoMode"
               @submit="handleSubmit"
               @stop="stopAssistantStream"
               @file-selected="handleFileSelected"
               @clear-mode="clearShortcut"
               @select-mode="setComposerMode"
+              @toggle-incognito="toggleIncognitoMode"
             />
           </div>
         </div>
@@ -602,12 +620,12 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { marked } from 'marked'
 import {
   chatStream,
   clearSession,
   deleteFileAsset,
   fetchAllSessions,
+  finalizeSession,
   getSessionState,
   getFileDownloadUrl,
   newSessionId,
@@ -634,6 +652,8 @@ import {
   composeScenarioPrompt,
   resolveTemplateBubbleText,
 } from '../utils/scenarioPrompt.js'
+import { renderMarkdown } from '../utils/sanitizeHtml.js'
+import { useVirtualList } from '../composables/useVirtualList.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -671,8 +691,6 @@ function handleOnboardingScenario(agentHint) {
   setWorkspaceOnboardingComplete(undefined, true)
   showOnboarding.value = false
 }
-
-marked.setOptions({ breaks: true, gfm: true })
 
 function imageItemAlt(filename) {
   if (filename) return t('chat.imageUploadedAlt', { name: filename })
@@ -737,9 +755,34 @@ function userBubbleUsesAttachLayout(msg) {
   return false
 }
 
-function renderMarkdown(text) {
-  if (!text) return '&nbsp;'
-  return marked.parse(text)
+/** Render assistant markdown once after streaming completes; hydrate history on demand. */
+function assistantMessageHtml(msg) {
+  if (msg?.renderedHtml) return msg.renderedHtml
+  return renderMarkdown(msg?.content)
+}
+
+/** Return whether a chat row should occupy space in the virtual list. */
+function shouldShowChatMessage(msg) {
+  if (msg?.role === 'user') return userMessageVisible(msg)
+  return Boolean(msg.content || (msg.steps && msg.steps.length))
+}
+
+/** Rough row-height estimate before a message row is measured in the DOM. */
+function estimateMessageHeight(msg) {
+  if (msg?.role === 'user') {
+    if (msg.type === 'image' || msg.type === 'data' || msg.type === 'composite') {
+      return 96
+    }
+    const lines = Math.ceil(String(msg.content || '').length / 56)
+    return Math.max(56, lines * 22 + 28)
+  }
+
+  const contentLength = String(msg.content || '').length
+  const stepsExtra = (msg.steps?.length || 0) * 28
+  if (msg.streaming) {
+    return Math.max(88, Math.min(420, contentLength * 0.75 + stepsExtra + 56))
+  }
+  return Math.max(120, Math.min(960, contentLength * 0.45 + stepsExtra + 72))
 }
 
 const UI_BY_ID = {
@@ -776,6 +819,21 @@ const UI_BY_ID = {
 }
 
 const messages = ref([])
+const chatListItems = computed(() => messages.value.filter(shouldShowChatMessage))
+const {
+  visibleItems: virtualVisibleItems,
+  totalHeight: virtualTotalHeight,
+  offsetY: virtualOffsetY,
+  syncContainer: syncVirtualContainer,
+  setRowRef: setVirtualRowRef,
+  resetMeasurements: resetVirtualMeasurements,
+} = useVirtualList({
+  items: chatListItems,
+  getKey: (msg) => msg.id,
+  estimateHeight: estimateMessageHeight,
+  itemGap: 24,
+  overscan: 3,
+})
 const loading = ref(false)
 /** 中止当前 /chat SSE（用户点击停止） */
 const streamAbortController = ref(null)
@@ -785,6 +843,8 @@ function stopAssistantStream() {
   streamAbortController.value?.abort()
 }
 const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
+/** When true, chat is ephemeral: no history, memory injection, or session finalize. */
+const incognitoMode = ref(false)
 const scrollEl = ref(null)
 const searchRefHome = ref(null)
 const searchRefChat = ref(null)
@@ -907,7 +967,9 @@ async function deleteAttachment(fileUuid) {
 function resetConversationState() {
   stopAssistantStream()
   messages.value = []
+  resetVirtualMeasurements()
   sessionId.value = newSessionId()
+  incognitoMode.value = false
   loading.value = false
   streamingMsg.value = null
   attachmentList.value = []
@@ -921,6 +983,52 @@ function resetConversationState() {
     ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
+}
+
+/** Schedule durable memory extraction without blocking navigation. */
+function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
+  if (incognitoMode.value) return
+  if (!messages.value.length) return
+  void finalizeSession(activeSessionId).catch((err) => {
+    console.error('Failed to finalize session memory:', err)
+  })
+}
+
+/** Start a fresh session; optionally enable or disable incognito mode. */
+function startFreshSession({ incognito = false, navigate = true } = {}) {
+  stopAssistantStream()
+  messages.value = []
+  const nextSessionId = newSessionId()
+  sessionId.value = nextSessionId
+  incognitoMode.value = incognito
+  loading.value = false
+  streamingMsg.value = null
+  attachmentList.value = []
+  uploadError.value = ''
+  activeShortcutId.value = ''
+  if (navigate) {
+    router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  }
+  nextTick(() => {
+    searchRefHome.value?.clearPendingImage?.()
+    searchRefChat.value?.clearPendingImage?.()
+    searchRefHome.value?.clearPendingDataFiles?.()
+    searchRefChat.value?.clearPendingDataFiles?.()
+    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
+    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  })
+}
+
+/** Toggle incognito mode; enabling starts a fresh ephemeral session immediately. */
+function toggleIncognitoMode() {
+  if (incognitoMode.value) {
+    startFreshSession({ incognito: false })
+    return
+  }
+  if (messages.value.length > 0) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: true })
 }
 
 watch(
@@ -1008,12 +1116,13 @@ const activeShortcutPill = computed(() => {
 const quotaItems = computed(() => {
   const usage = planSummary.value?.usage || {}
   const limits = planSummary.value?.limits || {}
+  const formatLimit = (value) => (value == null ? '∞' : value)
   const items = [
-    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}/${limits.tokens ?? 0}` },
-    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${limits.attachments ?? 0}` },
+    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}` },
+    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${formatLimit(limits.attachments)}` },
   ]
-  if (limits.messages !== null && limits.messages !== undefined) {
-    items.unshift({ label: t('home.quota.messages'), value: `${usage.messages ?? 0}/${limits.messages ?? 0}` })
+  if (limits.tasks !== null && limits.tasks !== undefined) {
+    items.unshift({ label: t('home.quota.tasks'), value: `${usage.tasks ?? 0}/${formatLimit(limits.tasks)}` })
   }
   return items
 })
@@ -1041,7 +1150,14 @@ watch(
   async (nextSessionId) => {
     const resolved = typeof nextSessionId === 'string' ? nextSessionId : newSessionId()
     if (resolved === sessionId.value) return
+    const previousSessionId = sessionId.value
+    const hadMessages = messages.value.length > 0
+    if (hadMessages) {
+      scheduleFinalizeSessionIfNeeded(previousSessionId)
+    }
+    incognitoMode.value = false
     messages.value = []
+    resetVirtualMeasurements()
     sessionId.value = resolved
     loading.value = false
     streamingMsg.value = null
@@ -1050,14 +1166,45 @@ watch(
     activeShortcutId.value = ''
     await loadPlanSummary()
     await hydrateCurrentSession()
-    await nextTick()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
+  },
+)
+
+watch(
+  () => [virtualTotalHeight.value, loading.value],
+  () => {
+    if (loading.value) {
+      scrollBottom()
+    }
   },
 )
 
 async function scrollBottom() {
   await nextTick()
-  if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  if (messages.value.length > 0) {
+    await nextTick()
+  }
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      applyChatScrollBottom()
+      requestAnimationFrame(() => {
+        applyChatScrollBottom()
+        resolve()
+      })
+    })
+  })
+}
+
+/** Scroll the chat container to the latest message and sync the virtual window. */
+function applyChatScrollBottom() {
+  const el = scrollEl.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+  syncVirtualContainer(el)
+}
+
+/** Keep the virtual list window aligned with the chat scroll container. */
+function onChatScroll(event) {
+  syncVirtualContainer(event.target)
 }
 
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
@@ -1187,6 +1334,7 @@ async function hydrateCurrentSession() {
       sessionId: sessionId.value,
       templateLabels: templateLabelById.value,
     })
+    resetVirtualMeasurements()
     await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
     await loadSessions()
@@ -1200,6 +1348,9 @@ async function hydrateCurrentSession() {
       subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
+    if (messages.value.length > 0) {
+      await scrollBottom()
+    }
   } catch {
     await refreshAttachments()
   }
@@ -1272,6 +1423,7 @@ async function sendUserMessage(msg, agentHint = '', {
       agentMessage: agentMessage !== bubbleText ? agentMessage : '',
       templateId,
       ...(captionForApi ? { displayCaption: captionForApi } : {}),
+      incognito: incognitoMode.value,
     })) {
       if (!evt) continue
       if (evt.kind === 'token') {
@@ -1318,9 +1470,11 @@ async function sendUserMessage(msg, agentHint = '', {
   } finally {
     stopQuotaPolling()
     streamAbortController.value = null
+    const cur = messages.value[replyIndex]
     commitAssistant({
       streaming: false,
       stepsCollapsed: true,
+      renderedHtml: renderMarkdown(cur?.content || ''),
     })
     streamingMsg.value = null
     loading.value = false
@@ -1476,22 +1630,13 @@ function openRecentSession(targetSessionId) {
 }
 
 function onSidebarNew() {
-  messages.value = []
-  const nextSessionId = newSessionId()
-  sessionId.value = nextSessionId
-  loading.value = false
-  streamingMsg.value = null
-  attachmentList.value = []
-  uploadError.value = ''
-  activeShortcutId.value = ''
-  router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+  if (!incognitoMode.value) {
+    scheduleFinalizeSessionIfNeeded()
+  }
+  startFreshSession({ incognito: false })
   syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),
-  })
-  nextTick(() => {
-    ;(messages.value.length ? searchRefChat.value : searchRefHome.value)?.focus?.()
-    if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
 }
 

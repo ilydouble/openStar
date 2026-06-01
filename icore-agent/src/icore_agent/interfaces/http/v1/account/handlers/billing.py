@@ -6,6 +6,7 @@ from icore_agent.application.account import AccountService
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_account_service, get_current_user
+from ...users.serializers import serialize_byok
 from ..schemas.billing import ByokRequest
 
 
@@ -14,7 +15,9 @@ async def get_plan(
     service: AccountService = Depends(get_account_service),
 ) -> dict:
     """Return the current user's account plan."""
-    return service.get_plan(user.public_id)
+    plan = service.get_plan(user.public_id)
+    plan["byok"] = serialize_byok(plan.get("byok"))
+    return plan
 
 
 async def update_byok(
@@ -23,4 +26,6 @@ async def update_byok(
     service: AccountService = Depends(get_account_service),
 ) -> dict:
     """Update Bring Your Own Key settings for the current user."""
-    return service.update_byok(user.public_id, req.api_key, req.api_base, req.model)
+    result = service.update_byok(
+        user.public_id, req.api_key, req.api_base, req.model)
+    return serialize_byok(result)

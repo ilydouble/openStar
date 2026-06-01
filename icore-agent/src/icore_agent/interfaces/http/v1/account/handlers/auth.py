@@ -24,7 +24,16 @@ async def send_verification_code(
     """发送邮箱验证码（同一 IP 24 小时内最多发送 3 次）"""
     client_ip = request.client.host if request.client else "unknown"
 
-    success, message = service.send_verification_code(req.email, client_ip)
+    try:
+        success, message = service.send_verification_code(
+            req.email,
+            client_ip,
+            purpose=req.purpose,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not success:
         raise HTTPException(status_code=429, detail=message)
 

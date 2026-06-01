@@ -8,23 +8,22 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from icore_agent.application.chat.orchestrator import create_orchestrator
 from icore_agent.application.chat.prompts import build_orchestrator_system_prompt
 from icore_agent.application.chat.routing import AgentHint
 from icore_agent.main import app
+from .test_account_flow import ASGISyncTestClient
 
 # ── TestClient (sync) ──────────────────────────────────────────────────────
 
 
 @pytest.fixture()
 def client():
-    with TestClient(app) as c:
-        yield c
+    return ASGISyncTestClient(app)
 
 
-def _auth_headers(client: TestClient) -> dict[str, str]:
+def _auth_headers(client: ASGISyncTestClient) -> dict[str, str]:
     from .test_account_flow import _register_trial_direct
 
     payload = _register_trial_direct(client)
@@ -103,19 +102,50 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.soft_delete_session")
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session._run_session_end_extract_from_context",
+    new_callable=AsyncMock,
+)
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session.resolve_session_extract_context",
+    new_callable=AsyncMock,
+)
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
-def test_clear_session(mock_memory, client):
+def test_clear_session(mock_memory, mock_resolve, mock_extract, _assert_owned, _soft_delete, client):
     mock_memory.clear = AsyncMock()
+    mock_resolve.return_value = (
+        "summary", [{"role": "user", "content": "hello"}])
     resp = client.delete("/api/v1/agent/session/my-session",
                          headers=_auth_headers(client))
     assert resp.status_code == 200
     assert _api_data(resp)["cleared"] is True
+    mock_resolve.assert_awaited_once()
+    _soft_delete.assert_called_once()
     mock_memory.clear.assert_awaited_once_with("my-session")
+    mock_extract.assert_awaited_once()
+
+
+@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch(
+    "icore_agent.interfaces.http.v1.agent.handlers.session._run_finalize_session_extract",
+    new_callable=AsyncMock,
+)
+def test_finalize_session(mock_extract, _assert_owned, client):
+    resp = client.post(
+        "/api/v1/agent/session/my-session/finalize",
+        headers=_auth_headers(client),
+    )
+    assert resp.status_code == 200
+    data = _api_data(resp)
+    assert data["finalized"] is True
+    mock_extract.assert_awaited_once()
 
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.application.chat.orchestrator.LiteLLMModel")
+@patch("icore_agent.application.chat.model_factory.LiteLLMModel")
 @patch("icore_agent.application.chat.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
@@ -123,12 +153,14 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     create_orchestrator()
     _, model_kwargs = mock_model_cls.call_args
     assert model_kwargs["model_id"] == settings.model_id
+    assert "client_args" in model_kwargs
     assert model_kwargs["params"]["max_tokens"] == settings.agent_max_tokens
     assert model_kwargs["params"]["temperature"] == settings.agent_temperature
+    assert "api_key" not in model_kwargs["params"]
     mock_agent_cls.assert_called_once()
-    # Verify 5 tools are registered
+    # Verify all built-in chat tools are registered.
     _, kwargs = mock_agent_cls.call_args
-    assert len(kwargs.get("tools", [])) == 5
+    assert len(kwargs.get("tools", [])) == 6
 
 
 def test_orchestrator_prompt_builder_includes_chat_context():

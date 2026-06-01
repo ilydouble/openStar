@@ -53,6 +53,28 @@
   html.dark ::-webkit-scrollbar-thumb:hover {
     background: rgb(82 82 91);
   }
+
+  /* Native <select> popups follow color-scheme; translucent dark:bg-white/[0.04] breaks them. */
+  select {
+    color-scheme: light;
+  }
+
+  html.dark select {
+    color-scheme: dark;
+    @apply text-zinc-100;
+  }
+
+  html.dark select option,
+  html.dark select optgroup {
+    background-color: rgb(24 24 27);
+    color: rgb(244 244 245);
+  }
+
+  html.dark select option:checked,
+  html.dark select option:focus {
+    background-color: rgb(39 39 42);
+    color: rgb(250 250 250);
+  }
 }
 
 @layer utilities {
@@ -124,6 +146,23 @@
 }
 
 @layer components {
+  .form-select {
+    @apply w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition
+           focus:border-violet-400 focus:ring-4 focus:ring-violet-100
+           dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100
+           dark:focus:border-violet-300 dark:focus:ring-violet-500/10;
+    color-scheme: light;
+  }
+
+  html.dark .form-select {
+    color-scheme: dark;
+  }
+
+  .form-select-teal {
+    @apply focus:border-teal-400 focus:ring-teal-100
+           dark:focus:border-teal-300 dark:focus:ring-teal-500/10;
+  }
+
   .typing-cursor::after {
     content: '\258B';
     @apply animate-pulse text-zinc-400;

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from icore_agent.application.account.service import AccountService
 from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import UserProfile
+from icore_agent.domain.user import AuthenticatedUser, UserProfile
 
 
 def _user(user_id: str = "u1", email: str = "trial@example.com") -> UserProfile:
@@ -28,6 +28,7 @@ class FakeIdentityRepository:
         """Create the fake identity repository."""
         self.calls: list[tuple[str, tuple, dict]] = []
         self.user_by_token = {"tok": _user()}
+        self.registered_emails: set[str] = set()
 
     def get_user_by_token(self, token: str) -> UserProfile | None:
         """Record token lookup calls."""
@@ -44,7 +45,15 @@ class FakeIdentityRepository:
     def get_user_by_email(self, email: str) -> UserProfile | None:
         """Record email lookup calls."""
         self.calls.append(("get_user_by_email", (email,), {}))
+        normalized = email.strip().lower()
+        if normalized in self.registered_emails:
+            return _user(email=normalized)
         return None
+
+    def email_exists(self, email: str) -> bool:
+        """Record indexed email existence checks."""
+        self.calls.append(("email_exists", (email,), {}))
+        return email.strip().lower() in self.registered_emails
 
     def issue_token_for_user(self, user_id: str) -> str:
         """Record legacy token issuance calls."""
@@ -277,3 +286,124 @@ def test_account_service_uses_usage_service_for_quota_checks():
     assert (allowed, reason) == (True, None)
     assert [call[0] for call in usage.calls] == [
         "check_quota", "consume_quota"]
+
+
+def test_admin_overview_requires_platform_admin_role():
+    """Owner-only accounts must not access global admin metrics."""
+    usage = FakeUsageService()
+    service = _account_service(usage=usage)
+    user = AuthenticatedUser(
+        public_id="u1",
+        email="trial@example.com",
+        name="Trial User",
+        roles=("owner",),
+    )
+
+    try:
+        service.get_admin_overview(user)
+    except PermissionError as exc:
+        assert "admin" in str(exc).lower()
+    else:
+        raise AssertionError(
+            "expected owner-only user to be denied admin overview")
+
+    assert usage.calls == []
+
+
+def test_admin_overview_allows_platform_admin_role():
+    """Accounts with the admin role may access global admin metrics."""
+    usage = FakeUsageService()
+    service = _account_service(usage=usage)
+    user = AuthenticatedUser(
+        public_id="u1",
+        email="ops@example.com",
+        name="Ops User",
+        roles=("owner", "admin"),
+    )
+
+    payload = service.get_admin_overview(user)
+
+    assert payload["users"]["total"] == 1
+    assert [call[0] for call in usage.calls] == ["get_admin_overview"]
+
+
+def test_account_service_rejects_login_verification_for_unknown_email():
+    """Login verification must fail fast when the email is not registered."""
+    identity = FakeIdentityRepository()
+    verification = FakeVerificationRepository()
+    service = _account_service(identity=identity, verification=verification)
+
+    try:
+        service.send_verification_code(
+            "missing@example.com",
+            "127.0.0.1",
+            purpose="login",
+        )
+    except LookupError as exc:
+        assert "not registered" in str(exc)
+    else:
+        raise AssertionError("expected unknown login email to be rejected")
+
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert verification.calls == []
+
+
+def test_account_service_sends_login_verification_for_registered_email():
+    """Login verification should proceed only after a registered email check."""
+    identity = FakeIdentityRepository()
+    identity.registered_emails.add("trial@example.com")
+    verification = FakeVerificationRepository()
+    service = _account_service(identity=identity, verification=verification)
+
+    success, message = service.send_verification_code(
+        "trial@example.com",
+        "127.0.0.1",
+        purpose="login",
+    )
+
+    assert success is True
+    assert message == "sent:trial@example.com:127.0.0.1"
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert [call[0]
+            for call in verification.calls] == ["send_verification_code"]
+
+
+def test_account_service_sends_register_verification_for_new_email():
+    """Registration verification should proceed only when the email is available."""
+    identity = FakeIdentityRepository()
+    verification = FakeVerificationRepository()
+    service = _account_service(identity=identity, verification=verification)
+
+    success, message = service.send_verification_code(
+        "new@example.com",
+        "127.0.0.1",
+        purpose="register",
+    )
+
+    assert success is True
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert [call[0]
+            for call in verification.calls] == ["send_verification_code"]
+
+
+def test_account_service_rejects_register_verification_for_existing_email():
+    """Registration verification must fail fast when the email is already registered."""
+    identity = FakeIdentityRepository()
+    identity.registered_emails.add("trial@example.com")
+    verification = FakeVerificationRepository()
+    service = _account_service(identity=identity, verification=verification)
+
+    try:
+        service.send_verification_code(
+            "trial@example.com",
+            "127.0.0.1",
+            purpose="register",
+        )
+    except ValueError as exc:
+        assert "already registered" in str(exc)
+    else:
+        raise AssertionError(
+            "expected registered email to be rejected during register verification")
+
+    assert [call[0] for call in identity.calls] == ["email_exists"]
+    assert verification.calls == []

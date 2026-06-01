@@ -17,6 +17,7 @@ def test_control_plane_constants_only_expose_dataclass_api():
     assert asdict(Usage()) == {
         "task_count": 0,
         "token_count": 0,
+        "attachment_count": 0,
         "quota_period_start": 0,
     }
 
@@ -30,6 +31,7 @@ def test_plan_limits_are_available_as_enum_attributes():
     assert Plan.TRIAL.value == "trial"
     assert isinstance(Plan.TRIAL.limits, PlanLimits)
     assert Plan.TRIAL.limits.task_limit == 10
+    assert Plan.TRIAL.limits.attachment_limit == 10
     assert Plan.TRIAL.limits.price_usd == 0
 
     # PRO: $29/month, 200 tasks.
@@ -50,4 +52,5 @@ def test_plan_limits_are_available_as_enum_attributes():
     # BYOK: unlimited tasks, small infrastructure fee.
     assert Plan.BYOK.value == "byok"
     assert Plan.BYOK.limits.task_limit is None
+    assert Plan.BYOK.limits.attachment_limit is None
     assert Plan.BYOK.limits.price_usd == 9

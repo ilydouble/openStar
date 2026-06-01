@@ -1,6 +1,6 @@
 import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
 import { authTrace } from '../auth/trace.js'
-import { readJsonResponse } from './client.js'
+import { formatApiErrorMessage, readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
@@ -60,7 +60,12 @@ export async function readAgentError(resp) {
   }
 
   const detail = String(payload?.detail || payload?.message || '').trim()
-  throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`)
+  const err = new Error(
+    formatApiErrorMessage(resp.status, detail, resp.url || ''),
+  )
+  err.status = resp.status
+  err.detail = detail
+  throw err
 }
 
 /**
@@ -73,7 +78,7 @@ export async function readAgentError(resp) {
 function *yieldTokenChunks(text) {
   const t = String(text ?? '')
   if (!t) return
-  // 4–8 字：打字感好，marked 重跑成本可接受
+  // Chunk long token bursts so the UI can update incrementally during streaming.
   const SLICE = 6
   if (t.length <= SLICE) {
     yield { kind: 'token', text: t }
@@ -110,6 +115,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   const templateId = typeof options?.templateId === 'string'
     ? options.templateId.trim()
     : ''
+  const incognito = Boolean(options?.incognito)
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -122,6 +128,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       ...(displayCaption ? { display_caption: displayCaption } : {}),
       ...(agentMessage ? { agent_message: agentMessage } : {}),
       ...(templateId ? { template_id: templateId } : {}),
+      ...(incognito ? { incognito: true } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -215,6 +222,18 @@ export async function runSequential(task, useDocker = false) {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ task, use_docker: useDocker }),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Finalize a session so durable user memory can be extracted without deleting it.
+ */
+export async function finalizeSession(sessionId) {
+  const resp = await fetch(`${BASE}/session/${sessionId}/finalize`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders(),
   })
   if (!resp.ok) await readAgentError(resp)
   return readJsonResponse(resp)
@@ -344,7 +363,7 @@ export async function uploadFileAsset(file) {
     body: file,
   })
   if (!putResp.ok) {
-    throw new Error(`Upload failed: HTTP ${putResp.status}`)
+    throw new Error(formatApiErrorMessage(putResp.status, '', putResp.url || ''))
   }
 
   const completeResp = await fetch(`${FILE_BASE}/${upload.file_uuid}/complete/`, {

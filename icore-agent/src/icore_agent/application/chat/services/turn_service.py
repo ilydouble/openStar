@@ -9,7 +9,15 @@ import threading
 from typing import Any, Protocol, cast
 
 from icore_agent.application.files import FileAssetService
+from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
+from icore_agent.application.usage.recording import (
+    begin_turn_usage_capture,
+    end_turn_usage_capture,
+    flush_turn_usage_capture,
+)
+from icore_agent.config import settings
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -18,6 +26,7 @@ from ..commands import ChatTurnCommand
 from ..context import ConversationMemory, dedupe_file_uuids, load_chat_context
 from ..events import ChatStreamEvent, ChatTurnResult
 from ..routing import AgentHint, ChatIntent, ChatRoutingDecision, resolve_routing
+from ..tool_calls import ChatToolCallRecorder
 from .history_service import ChatHistoryService
 
 log = get_logger(__name__)
@@ -49,6 +58,7 @@ class ChatTurnService:
         conversation_memory: ConversationMemory,
         orchestrator_factory: OrchestratorFactory,
         usage_service: UsageService | None = None,
+        user_memory_service: UserMemoryService | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
     ) -> None:
         """Create a chat turn service with its application dependencies."""
@@ -57,18 +67,16 @@ class ChatTurnService:
         self._conversation_memory = conversation_memory
         self._orchestrator_factory = orchestrator_factory
         self._usage_service = usage_service
+        self._user_memory_service = user_memory_service
         self._wall_budget_sec = wall_budget_sec
 
     def _check_task_quota(self, command: ChatTurnCommand) -> None:
-        """Raise PermissionError if the user's monthly task quota is exhausted.
-
-        Called before any LLM work begins so users are never billed for a turn
-        that would be denied.  Skipped when no usage_service is wired (tests).
-        """
+        """Raise PermissionError if the user's monthly task quota is exhausted."""
         if self._usage_service is None:
             return
         allowed, reason = self._usage_service.check_quota(
-            command.user_id, "tasks"
+            command.user_id,
+            "tasks",
         )
         if not allowed:
             raise PermissionError(
@@ -80,29 +88,53 @@ class ChatTurnService:
         self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
+        self._record_turn_quota(command, context)
         enable_tools = route.enable_tools or context.has_attachments
+        tool_call_recorder = self._tool_call_recorder(command)
         loop = asyncio.get_running_loop()
         try:
             with ThreadPoolExecutor(max_workers=1) as executor:
-                result = await loop.run_in_executor(
+                future = loop.run_in_executor(
                     executor,
                     lambda: self._invoke_agent(
                         command=command,
                         route=route,
                         context=context,
                         enable_tools=enable_tools,
+                        tool_call_recorder=tool_call_recorder,
                     ),
                 )
+                start = loop.time()
+                while True:
+                    remaining = self._wall_budget_sec - (loop.time() - start)
+                    if remaining <= 0:
+                        future.cancel()
+                        raise TimeoutError(
+                            f"Agent run exceeded {self._wall_budget_sec}s budget"
+                        )
+                    try:
+                        result = await asyncio.wait_for(
+                            asyncio.shield(future),
+                            timeout=min(1.0, remaining),
+                        )
+                        break
+                    except TimeoutError:
+                        continue
         except Exception:
             log.exception("chat_turn_failed", session_id=command.session_id)
             raise
 
         reply = str(result)
-        await self._append_memory_pair(command, reply)
-        self._save_assistant_message(command, reply)
-        # Deduct one task after the turn is fully persisted.
+        session_compressed = await self._append_memory_pair(command, reply)
+        assistant_message_id = self._save_assistant_message(command, reply)
+        self._attach_tool_calls_to_assistant(
+            command,
+            tool_call_recorder,
+            assistant_message_id,
+        )
         if self._usage_service is not None:
             self._usage_service.consume_task(command.user_id)
+        await self._maybe_extract_user_memory(command, session_compressed)
         return ChatTurnResult(session_id=command.session_id, reply=reply)
 
     async def stream(
@@ -113,12 +145,15 @@ class ChatTurnService:
         self._check_task_quota(command)
         route = await self._prepare_turn(command)
         context = await self._load_context(command)
+        self._record_turn_quota(command, context)
         enable_tools = route.enable_tools or context.has_attachments
+        tool_call_recorder = self._tool_call_recorder(command)
         return self._stream_prepared_turn(
             command=command,
             route=route,
             context=context,
             enable_tools=enable_tools,
+            tool_call_recorder=tool_call_recorder,
         )
 
     async def _prepare_turn(
@@ -127,27 +162,28 @@ class ChatTurnService:
     ) -> ChatRoutingDecision:
         """Persist the user turn and return its routing decision."""
         file_uuids = dedupe_file_uuids(command.file_uuids)
-        self._chat_history.ensure_owned_session(
-            command.session_id,
-            command.user_id,
-            title=command.message.strip()[:255],
-        )
-        metadata = None
-        if file_uuids:
-            metadata = {"file_uuids": list(file_uuids)}
-            caption = (command.display_caption or "").strip()
-            if caption:
-                metadata["display_caption"] = caption
-        template_id = (command.template_id or "").strip()
-        if template_id:
-            metadata = metadata or {}
-            metadata["template_id"] = template_id
-        self._chat_history.save_user_message(
-            command.session_id,
-            command.user_id,
-            command.message,
-            metadata=metadata,
-        )
+        if not command.incognito:
+            self._chat_history.ensure_owned_session(
+                command.session_id,
+                command.user_id,
+                title=command.message.strip()[:255],
+            )
+            metadata = None
+            if file_uuids:
+                metadata = {"file_uuids": list(file_uuids)}
+                caption = (command.display_caption or "").strip()
+                if caption:
+                    metadata["display_caption"] = caption
+            template_id = (command.template_id or "").strip()
+            if template_id:
+                metadata = metadata or {}
+                metadata["template_id"] = template_id
+            self._chat_history.save_user_message(
+                command.session_id,
+                command.user_id,
+                command.message,
+                metadata=metadata,
+            )
         route = resolve_routing(
             command.agent_message or command.message,
             command.agent_hint,
@@ -156,6 +192,7 @@ class ChatTurnService:
             "chat_request",
             session_id=command.session_id,
             stream=command.stream,
+            incognito=command.incognito,
             intent=route.intent.value,
             enable_tools=route.enable_tools,
             agent_hint=route.agent_hint.value if route.agent_hint else None,
@@ -168,9 +205,17 @@ class ChatTurnService:
             session_id=command.session_id,
             file_uuids=command.file_uuids,
             user_id=command.user_id,
+            user_message=command.message,
+            agent_hint=(
+                command.agent_hint.value
+                if command.agent_hint is not None
+                else None
+            ),
+            incognito=command.incognito,
             file_service=self._file_service,
             chat_history=self._chat_history,
             conversation_memory=self._conversation_memory,
+            user_memory_service=self._user_memory_service,
         )
 
     def _invoke_agent(
@@ -180,11 +225,15 @@ class ChatTurnService:
         route: ChatRoutingDecision,
         context,
         enable_tools: bool,
+        tool_call_recorder: ChatToolCallRecorder | None,
         callback_handler: Callable[..., None] | None = None,
     ) -> Any:
         """Invoke the blocking orchestrator for one chat turn."""
+        capture_token = begin_turn_usage_capture()
         runtime_token = set_runtime_user(command.user)
+        result = None
         try:
+            hooks = [tool_call_recorder] if tool_call_recorder is not None else []
             orchestrator = self._orchestrator_factory(
                 callback_handler=callback_handler,
                 summary=context.summary,
@@ -194,12 +243,29 @@ class ChatTurnService:
                 enable_tools=enable_tools,
                 agent_hint=route.agent_hint.value if route.agent_hint else None,
                 session_id=command.session_id,
+                hooks=hooks,
+                user_id=command.user_id,
+                user_memory_prompt=context.user_memory_prompt,
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history
             agent_input = command.agent_message or command.message
-            return runner(agent_input)
+            result = runner(agent_input)
+            return result
         finally:
+            if self._usage_service is not None:
+                recorded = flush_turn_usage_capture(
+                    user_id=command.user_id,
+                    session_id=command.session_id,
+                    record_usage=self._usage_service.record_llm_usage,
+                )
+                if recorded == 0 and result is not None:
+                    self._record_estimated_turn_usage(
+                        command,
+                        prompt=command.agent_message or command.message,
+                        reply=str(result),
+                    )
+            end_turn_usage_capture(capture_token)
             clear_runtime_user(runtime_token)
 
     async def _stream_prepared_turn(
@@ -209,6 +275,7 @@ class ChatTurnService:
         route: ChatRoutingDecision,
         context,
         enable_tools: bool,
+        tool_call_recorder: ChatToolCallRecorder | None,
     ) -> AsyncIterator[ChatStreamEvent]:
         """Stream typed application events for a prepared chat turn."""
         yield self._initial_status_event(route, context)
@@ -259,6 +326,7 @@ class ChatTurnService:
                     route=route,
                     context=context,
                     enable_tools=enable_tools,
+                    tool_call_recorder=tool_call_recorder,
                     callback_handler=on_stream_event,
                 )
             except Exception as exc:
@@ -278,6 +346,7 @@ class ChatTurnService:
         start = loop.time()
         step_idx = 1
         timed_out = False
+        had_error = False
         while True:
             if loop.time() - start > self._wall_budget_sec:
                 timed_out = True
@@ -304,6 +373,7 @@ class ChatTurnService:
                     input_preview=str(status_payload.get("input_preview", "")),
                 )
             elif kind == "error":
+                had_error = True
                 message = payload if isinstance(payload, str) else str(payload)
                 log.error(
                     "agent_stream_error",
@@ -326,11 +396,17 @@ class ChatTurnService:
             )
 
         reply = "".join(full_reply)
-        await self._append_memory_pair(command, reply)
-        self._save_assistant_message(command, reply)
-        # Deduct one task only on clean completion (not on error or timeout).
-        if not timed_out and self._usage_service is not None:
+        session_compressed = await self._append_memory_pair(command, reply)
+        assistant_message_id = self._save_assistant_message(command, reply)
+        self._attach_tool_calls_to_assistant(
+            command,
+            tool_call_recorder,
+            assistant_message_id,
+        )
+        if not timed_out and not had_error and self._usage_service is not None:
             self._usage_service.consume_task(command.user_id)
+        if not timed_out and not had_error:
+            await self._maybe_extract_user_memory(command, session_compressed)
         yield ChatStreamEvent.done()
 
     def _initial_status_event(
@@ -369,27 +445,75 @@ class ChatTurnService:
         self,
         command: ChatTurnCommand,
         reply: str,
-    ) -> None:
+    ) -> bool:
         """Append completed turn messages to the conversation cache."""
-        await self._conversation_memory.append_message(
+        compressed_user = await self._conversation_memory.append_message(
             command.session_id,
-            "user",
+            ChatCompletionRole.USER.value,
             command.message,
         )
-        await self._conversation_memory.append_message(
+        compressed_assistant = await self._conversation_memory.append_message(
             command.session_id,
-            "assistant",
+            ChatCompletionRole.ASSISTANT.value,
             reply,
         )
+        return compressed_user or compressed_assistant
+
+    async def _maybe_extract_user_memory(
+        self,
+        command: ChatTurnCommand,
+        session_compressed: bool,
+    ) -> None:
+        """Run durable memory extraction when Redis compression rolls older turns."""
+        if command.incognito:
+            return
+        if self._user_memory_service is None:
+            log.warning(
+                "user_memory_extract_skipped",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                reason="service_not_wired",
+            )
+            return
+        if not self._user_memory_service.should_extract_on_compression(
+            session_compressed=session_compressed,
+        ):
+            return
+        try:
+            log.info(
+                "user_memory_extract_scheduled",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                reason="session_compressed",
+                session_compressed=session_compressed,
+            )
+            summary, messages = await self._conversation_memory.get_context(
+                command.session_id,
+            )
+            await self._user_memory_service.extract_from_session(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                session_summary=summary,
+                recent_messages=messages,
+            )
+        except Exception as exc:
+            log.warning(
+                "user_memory_extract_schedule_failed",
+                user_id=command.user_id,
+                session_id=command.session_id,
+                error=str(exc),
+            )
 
     def _save_assistant_message(
         self,
         command: ChatTurnCommand,
         reply: str,
-    ) -> None:
+    ) -> int | None:
         """Persist assistant output without failing an already completed turn."""
+        if command.incognito:
+            return None
         try:
-            self._chat_history.save_assistant_message(
+            return self._chat_history.save_assistant_message(
                 command.session_id,
                 command.user_id,
                 reply,
@@ -399,4 +523,127 @@ class ChatTurnService:
                 "assistant_message_persist_failed",
                 session_id=command.session_id,
                 error=str(exc),
+            )
+            return None
+
+    def _tool_call_recorder(
+        self,
+        command: ChatTurnCommand,
+    ) -> ChatToolCallRecorder | None:
+        """Create a tool-call recorder scoped to one persisted chat turn."""
+        if command.incognito:
+            return None
+        return ChatToolCallRecorder(
+            chat_history=self._chat_history,
+            session_id=command.session_id,
+            user_id=command.user_id,
+        )
+
+    def _attach_tool_calls_to_assistant(
+        self,
+        command: ChatTurnCommand,
+        tool_call_recorder: ChatToolCallRecorder | None,
+        assistant_message_id: int | None,
+    ) -> None:
+        """Link observed tool calls to the final assistant message."""
+        if (
+            assistant_message_id is None
+            or tool_call_recorder is None
+            or not tool_call_recorder.tool_call_ids
+        ):
+            return
+        try:
+            self._chat_history.attach_tool_calls_to_assistant(
+                command.session_id,
+                tool_call_ids=tool_call_recorder.tool_call_ids,
+                assistant_message_id=assistant_message_id,
+            )
+        except (PermissionError, LookupError) as exc:
+            log.warning(
+                "assistant_tool_call_link_failed",
+                session_id=command.session_id,
+                error=str(exc),
+            )
+
+    def _record_turn_quota(self, command: ChatTurnCommand, context) -> None:
+        """Persist attachment quota counters for files uploaded in this turn."""
+        if self._usage_service is None:
+            return
+        try:
+            attachment_count = (
+                len(context.image_attachments)
+                + len(context.data_attachments)
+            )
+            if context.attachments_text:
+                attachment_count += 1
+            if attachment_count:
+                self._usage_service.consume_quota(
+                    command.user_id,
+                    "attachments",
+                    attachment_count,
+                )
+        except KeyError:
+            log.warning(
+                "turn_quota_user_missing",
+                user_id=command.user_id,
+                session_id=command.session_id,
+            )
+
+    def _record_estimated_turn_usage(
+        self,
+        command: ChatTurnCommand,
+        *,
+        prompt: str,
+        reply: str,
+    ) -> None:
+        """Persist estimated token usage when LiteLLM callbacks did not fire for a turn."""
+        if self._usage_service is None:
+            return
+        prompt_text = (prompt or "").strip()
+        reply_text = (reply or "").strip()
+        if not prompt_text and not reply_text:
+            return
+        try:
+            from litellm import token_counter
+        except Exception as exc:
+            log.warning("estimated_turn_usage_failed", error=str(exc))
+            return
+        model = settings.effective_model_id()
+        prompt_tokens = 0
+        if prompt_text:
+            try:
+                prompt_tokens = int(
+                    token_counter(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt_text}],
+                    )
+                    or 0
+                )
+            except Exception:
+                prompt_tokens = max(len(prompt_text) // 4, 1)
+        completion_tokens = 0
+        if reply_text:
+            try:
+                completion_tokens = int(
+                    token_counter(model=model, text=reply_text) or 0
+                )
+            except Exception:
+                completion_tokens = max(len(reply_text) // 4, 1)
+        total_tokens = prompt_tokens + completion_tokens
+        if total_tokens <= 0:
+            return
+        try:
+            self._usage_service.record_llm_usage(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+            )
+        except KeyError:
+            log.warning(
+                "estimated_turn_usage_user_missing",
+                user_id=command.user_id,
+                session_id=command.session_id,
             )

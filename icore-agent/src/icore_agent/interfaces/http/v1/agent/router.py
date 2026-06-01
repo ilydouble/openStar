@@ -6,6 +6,7 @@ from ..envelope import ApiEnvelopeRoute
 from .handlers import (
     chat,
     clear_session,
+    finalize_session,
     get_session_state,
     list_sessions,
     search_sessions,
@@ -43,6 +44,10 @@ router.delete(
     "/session/{session_id}",
     summary="Clear conversation memory for a session",
 )(clear_session)
+router.post(
+    "/session/{session_id}/finalize",
+    summary="Extract durable user memory when a session ends",
+)(finalize_session)
 router.get(
     "/sessions/search",
     response_model=SessionSearchResponse,

@@ -5,15 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
 from icore_agent.main import app
+from .test_account_flow import ASGISyncTestClient
 
 
 @pytest.fixture()
 def client():
-    with TestClient(app) as c:
-        yield c
+    return ASGISyncTestClient(app)
 
 
 def _api_data(resp) -> dict:
@@ -33,7 +32,11 @@ def _api_message(resp) -> str:
     return payload["message"]
 
 
-def _register_trial_direct(client: TestClient, email: str | None = None, name: str = "Trial User") -> dict:
+def _register_trial_direct(
+    client: ASGISyncTestClient,
+    email: str | None = None,
+    name: str = "Trial User",
+) -> dict:
     from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 
     email = email or f"trial-{uuid4().hex[:8]}@example.com"
@@ -58,7 +61,7 @@ def _register_trial_direct(client: TestClient, email: str | None = None, name: s
     return _api_data(resp)
 
 
-def _trial_headers(client: TestClient) -> dict[str, str]:
+def _trial_headers(client: ASGISyncTestClient) -> dict[str, str]:
     payload = _register_trial_direct(client)
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
@@ -82,9 +85,11 @@ def test_transcribe_converts_webm_before_zai(mock_zai, mock_prepare, client):
     assert mock_zai.await_args.kwargs["mime"] == "audio/wav"
 
 
+@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.prepare_audio_for_zai_asr")
 @patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe._zai_transcribe", new_callable=AsyncMock)
-def test_transcribe_zai_returns_text(mock_zai, client):
+def test_transcribe_zai_returns_text(mock_zai, mock_prepare, client):
     mock_zai.return_value = "hello world"
+    mock_prepare.return_value = (b"RIFFwav", "speech.wav", "audio/wav")
     headers = _trial_headers(client)
     resp = client.post(
         "/api/v1/agent/transcribe",

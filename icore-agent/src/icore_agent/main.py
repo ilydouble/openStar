@@ -26,7 +26,11 @@ from .shared.http.middleware import (
     RequestIdMiddleware,
 )
 from .shared.logging.app_logger import get_logger
-from .shared.runtime.user_context import current_runtime_user
+from .application.usage.recording import (
+    buffer_litellm_usage_event,
+    build_litellm_usage_event,
+    resolve_litellm_user_id,
+)
 
 
 log = get_logger(__name__)
@@ -37,28 +41,42 @@ log = get_logger(__name__)
 # rolling-summary compression, memU extraction — all are counted.
 
 def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
-    usage = getattr(completion_response, "usage", None)
-    if usage is None:
+    event = build_litellm_usage_event(kwargs, completion_response)
+    if event is None:
+        log.warning(
+            "llm_token_usage_missing",
+            model=kwargs.get("model", "unknown"),
+        )
         return
     elapsed = (end_time - start_time).total_seconds()
+    buffered = buffer_litellm_usage_event(event)
     log.info(
         "llm_token_usage",
-        model=kwargs.get("model", "unknown"),
-        prompt_tokens=getattr(usage, "prompt_tokens", 0),
-        completion_tokens=getattr(usage, "completion_tokens", 0),
-        total_tokens=getattr(usage, "total_tokens", 0),
+        model=event["model"],
+        prompt_tokens=event["prompt_tokens"],
+        completion_tokens=event["completion_tokens"],
+        total_tokens=event["total_tokens"],
         elapsed_s=round(elapsed, 2),
+        buffered=buffered,
     )
-    user = current_runtime_user()
-    if user:
-        usage_service.record_llm_usage(
-            user_id=user.public_id,
-            session_id=str(kwargs.get("metadata", {}).get("session_id", "")),
-            model=kwargs.get("model", "unknown"),
-            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            total_tokens=int(getattr(usage, "total_tokens", 0) or 0),
+    if buffered:
+        return
+    user_id = resolve_litellm_user_id(kwargs)
+    if not user_id:
+        log.warning(
+            "llm_token_usage_skipped",
+            reason="missing_user_id",
+            model=event["model"],
         )
+        return
+    usage_service.record_llm_usage(
+        user_id=user_id,
+        session_id=str(event.get("session_id") or ""),
+        model=event["model"],
+        prompt_tokens=int(event["prompt_tokens"]),
+        completion_tokens=int(event["completion_tokens"]),
+        total_tokens=int(event["total_tokens"]),
+    )
 
 
 litellm.success_callback = [_log_token_usage]
@@ -104,7 +122,7 @@ def create_app() -> FastAPI:
     # ── CORS ──────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.debug else [],
+        allow_origins=settings.cors_allowed_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

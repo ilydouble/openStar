@@ -15,6 +15,7 @@ from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.persistence.sessions import repository as search_repo
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
+from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
 from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
 
 
@@ -185,6 +186,37 @@ async def test_chat_non_streaming_returns_service_result() -> None:
         session_id="session-2", reply="plain reply")
 
 
+@pytest.mark.asyncio
+async def test_session_state_includes_tool_call_summaries_without_results(monkeypatch) -> None:
+    """Session state should expose tool-call badges without leaking result JSON."""
+    monkeypatch.setattr(session_handlers, "memory", FakeMemory())
+    chat_history = FakeSessionHistory()
+
+    response = await session_handlers.get_session_state(
+        "session-3",
+        user=_auth_user(),
+        chat_history=chat_history,
+        file_service=FakeFileService({}),
+    )
+
+    assert [message.role for message in response.messages] == [
+        "user",
+        "assistant",
+    ]
+    assistant = response.messages[1]
+    assert assistant.tool_calls is not None
+    assert [tool.model_dump() for tool in assistant.tool_calls] == [
+        {
+            "tool_call_id": "tool-1",
+            "tool_name": "web_search",
+            "status": "success",
+            "elapsed_ms": 12,
+            "created_at": "2026-05-22T11:00:00+00:00",
+        }
+    ]
+    assert "result" not in type(assistant.tool_calls[0]).model_fields
+
+
 class FakeChatTurnService:
     """Application service fake for chat handler tests."""
 
@@ -206,6 +238,52 @@ class FakeChatTurnService:
     async def _events(self):
         """Yield a minimal terminal stream."""
         yield ChatStreamEvent.done()
+
+
+class FakeMemory:
+    """Conversation memory fake that forces durable history fallback."""
+
+    async def get_context(self, session_id: str):
+        """Return no cached messages."""
+        return "", []
+
+
+class FakeSessionHistory:
+    """Chat history fake that returns assistant tool-call summaries."""
+
+    def assert_owned_session(self, public_id: str, user_id: str) -> None:
+        """Accept the owned session check."""
+
+    def load_messages(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        include_tool_calls: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return a small durable conversation with tool call summaries."""
+        assert include_tool_calls is True
+        return [
+            {
+                "role": "user",
+                "content": "Search weather",
+                "metadata": {},
+            },
+            {
+                "role": "assistant",
+                "content": "It is 22C.",
+                "metadata": {},
+                "tool_calls": [
+                    {
+                        "tool_call_id": "tool-1",
+                        "tool_name": "web_search",
+                        "status": "success",
+                        "elapsed_ms": 12,
+                        "created_at": "2026-05-22T11:00:00+00:00",
+                    }
+                ],
+            },
+        ]
 
 
 class FakeFileService:

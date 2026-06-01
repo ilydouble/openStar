@@ -512,6 +512,9 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
     chat_dir = package_dir / "application" / "chat"
     routing = (chat_dir / "routing.py").read_text(encoding="utf-8")
     events = (chat_dir / "events.py").read_text(encoding="utf-8")
+    roles = (package_dir / "domain" / "chat" / "roles.py").read_text(
+        encoding="utf-8"
+    )
     services_dir = chat_dir / "services"
 
     assert (services_dir / "__init__.py").is_file()
@@ -531,6 +534,42 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
     assert "class AgentHint(str, Enum)" in routing
     assert "intent: ChatIntent" in routing
     assert "class ChatStreamEventKind(str, Enum)" in events
+    assert "class ChatCompletionRole(str, Enum)" in roles
+    assert 'TOOL = "tool"' in roles
+
+
+def test_llm_tool_calls_migration_aligns_with_chat_history_ids():
+    """Keep tool-call persistence aligned with existing sessions/messages identifiers."""
+    migration = (
+        AGENT_ROOT / "alembic" / "versions" / "0007_create_llm_tool_calls.py"
+    ).read_text(encoding="utf-8")
+
+    assert "llm_tool_calls" in migration
+    assert '"id", sa.BigInteger()' in migration
+    assert '"session_id", sa.BigInteger()' in migration
+    assert '"assistant_message_id", sa.BigInteger()' in migration
+    assert '"tool_message_id", sa.BigInteger()' in migration
+    assert "fk_llm_tool_calls_session_id_sessions" in migration
+    assert "fk_llm_tool_calls_assistant_message_id_messages" in migration
+    assert "fk_llm_tool_calls_tool_message_id_messages" in migration
+    assert "session_public_id" not in migration
+    assert "conversation_id" not in migration
+    assert "UUID" not in migration
+
+
+def test_number_comparator_is_registered_with_orchestrator_tools():
+    """The orchestrator should expose the deterministic number comparison tool."""
+    orchestrator = (
+        AGENT_ROOT / "src" / "icore_agent" / "application" / "chat" / "orchestrator.py"
+    ).read_text(encoding="utf-8")
+    tools_init = (
+        AGENT_ROOT / "src" / "icore_agent" /
+        "application" / "chat" / "tools" / "__init__.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from .tools.number_comparator import number_comparator" in orchestrator
+    assert "number_comparator," in orchestrator
+    assert '"number_comparator"' in tools_init
 
 
 def test_chat_orchestration_lives_in_application_layer():

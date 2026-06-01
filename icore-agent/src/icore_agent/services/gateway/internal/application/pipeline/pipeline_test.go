@@ -15,6 +15,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	sharedlogging "icore-services-lib-go/logging"
 )
 
 type fakeAuthenticator struct {
@@ -76,6 +78,50 @@ func (recorder *testResponseRecorder) Status() int {
 		return http.StatusOK
 	}
 	return recorder.Code
+}
+
+// TestPipelineSkipsSuccessfulHealthProbeAccessLog verifies routine health probes stay quiet.
+func TestPipelineSkipsSuccessfulHealthProbeAccessLog(t *testing.T) {
+	logger := &captureAccessLogger{}
+	pipeline := newTestPipeline(fakeAuthenticator{}, fakeLimiter{}, &fakeProxy{}, logger)
+
+	response := newTestResponseRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	pipeline.HandleHealth(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if len(logger.events) != 0 {
+		t.Fatalf("successful health probe logs = %d, want 0", len(logger.events))
+	}
+}
+
+// TestPipelineLogsFailedHealthProbeAccessLog verifies failed health probes remain visible.
+func TestPipelineLogsFailedHealthProbeAccessLog(t *testing.T) {
+	logger := &captureAccessLogger{}
+	pipeline := newTestPipeline(fakeAuthenticator{}, fakeLimiter{}, &fakeProxy{}, logger)
+	response := newTestResponseRecorder()
+	response.WriteHeader(http.StatusServiceUnavailable)
+	metadata := &logging.AccessLogMetadata{
+		RequestID:       "req-health-failed",
+		Path:            "/health",
+		Roles:           []string{},
+		RateLimitResult: "skipped",
+	}
+
+	pipeline.emitLog(pipeline.now(), metadata, response)
+
+	if len(logger.events) != 1 {
+		t.Fatalf("failed health probe logs = %d, want 1", len(logger.events))
+	}
+	event := logger.events[0]
+	if event.Level != sharedlogging.LogLevelError {
+		t.Fatalf("level = %q, want error", event.Level)
+	}
+	if event.Metadata.FinalStatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", event.Metadata.FinalStatusCode)
+	}
 }
 
 func TestPipelineRejectsProtectedRouteWithoutTokenBeforeProxy(t *testing.T) {

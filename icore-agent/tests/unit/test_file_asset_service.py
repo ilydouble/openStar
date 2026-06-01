@@ -11,6 +11,7 @@ from icore_agent.application.files.service import (
     ChecksumMismatchError,
     FileAssetService,
 )
+from icore_agent.domain.identifiers import uuid7 as shared_uuid7
 from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.files.uuid import uuid7
 
@@ -113,6 +114,11 @@ def test_uuid7_returns_parseable_time_ordered_values() -> None:
     assert first.version == 7
     assert second.version == 7
     assert first.int < second.int
+
+
+def test_file_uuid7_uses_shared_domain_identifier() -> None:
+    """The file-domain UUID helper should preserve the shared UUIDv7 export."""
+    assert uuid7 is shared_uuid7
 
 
 def test_create_upload_url_persists_default_object_key() -> None:

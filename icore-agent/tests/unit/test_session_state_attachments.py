@@ -20,7 +20,8 @@ from icore_agent.interfaces.http.v1.agent.handlers.session import (
 def test_asset_mode_classifies_supported_document_types_as_data() -> None:
     """Document uploads should map to the frontend data attachment mode."""
     assert _asset_mode("report.pdf", "application/pdf") == "data"
-    assert _asset_mode("notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document") == "data"
+    assert _asset_mode(
+        "notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document") == "data"
     assert _asset_mode("readme.md", "text/markdown") == "data"
     assert _asset_mode("photo.png", "image/png") == "image"
 
@@ -58,6 +59,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         file_service=_FakeFileService({}),
         conversation_memory=_NoopMemory(),
         orchestrator_factory=_StaticOrchestratorFactory("ok"),
+        usage_service=_NoopUsageService(),
     )
     command = ChatTurnCommand(
         message="Please answer based on the data file I uploaded.",
@@ -69,6 +71,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         display_caption="Hello please analysis these files",
         agent_message="Creative Brief\n\n---\nPlease answer in markdown",
         template_id="image",
+        incognito=False,
         user=_auth_user(),
     )
 
@@ -150,8 +153,8 @@ class _NoopMemory:
     async def get_context(self, session_id: str) -> tuple[str | None, list[dict[str, Any]]]:
         return None, []
 
-    async def append_message(self, session_id: str, role: str, content: str) -> None:
-        return None
+    async def append_message(self, session_id: str, role: str, content: str) -> bool:
+        return False
 
 
 class _StaticOrchestratorFactory:
@@ -168,6 +171,23 @@ class _StaticOrchestratorFactory:
                 return reply
 
         return _Agent()
+
+
+class _NoopUsageService:
+    """Usage service fake that accepts quota calls without side effects."""
+
+    def check_quota(self, user_id: str, resource: str, amount: int = 1) -> tuple[bool, str | None]:
+        """Allow quota checks during attachment-focused chat turn tests."""
+        return True, None
+
+    def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
+        """Accept quota consumption without persisting anything."""
+
+    def consume_task(self, user_id: str) -> None:
+        """Accept task quota consumption without persisting anything."""
+
+    def record_llm_usage(self, **payload: Any) -> None:
+        """Accept LLM usage recording without persisting anything."""
 
 
 class _FakeFileService:

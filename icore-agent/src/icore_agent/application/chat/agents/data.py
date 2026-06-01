@@ -11,13 +11,14 @@ Exposed as a Strands @tool so the orchestrator can delegate to it.
 from __future__ import annotations
 
 from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.config import settings
-from ..tools.code_executor import run_python_snippet
-from ..tools.file_ops import read_file, list_files
+
 from ..callback_ctx import sub_agent_callback
+from ..model_factory import create_litellm_model
+from ..tools.code_executor import run_python_snippet
+from ..tools.file_ops import list_files, read_file
 
 _SYSTEM_PROMPT = """
 You are a data-analysis specialist. You help the user explore, transform and
@@ -42,13 +43,10 @@ Return Markdown-formatted tables for small results.
 
 
 def _create_data_agent() -> Agent:
-    model = LiteLLMModel(
-        model_id=settings.effective_model_id(),
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": 0.1,
-            **settings.litellm_kwargs(model_id=settings.model_id),
-        },
+    """Create the specialist data agent with the configured chat model."""
+    model = create_litellm_model(
+        max_tokens=settings.agent_max_tokens,
+        temperature=0.1,
     )
     return Agent(
         model=model,

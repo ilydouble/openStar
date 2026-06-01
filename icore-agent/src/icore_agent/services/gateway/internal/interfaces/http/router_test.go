@@ -135,23 +135,51 @@ func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
 	}
 }
 
+// TestGatewaySkipsSuccessfulHealthAccessLog verifies the router-level health probe stays quiet.
+func TestGatewaySkipsSuccessfulHealthAccessLog(t *testing.T) {
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{logger: logger})
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+	if len(logger.events) != 0 {
+		t.Fatalf("successful health logs = %d, want 0", len(logger.events))
+	}
+}
+
 // TestGatewayFormatsTimestampsInConfiguredLocation keeps access logs out of implicit UTC.
 func TestGatewayFormatsTimestampsInConfiguredLocation(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatalf("load test location: %v", err)
 	}
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusAccepted, `{"ok":true}`), nil
+	})
 	logger := &captureAccessLogger{}
 	router := newTestRouter(routerTestConfig{
-		logger:   logger,
-		location: location,
+		logger:    logger,
+		location:  location,
+		transport: transport,
+		clientIPLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
+			Allowed: true,
+			Result:  "allowed",
+		}},
+		serviceLimiter: staticLimiter{decision: rate_limit.RateLimitDecision{
+			Allowed: true,
+			Result:  "allowed",
+		}},
 		now: func() time.Time {
 			return time.Date(2026, 5, 16, 7, 22, 52, 742470455, time.UTC)
 		},
 	})
 
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/account/login", nil))
 
 	if len(logger.events) != 1 {
 		t.Fatalf("expected one gateway log event, got %d", len(logger.events))

@@ -15,6 +15,7 @@ from typing import Any, cast
 
 from litellm import completion
 
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings
@@ -63,8 +64,8 @@ class SequentialAgent:
     def run(self, task: str) -> SequentialResult:
         """Execute a task sequentially. Returns when done, failed, or max_steps reached."""
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": f"Task: {task}"},
+            {"role": ChatCompletionRole.SYSTEM.value, "content": _SYSTEM_PROMPT},
+            {"role": ChatCompletionRole.USER.value, "content": f"Task: {task}"},
         ]
 
         log.info("sequential_agent_start", task=task[:120], model=self.model)
@@ -75,7 +76,10 @@ class SequentialAgent:
             model_kwargs["messages"] = messages
             resp = cast(Any, completion(**model_kwargs))
             content: str = resp.choices[0].message.content or ""
-            messages.append({"role": "assistant", "content": content})
+            messages.append({
+                "role": ChatCompletionRole.ASSISTANT.value,
+                "content": content,
+            })
 
             log.debug("sequential_agent_step", step=step,
                       content_preview=content[:200])
@@ -93,13 +97,19 @@ class SequentialAgent:
             cmd_match = _CMD_PATTERN.search(content)
             if not cmd_match:
                 feedback = "No ```bash ... ``` block found. Please output exactly one bash command."
-                messages.append({"role": "user", "content": feedback})
+                messages.append({
+                    "role": ChatCompletionRole.USER.value,
+                    "content": feedback,
+                })
                 continue
 
             cmd = cmd_match.group(1).strip()
             cmd_output = self.environment.execute(cmd, timeout=self.timeout)
             messages.append(
-                {"role": "user", "content": f"Output:\n{cmd_output}"})
+                {
+                    "role": ChatCompletionRole.USER.value,
+                    "content": f"Output:\n{cmd_output}",
+                })
 
         log.warning("sequential_agent_timeout", max_steps=self.max_steps)
         return SequentialResult(

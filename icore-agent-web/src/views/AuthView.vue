@@ -198,12 +198,19 @@ async function sendCode() {
   sending.value = true
   error.value = ''
   try {
-    await sendVerificationCode({ email: form.email })
+    await sendVerificationCode({
+      email: form.email,
+      purpose: isLoginMode.value ? 'login' : 'register',
+    })
     step.value = 2
     codeSent.value = true
     startCooldown(60)
   } catch (err) {
-    error.value = err.message || t('auth.failed')
+    if (!isLoginMode.value && err.status === 400) {
+      error.value = t('auth.emailAlreadyRegistered')
+    } else {
+      error.value = err.message || t('auth.failed')
+    }
   } finally {
     sending.value = false
   }

@@ -8,14 +8,15 @@ For quick code generation it uses Strands directly.
 import json
 
 from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.config import settings
-from ..tools.code_executor import run_python_snippet
-from ..tools.file_ops import read_file, write_file, list_files
-from ..sequential.agent import SequentialAgent
+
 from ..callback_ctx import sub_agent_callback
+from ..model_factory import create_litellm_model
+from ..sequential.agent import SequentialAgent
+from ..tools.code_executor import run_python_snippet
+from ..tools.file_ops import list_files, read_file, write_file
 
 _SYSTEM_PROMPT = """
 You are a software engineering assistant. You can:
@@ -31,13 +32,10 @@ Return clean, well-commented code. Prefer correctness over brevity.
 
 
 def _create_code_agent() -> Agent:
-    model = LiteLLMModel(
-        model_id=settings.effective_model_id(),
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": 0.05,
-            **settings.litellm_kwargs(model_id=settings.model_id),
-        },
+    """Create the specialist code agent with the configured chat model."""
+    model = create_litellm_model(
+        max_tokens=settings.agent_max_tokens,
+        temperature=0.05,
     )
     return Agent(
         model=model,

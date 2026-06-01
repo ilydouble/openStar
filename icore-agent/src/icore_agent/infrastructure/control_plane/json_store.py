@@ -679,6 +679,28 @@ class ControlPlaneStore:
                 "heavy_users": heavy_users,
             }
 
+    def account_funnel_meta(self) -> dict[str, Any]:
+        """Return lead and trial funnel metadata stored in the JSON control plane."""
+        with self._lock:
+            data = self._load()
+            leads = data.get("leads", [])
+            now = int(time.time())
+            active_window = now - 7 * 24 * 3600
+            recent_trials = sum(
+                1
+                for evt in data.get("events", [])
+                if evt.get("type") == "trial_registered"
+                and int(evt.get("timestamp", 0) or 0) >= active_window
+            )
+        return {
+            "new_trials_7d": recent_trials,
+            "leads": {
+                "total": len(leads),
+                "enterprise": sum(1 for lead in leads if lead.get("intent") == "enterprise"),
+                "demo": sum(1 for lead in leads if lead.get("intent") == "demo"),
+            },
+        }
+
     def create_lead(
         self,
         *,

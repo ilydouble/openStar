@@ -22,6 +22,7 @@ class ChatTurnCommand:
     display_caption: str | None
     agent_message: str | None
     template_id: str | None
+    incognito: bool
     user: AuthenticatedUser
 
     @property

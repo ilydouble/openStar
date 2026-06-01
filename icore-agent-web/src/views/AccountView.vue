@@ -71,7 +71,12 @@
             <form class="mt-6 grid gap-4 md:grid-cols-2" @submit.prevent="saveByok">
               <label class="block md:col-span-2">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiKey') }}</span>
-                <input v-model="byokForm.api_key" type="password" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input
+                  v-model="byokForm.api_key"
+                  type="password"
+                  :placeholder="t('account.byok.apiKeyPlaceholder')"
+                  class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
+                />
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiBase') }}</span>
@@ -89,6 +94,8 @@
               </div>
             </form>
           </div>
+
+          <MemoryManagerSection />
 
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <div>
@@ -111,7 +118,7 @@
             <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.knowledgeScope') }}</span>
-                <select v-model="teamForm.scope" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10">
+                <select v-model="teamForm.scope" class="form-select">
                   <option value="private">{{ t('account.team.private') }}</option>
                   <option value="organization">{{ t('account.team.organization') }}</option>
                 </select>
@@ -155,7 +162,7 @@
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.memberRole') }}</span>
-                <select v-model="teamForm.member_role" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10">
+                <select v-model="teamForm.member_role" class="form-select">
                   <option value="owner">{{ t('account.team.owner') }}</option>
                   <option value="editor">{{ t('account.team.editor') }}</option>
                   <option value="viewer">{{ t('account.team.viewer') }}</option>
@@ -174,10 +181,9 @@
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.plan.title') }}</p>
             <ul class="mt-5 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-              <li>{{ t('account.plan.messages') }}: {{ plan?.usage?.messages ?? 0 }} / {{ plan?.limits?.messages ?? 0 }}</li>
-              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }} / {{ plan?.limits?.tokens ?? 0 }}</li>
-              <li>{{ t('account.plan.images') }}: {{ plan?.usage?.images ?? 0 }} / {{ plan?.limits?.images ?? 0 }}</li>
-              <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ plan?.limits?.attachments ?? 0 }}</li>
+              <li>{{ t('account.plan.tasks') }}: {{ plan?.usage?.tasks ?? 0 }} / {{ formatPlanLimit(plan?.limits?.tasks) }}</li>
+              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }}</li>
+              <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ formatPlanLimit(plan?.limits?.attachments) }}</li>
             </ul>
           </div>
 
@@ -190,7 +196,7 @@
               </article>
               <article class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{{ t('account.opsCards.models') }}</p>
-                <p class="mt-3 text-xl font-semibold">{{ modelRows.length }}</p>
+                <p class="mt-3 text-xl font-semibold">{{ activeModelCount }}</p>
               </article>
               <article class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{{ t('account.opsCards.byok') }}</p>
@@ -222,7 +228,10 @@
             </div>
           </div>
 
-          <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+          <div
+            v-if="isPlatformAdmin"
+            class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+          >
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.adminOverview') }}</p>
             <div class="mt-5 grid gap-3 sm:grid-cols-2">
               <article
@@ -268,7 +277,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -277,12 +286,12 @@ import {
   fetchMe,
   fetchPlan,
   fetchTeam,
-  fetchUsageSummary,
   renameTeam,
   signOut,
   updateByok,
   updateKnowledgeScope,
 } from '../api/account.js'
+import MemoryManagerSection from '../components/MemoryManagerSection.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -290,7 +299,6 @@ const router = useRouter()
 const loading = ref(true)
 const me = ref(null)
 const plan = ref(null)
-const usage = ref(null)
 const adminOverview = ref(null)
 const team = ref(null)
 const saved = ref(false)
@@ -307,19 +315,36 @@ const teamForm = reactive({
   member_role: 'viewer',
 })
 
+/** Render a plan quota limit, using ∞ when the backend marks it unlimited. */
+function formatPlanLimit(value) {
+  return value == null ? '∞' : value
+}
+
+/** Mirror backend UsageService estimated_cost from PostgreSQL token quota usage. */
+function estimatedCostFromTokenCount(tokenCount) {
+  const tokens = Number(tokenCount) || 0
+  return Math.round((tokens / 1_000_000) * 2.0 * 1_000_000) / 1_000_000
+}
+
+const planUsage = computed(() => plan.value?.usage || {})
+
 const usageCards = computed(() => {
-  const summary = usage.value || {}
-  const planUsage = plan.value?.usage || {}
+  const usage = planUsage.value
+  const tokenCount = Number(usage.tokens) || 0
+  const estimatedCost =
+    usage.estimated_cost != null
+      ? Number(usage.estimated_cost) || 0
+      : estimatedCostFromTokenCount(tokenCount)
   return [
-    { label: t('account.cards.totalTokens'), value: summary.total_tokens ?? 0, helper: t('account.plan.tokens') },
-    { label: t('account.cards.totalCost'), value: `$${(summary.total_cost ?? 0).toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.messages'), value: planUsage.messages ?? 0, helper: t('account.plan.messages') },
-    { label: t('account.cards.attachments'), value: planUsage.attachments ?? 0, helper: t('account.plan.attachments') },
+    { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
+    { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
+    { label: t('account.cards.tasks'), value: usage.tasks ?? 0, helper: t('account.plan.tasks') },
+    { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
   ]
 })
 
 const modelRows = computed(() => {
-  const byModel = usage.value?.by_model || {}
+  const byModel = plan.value?.by_model || {}
   return Object.entries(byModel).map(([model, stats]) => ({
     model,
     calls: stats.calls,
@@ -328,9 +353,9 @@ const modelRows = computed(() => {
   }))
 })
 
-const totalCalls = computed(() =>
-  modelRows.value.reduce((sum, row) => sum + Number(row.calls || 0), 0),
-)
+const totalCalls = computed(() => Number(planUsage.value.model_calls) || 0)
+
+const activeModelCount = computed(() => Number(planUsage.value.active_models) || 0)
 
 const adminCards = computed(() => {
   const users = adminOverview.value?.users || {}
@@ -347,35 +372,78 @@ const adminCards = computed(() => {
 
 const heavyUsers = computed(() => adminOverview.value?.heavy_users || [])
 
+/** Platform operators with the admin role can view global usage metrics. */
+const isPlatformAdmin = computed(
+  () => Array.isArray(me.value?.roles) && me.value.roles.includes('admin'),
+)
+
 const byokBadgeClass = computed(() =>
   plan.value?.byok?.enabled
     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
     : 'bg-zinc-100 text-zinc-600 dark:bg-white/[0.06] dark:text-zinc-300',
 )
 
-async function loadAccount() {
-  loading.value = true
-  const [meResp, planResp, usageResp] = await Promise.all([
+const PLAN_POLL_MS = 10_000
+let planPollTimer = null
+
+async function loadAccount(options = {}) {
+  const silent = Boolean(options.silent)
+  if (!silent) {
+    loading.value = true
+  }
+  const [meResp, planResp] = await Promise.all([
     fetchMe(),
     fetchPlan(),
-    fetchUsageSummary(),
   ])
   me.value = meResp
   plan.value = planResp
-  usage.value = usageResp
-  byokForm.api_key = planResp.byok?.api_key || ''
   byokForm.api_base = planResp.byok?.api_base || ''
   byokForm.model = planResp.byok?.model || ''
-  adminOverview.value = await fetchAdminOverview().catch(() => null)
+  adminOverview.value = isPlatformAdmin.value
+    ? await fetchAdminOverview().catch(() => null)
+    : null
   team.value = await fetchTeam().catch(() => null)
   teamForm.organization_name = team.value?.organization?.name || ''
   teamForm.scope = team.value?.organization?.knowledge_scope || 'organization'
-  loading.value = false
+  if (!silent) {
+    loading.value = false
+  }
+}
+
+function startPlanPolling() {
+  stopPlanPolling()
+  planPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      loadAccount({ silent: true })
+    }
+  }, PLAN_POLL_MS)
+}
+
+function stopPlanPolling() {
+  if (planPollTimer) {
+    clearInterval(planPollTimer)
+    planPollTimer = null
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    loadAccount({ silent: true })
+  }
 }
 
 async function saveByok() {
   saved.value = false
-  await updateByok(byokForm)
+  const payload = {
+    api_base: byokForm.api_base,
+    model: byokForm.model,
+  }
+  const nextApiKey = byokForm.api_key.trim()
+  if (nextApiKey) {
+    payload.api_key = nextApiKey
+  }
+  await updateByok(payload)
+  byokForm.api_key = ''
   await loadAccount()
   saved.value = true
 }
@@ -407,6 +475,18 @@ function handleSignOut() {
 }
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   await loadAccount()
+  startPlanPolling()
+})
+
+onActivated(async () => {
+  await loadAccount({ silent: true })
+  startPlanPolling()
+})
+
+onUnmounted(() => {
+  stopPlanPolling()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>

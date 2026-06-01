@@ -4,17 +4,21 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from fastapi import Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 from icore_agent.application.chat import ChatHistoryService
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
+from icore_agent.application.memory import UserMemoryService
+from icore_agent.application.memory.session_context import resolve_session_extract_context
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.memory.conversation import memory
+from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import (
     get_chat_history_service,
     get_current_user,
     get_file_asset_service,
+    get_user_memory_service,
 )
 from ..schemas.session import (
     SessionAttachmentItem,
@@ -25,12 +29,16 @@ from ..schemas.session import (
 )
 
 
+log = get_logger(__name__)
+
+
 class SessionMessagePayload(TypedDict, total=False):
     """Persisted or cached chat message payload used by session handlers."""
 
     role: str
     content: str
     metadata: dict[str, Any]
+    tool_calls: list[dict[str, Any]]
 
 
 def _history_http_error(exc: Exception) -> HTTPException:
@@ -76,16 +84,147 @@ async def search_sessions(
 
 async def clear_session(
     session_id: str,
+    background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
     chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    user_memory_service: UserMemoryService = Depends(get_user_memory_service),
 ) -> dict:
-    """Soft-delete an owned session and clear its cached conversation memory."""
+    """Soft-delete a session immediately and extract memory from a saved snapshot."""
+    try:
+        chat_history.assert_owned_session(session_id, user.public_id)
+    except (PermissionError, LookupError) as exc:
+        raise _history_http_error(exc) from exc
+
+    summary, messages = await resolve_session_extract_context(
+        session_id,
+        user_id=user.public_id,
+        conversation_memory=memory,
+        chat_history=chat_history,
+    )
+
     try:
         chat_history.soft_delete_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
     await memory.clear(session_id)
+
+    background_tasks.add_task(
+        _run_session_end_extract_from_context,
+        user_id=user.public_id,
+        session_id=session_id,
+        session_summary=summary,
+        recent_messages=messages,
+        user_memory_service=user_memory_service,
+    )
+    log.info(
+        "user_memory_clear_extract_scheduled",
+        user_id=user.public_id,
+        session_id=session_id,
+        session_summary_chars=len(summary or ""),
+        message_count=len(messages),
+    )
     return {"cleared": True, "session_id": session_id}
+
+
+async def finalize_session(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    user: AuthenticatedUser = Depends(get_current_user),
+    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    user_memory_service: UserMemoryService = Depends(get_user_memory_service),
+) -> dict:
+    """Schedule durable user-memory extraction and return immediately."""
+    try:
+        chat_history.assert_owned_session(session_id, user.public_id)
+    except (PermissionError, LookupError) as exc:
+        raise _history_http_error(exc) from exc
+
+    background_tasks.add_task(
+        _run_finalize_session_extract,
+        user_id=user.public_id,
+        session_id=session_id,
+        chat_history=chat_history,
+        user_memory_service=user_memory_service,
+    )
+    log.info(
+        "user_memory_finalize_scheduled",
+        user_id=user.public_id,
+        session_id=session_id,
+    )
+    return {"finalized": True, "session_id": session_id}
+
+
+async def _run_finalize_session_extract(
+    *,
+    user_id: str,
+    session_id: str,
+    chat_history: ChatHistoryService,
+    user_memory_service: UserMemoryService,
+) -> None:
+    """Resolve session context and extract durable memory after finalize returns."""
+    try:
+        summary, messages = await resolve_session_extract_context(
+            session_id,
+            user_id=user_id,
+            conversation_memory=memory,
+            chat_history=chat_history,
+        )
+        await _run_session_end_extract_from_context(
+            user_id=user_id,
+            session_id=session_id,
+            session_summary=summary,
+            recent_messages=messages,
+            user_memory_service=user_memory_service,
+        )
+        log.info(
+            "user_memory_finalize_completed",
+            user_id=user_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        log.warning(
+            "user_memory_finalize_extract_failed",
+            user_id=user_id,
+            session_id=session_id,
+            error=str(exc),
+        )
+
+
+async def _run_session_end_extract_from_context(
+    *,
+    user_id: str,
+    session_id: str,
+    session_summary: str,
+    recent_messages: list[dict[str, str]],
+    user_memory_service: UserMemoryService,
+) -> None:
+    """Extract durable memory from one pre-resolved session snapshot."""
+    log.info(
+        "user_memory_session_extract_started",
+        user_id=user_id,
+        session_id=session_id,
+        session_summary_chars=len(session_summary or ""),
+        message_count=len(recent_messages),
+    )
+    try:
+        await user_memory_service.extract_on_session_end(
+            user_id=user_id,
+            session_id=session_id,
+            session_summary=session_summary,
+            recent_messages=recent_messages,
+        )
+        log.info(
+            "user_memory_session_extract_completed",
+            user_id=user_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        log.warning(
+            "user_memory_session_extract_failed",
+            user_id=user_id,
+            session_id=session_id,
+            error=str(exc),
+        )
 
 
 async def get_session_state(
@@ -98,7 +237,10 @@ async def get_session_state(
     try:
         chat_history.assert_owned_session(session_id, user.public_id)
         persisted_messages = chat_history.load_messages(
-            session_id, user.public_id)
+            session_id,
+            user.public_id,
+            include_tool_calls=True,
+        )
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 

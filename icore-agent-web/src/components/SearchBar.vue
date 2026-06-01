@@ -17,10 +17,13 @@
     <div
       :class="[
         'relative z-0 rounded-2xl border p-3 shadow-sm backdrop-blur-md transition-all duration-200',
-        'hover:shadow-md focus-within:border-zinc-300/90 focus-within:shadow-md',
-        isDragging
+        'hover:shadow-md focus-within:shadow-md',
+        incognito
+          ? 'border-zinc-400/90 bg-zinc-50/95 ring-2 ring-zinc-400/35 hover:shadow-md focus-within:border-zinc-500/90 focus-within:ring-zinc-400/45 dark:border-zinc-500/55 dark:bg-zinc-900/45 dark:ring-zinc-500/30 dark:focus-within:border-zinc-400/60'
+          : 'hover:shadow-md focus-within:border-zinc-300/90',
+        !incognito && (isDragging
           ? 'border-violet-400 bg-violet-50/80 shadow-md dark:border-violet-400/60 dark:bg-violet-900/20'
-          : 'border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl dark:focus-within:border-white/20',
+          : 'border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-white/5 dark:backdrop-blur-xl dark:focus-within:border-white/20'),
       ]"
       @dragover.prevent="isDragging = true"
       @dragleave.self="isDragging = false"
@@ -32,6 +35,15 @@
         class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
       >
         <span class="text-sm font-medium text-violet-600 dark:text-violet-300">{{ t('home.chatInput.dropToUpload') }}</span>
+      </div>
+      <!-- 无痕模式提示 -->
+      <div
+        v-if="incognito"
+        class="mb-2 flex items-center gap-2 rounded-xl border border-zinc-300/80 bg-zinc-100/90 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-500/40 dark:bg-zinc-800/70 dark:text-zinc-200"
+        role="status"
+      >
+        <Lock class="h-3.5 w-3.5 shrink-0 text-zinc-600 dark:text-zinc-300" stroke-width="2" aria-hidden="true" />
+        <span class="min-w-0">{{ t('chat.incognito.active') }}</span>
       </div>
       <!-- 模式 pill -->
       <div v-if="modePill" class="mb-2 flex flex-wrap items-center gap-2">
@@ -261,6 +273,25 @@
         <div class="flex shrink-0 items-center gap-2">
           <button
             type="button"
+            class="relative flex h-9 w-9 items-center justify-center rounded-full border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30"
+            :class="[
+              incognito
+                ? 'border-zinc-400/90 bg-zinc-200/90 text-zinc-800 hover:bg-zinc-300/90 dark:border-zinc-500/60 dark:bg-zinc-700/80 dark:text-zinc-100 dark:hover:bg-zinc-600/80'
+                : 'border-transparent text-zinc-500 hover:bg-zinc-100/90 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white',
+              (streaming || sendBlocked) ? 'pointer-events-none opacity-35' : '',
+            ]"
+            :disabled="streaming || sendBlocked"
+            :aria-pressed="incognito"
+            :aria-label="incognito ? t('chat.incognito.disable') : t('chat.incognito.enable')"
+            :title="incognito ? t('chat.incognito.disableHint') : t('chat.incognito.enableHint')"
+            @click.stop="$emit('toggle-incognito')"
+          >
+            <Lock v-if="incognito" class="h-[1.125rem] w-[1.125rem]" stroke-width="2" aria-hidden="true" />
+            <LockOpen v-else class="h-[1.125rem] w-[1.125rem]" stroke-width="2" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
             class="relative flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-zinc-500 transition-colors duration-200 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
             :class="[
               isRecordingMic
@@ -326,6 +357,8 @@ import {
   SendHorizontal,
   LayoutGrid,
   ChevronLeft,
+  Lock,
+  LockOpen,
 } from 'lucide-vue-next'
 
 import { transcribeSpeech } from '../api/agent.js'
@@ -345,8 +378,10 @@ const props = defineProps({
   streaming: { type: Boolean, default: false },
   /** 上传等场景下禁止发起新一轮发送（非流式阶段） */
   sendBlocked: { type: Boolean, default: false },
+  /** 无痕模式：不写入历史、不注入记忆 */
+  incognito: { type: Boolean, default: false },
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode'])
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito'])
 
 const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],

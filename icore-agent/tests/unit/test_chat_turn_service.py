@@ -14,6 +14,7 @@ from icore_agent.application.chat import (
 )
 from icore_agent.application.chat.context import dedupe_file_uuids
 from icore_agent.application.chat.routing import AgentHint, ChatIntent, resolve_routing
+from icore_agent.application.chat.tool_calls import ChatToolCallRecorder
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -37,11 +38,13 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
     history = FakeHistory()
     memory = FakeMemory()
     factory = FakeOrchestratorFactory(reply="assistant reply")
+    usage = FakeUsageService()
     service = ChatTurnService(
         chat_history=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=usage,
     )
 
     result = await service.run(_command(stream=False, file_uuids=("f1", "f1")))
@@ -58,7 +61,102 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
         ("session-1", "assistant", "assistant reply"),
     ]
     assert factory.calls[0]["enable_tools"] is False
+    assert len(factory.calls[0]["hooks"]) == 1
+    assert isinstance(factory.calls[0]["hooks"][0], ChatToolCallRecorder)
     assert factory.agent.messages == []
+    assert usage.calls == [("user-1", "tasks", 1)]
+    assert len(usage.llm_calls) == 1
+    assert usage.llm_calls[0]["user_id"] == "user-1"
+    assert usage.llm_calls[0]["total_tokens"] > 0
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
+    """Completed chat turns should attach observed tool calls to the assistant row."""
+    history = FakeHistory()
+    service = ChatTurnService(
+        chat_history=history,
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=FakeOrchestratorFactory(
+            reply="assistant reply",
+            emit_tool_call=True,
+        ),
+        usage_service=FakeUsageService(),
+    )
+
+    result = await service.run(_command(stream=False, agent_hint="research"))
+
+    assert result.reply == "assistant reply"
+    assert (
+        "tool-link",
+        "session-1",
+        ("tool-1",),
+        99,
+    ) in history.calls
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_skips_user_memory_without_compression() -> None:
+    """Normal turns should not trigger durable memory extraction."""
+    memory_service = TrackingUserMemoryService()
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False))
+
+    assert memory_service.compression_checks == [False]
+    assert memory_service.extract_calls == []
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_schedules_user_memory_extract_on_compression() -> None:
+    """Redis compression during a turn should trigger durable memory extraction."""
+    memory_service = TrackingUserMemoryService()
+    conversation_memory = FakeMemory(compress_on_append=True)
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=conversation_memory,
+        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False))
+
+    assert memory_service.compression_checks == [True]
+    assert len(memory_service.extract_calls) == 1
+    assert memory_service.extract_calls[0]["user_id"] == "user-1"
+    assert memory_service.extract_calls[0]["session_id"] == "session-1"
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
+    """Streaming turns should not extract durable memory unless compressed."""
+    memory_service = TrackingUserMemoryService()
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=FakeOrchestratorFactory(reply="", streaming=True),
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    event_stream = await service.stream(_command(stream=True))
+    async for event in event_stream:
+        if event.kind is ChatStreamEventKind.DONE:
+            break
+
+    assert memory_service.compression_checks == [False]
+    assert memory_service.extract_calls == []
 
 
 @pytest.mark.asyncio
@@ -72,6 +170,7 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
     )
 
     event_stream = await service.stream(_command(stream=True, agent_hint="research"))
@@ -95,11 +194,124 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
     assert history.calls[-1] == ("assistant", "session-1", "user-1", "Hi")
 
 
+def test_tool_call_recorder_persists_result_and_tool_message() -> None:
+    """Tool-call hooks should persist JSON result records and matching tool messages."""
+    history = FakeHistory()
+    recorder = ChatToolCallRecorder(
+        chat_history=history,
+        session_id="session-1",
+        user_id="user-1",
+    )
+    tool_use = {
+        "toolUseId": "tool-1",
+        "name": "web_search",
+        "input": {"query": "weather"},
+    }
+
+    recorder.record_start(tool_use)
+    recorder.record_finish(
+        tool_use,
+        {
+            "toolUseId": "tool-1",
+            "status": "success",
+            "content": [{"text": "{\"temperature\":\"22C\"}"}],
+        },
+        exception=None,
+    )
+
+    assert history.calls[-3:] == [
+        (
+            "tool-start",
+            "session-1",
+            "tool-1",
+            "web_search",
+            {"query": "weather"},
+        ),
+        (
+            "tool-message",
+            "session-1",
+            "user-1",
+            '{"toolUseId":"tool-1","status":"success","content":[{"text":"{\\"temperature\\":\\"22C\\"}"}]}',
+            {"tool_call_id": "tool-1", "tool_name": "web_search"},
+        ),
+        (
+            "tool-finish",
+            "session-1",
+            "tool-1",
+            "success",
+            {"toolUseId": "tool-1", "status": "success",
+                "content": [{"text": "{\"temperature\":\"22C\"}"}]},
+            None,
+            None,
+            42,
+        ),
+    ]
+    assert recorder.tool_call_ids == ("tool-1",)
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> None:
+    """Incognito turns should skip PostgreSQL persistence and memory extraction."""
+    history = FakeHistory()
+    memory_service = TrackingUserMemoryService()
+    conversation_memory = FakeMemory(compress_on_append=True)
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=history,
+        file_service=FakeFileService(),
+        conversation_memory=conversation_memory,
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert history.calls == []
+    assert conversation_memory.appended == [
+        ("session-1", "user", "Hello"),
+        ("session-1", "assistant", "assistant reply"),
+    ]
+    assert memory_service.compression_checks == []
+    assert memory_service.extract_calls == []
+    assert factory.calls[0]["hooks"] == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
+    """Incognito turns should not inject durable user memory into the prompt."""
+    memory_service = TrackingUserMemoryService()
+
+    def _build_prompt(user_id: str, turn: Any) -> str:
+        memory_service.build_calls.append((user_id, turn))
+        return "remember this"
+
+    memory_service.build_calls = []
+    # type: ignore[method-assign]
+    memory_service.build_memory_prompt = _build_prompt
+    factory = FakeOrchestratorFactory(reply="assistant reply")
+    service = ChatTurnService(
+        chat_history=FakeHistory(),
+        file_service=FakeFileService(),
+        conversation_memory=FakeMemory(),
+        orchestrator_factory=factory,
+        usage_service=FakeUsageService(),
+        user_memory_service=memory_service,
+    )
+
+    await service.run(_command(stream=False, incognito=True))
+
+    assert memory_service.build_calls == []
+    assert factory.calls[0]["user_memory_prompt"] is None
+
+
 def _command(
     *,
     stream: bool,
     agent_hint: str = "",
     file_uuids: tuple[str, ...] = (),
+    incognito: bool = False,
 ) -> ChatTurnCommand:
     """Build one chat command for tests."""
     return ChatTurnCommand(
@@ -112,6 +324,7 @@ def _command(
         display_caption=None,
         agent_message=None,
         template_id=None,
+        incognito=incognito,
         user=_auth_user(),
     )
 
@@ -126,11 +339,42 @@ def _auth_user() -> AuthenticatedUser:
     )
 
 
+class FakeUsageService:
+    """Usage service fake that records quota consumption calls."""
+
+    def __init__(self) -> None:
+        """Create the fake usage service."""
+        self.calls: list[tuple[str, str, int]] = []
+        self.llm_calls: list[dict[str, Any]] = []
+
+    def consume_quota(self, user_id: str, resource: str, amount: int = 1) -> None:
+        """Record one quota consumption call."""
+        self.calls.append((user_id, resource, amount))
+
+    def consume_task(self, user_id: str) -> None:
+        """Record one completed task quota consumption call."""
+        self.calls.append((user_id, "tasks", 1))
+
+    def check_quota(
+        self,
+        user_id: str,
+        resource: str,
+        amount: int = 1,
+    ) -> tuple[bool, str | None]:
+        """Allow quota checks during chat turn tests."""
+        return True, None
+
+    def record_llm_usage(self, **payload: Any) -> None:
+        """Record one LLM usage persistence call."""
+        self.llm_calls.append(dict(payload))
+
+
 class FakeMemory:
     """In-memory conversation cache fake."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, compress_on_append: bool = False) -> None:
         """Create the fake memory store."""
+        self.compress_on_append = compress_on_append
         self.appended: list[tuple[str, str, str]] = []
 
     async def get_context(self, session_id: str) -> tuple[str | None, list[dict]]:
@@ -142,9 +386,10 @@ class FakeMemory:
         session_id: str,
         role: str,
         content: str,
-    ) -> None:
+    ) -> bool:
         """Record one appended cached message."""
         self.appended.append((session_id, role, content))
+        return self.compress_on_append
 
 
 class FakeHistory:
@@ -182,9 +427,79 @@ class FakeHistory:
         content: str,
         *,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> int:
         """Record assistant message persistence."""
         self.calls.append(("assistant", public_id, user_id, content))
+        return 99
+
+    def save_tool_message(
+        self,
+        public_id: str,
+        user_id: str,
+        content: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        """Record tool message persistence."""
+        self.calls.append(("tool-message", public_id,
+                          user_id, content, metadata))
+        return 42
+
+    def start_tool_call(
+        self,
+        public_id: str,
+        *,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> None:
+        """Record tool call start persistence."""
+        self.calls.append((
+            "tool-start",
+            public_id,
+            tool_call_id,
+            tool_name,
+            arguments,
+        ))
+
+    def finish_tool_call(
+        self,
+        public_id: str,
+        *,
+        tool_call_id: str,
+        status: str,
+        result: dict[str, Any] | None,
+        error_code: str | None,
+        error_message: str | None,
+        elapsed_ms: int | None,
+        tool_message_id: int | None,
+    ) -> None:
+        """Record tool call finish persistence."""
+        self.calls.append((
+            "tool-finish",
+            public_id,
+            tool_call_id,
+            status,
+            result,
+            error_code,
+            error_message,
+            tool_message_id,
+        ))
+
+    def attach_tool_calls_to_assistant(
+        self,
+        public_id: str,
+        *,
+        tool_call_ids: tuple[str, ...],
+        assistant_message_id: int,
+    ) -> None:
+        """Record assistant-message linking."""
+        self.calls.append((
+            "tool-link",
+            public_id,
+            tool_call_ids,
+            assistant_message_id,
+        ))
 
     def load_messages(self, public_id: str, user_id: str) -> list[dict[str, Any]]:
         """Return no durable history for tests."""
@@ -196,17 +511,88 @@ class FakeFileService:
     """Unused file service fake for chat turn tests."""
 
 
+class TrackingUserMemoryService:
+    """Track compression checks and scheduled extraction calls."""
+
+    def __init__(self) -> None:
+        """Create a fake user memory service."""
+        self.compression_checks: list[bool] = []
+        self.extract_calls: list[dict[str, Any]] = []
+        self.session_end_calls: list[dict[str, Any]] = []
+        self.build_calls: list[tuple[str, Any]] = []
+
+    def build_memory_prompt(self, user_id: str, turn: Any) -> str | None:
+        """Return no injected memory prompt during chat turn tests."""
+        return None
+
+    def should_extract_on_compression(self, *, session_compressed: bool) -> bool:
+        """Mirror production compression-only extraction rules."""
+        self.compression_checks.append(session_compressed)
+        return session_compressed
+
+    async def extract_from_session(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        session_summary: str | None,
+        recent_messages: list[dict[str, str]],
+    ) -> None:
+        """Record one compression-triggered extraction call."""
+        self.extract_calls.append({
+            "user_id": user_id,
+            "session_id": session_id,
+            "session_summary": session_summary,
+            "recent_messages": recent_messages,
+        })
+
+    async def extract_on_session_end(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        session_summary: str | None,
+        recent_messages: list[dict[str, str]],
+    ) -> None:
+        """Record one session-end extraction call."""
+        self.session_end_calls.append({
+            "user_id": user_id,
+            "session_id": session_id,
+            "session_summary": session_summary,
+            "recent_messages": recent_messages,
+        })
+
+
 @dataclass
 class FakeAgent:
     """Agent fake with optional stream callback behavior."""
 
     reply: str
     streaming: bool
+    emit_tool_call: bool = False
     callback_handler: Any = None
+    hooks: list[Any] | None = None
     messages: list[dict[str, Any]] | None = None
 
     def __call__(self, message: str) -> str:
         """Return a reply or emit callback stream events."""
+        if self.emit_tool_call:
+            tool_use = {
+                "toolUseId": "tool-1",
+                "name": "web_search",
+                "input": {"q": message},
+            }
+            for hook in self.hooks or []:
+                hook.record_start(tool_use)
+                hook.record_finish(
+                    tool_use,
+                    {
+                        "toolUseId": "tool-1",
+                        "status": "success",
+                        "content": [{"text": "ok"}],
+                    },
+                    exception=None,
+                )
         if self.streaming and self.callback_handler is not None:
             self.callback_handler(
                 current_tool_use={
@@ -222,13 +608,25 @@ class FakeAgent:
 class FakeOrchestratorFactory:
     """Orchestrator factory fake that records construction kwargs."""
 
-    def __init__(self, *, reply: str, streaming: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        reply: str,
+        streaming: bool = False,
+        emit_tool_call: bool = False,
+    ) -> None:
         """Create the factory fake."""
         self.calls: list[dict[str, Any]] = []
-        self.agent = FakeAgent(reply=reply, streaming=streaming, messages=[])
+        self.agent = FakeAgent(
+            reply=reply,
+            streaming=streaming,
+            emit_tool_call=emit_tool_call,
+            messages=[],
+        )
 
     def __call__(self, **kwargs) -> FakeAgent:
         """Record factory kwargs and return the fake agent."""
         self.calls.append(kwargs)
         self.agent.callback_handler = kwargs.get("callback_handler")
+        self.agent.hooks = kwargs.get("hooks")
         return self.agent

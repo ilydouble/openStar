@@ -1,12 +1,13 @@
 """Authentication and trial registration schemas."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
 
 class SendVerificationCodeRequest(BaseModel):
     email: EmailStr
+    purpose: Literal["login", "register"] = "register"
 
 
 class SendVerificationCodeResponse(BaseModel):

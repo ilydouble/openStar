@@ -72,9 +72,27 @@ class AccountService:
 
         return self._identity_repository.get_user_by_id(claims["sub"])
 
-    def send_verification_code(self, email: str, client_ip: str) -> tuple[bool, str]:
+    def send_verification_code(
+        self,
+        email: str,
+        client_ip: str,
+        *,
+        purpose: str = "register",
+    ) -> tuple[bool, str]:
         """Dispatch a verification code to the given email."""
-        return self._verification_repository.send_verification_code(email, client_ip)
+        normalized = email.strip().lower()
+        if purpose == "login" and not self._identity_repository.email_exists(normalized):
+            raise LookupError(
+                "This email is not registered. Please sign up for a trial account first."
+            )
+        if purpose == "register" and self._identity_repository.email_exists(normalized):
+            raise ValueError(
+                "This email is already registered. Please use email login instead."
+            )
+        return self._verification_repository.send_verification_code(
+            normalized,
+            client_ip,
+        )
 
     def login_with_email_code(self, email: str, verification_code: str) -> tuple[UserProfile, str]:
         """Validate a one-time code and issue a fresh access token."""
@@ -131,10 +149,9 @@ class AccountService:
 
     def get_admin_overview(self, user: AuthenticatedUser) -> dict[str, Any]:
         """Return admin-only usage metrics after a role check."""
-        roles = user.roles
-        if "owner" not in roles and "admin" not in roles:
+        if "admin" not in user.roles:
             raise PermissionError(
-                "Admin access required. Only users with 'owner' or 'admin' role can access this endpoint."
+                "Admin access required. Only users with the 'admin' role can access this endpoint."
             )
         return self._usage_service.get_admin_overview()
 

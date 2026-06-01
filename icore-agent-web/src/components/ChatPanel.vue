@@ -89,8 +89,10 @@
                 dark ? 'prose-chat-dark' : 'prose-chat',
                 msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
               ]"
-              v-html="renderMarkdown(msg.content)"
-            />
+            >
+              <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
+              <span v-else v-html="assistantMessageHtml(msg)" />
+            </div>
           </div>
         </div>
       </div>
@@ -229,18 +231,17 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { marked } from 'marked'
 import { chatStream, newSessionId, deleteFileAsset, uploadFileAsset } from '../api/agent.js'
 import DocumentFileIcon from './DocumentFileIcon.vue'
 import { isDark as isDarkFn } from '../theme'
+import { renderMarkdown } from '../utils/sanitizeHtml.js'
 
 const { t } = useI18n()
 
-marked.setOptions({ breaks: true, gfm: true })
-
-function renderMarkdown(text) {
-  if (!text) return '&nbsp;'
-  return marked.parse(text)
+/** Render assistant markdown once after streaming completes; hydrate history on demand. */
+function assistantMessageHtml(msg) {
+  if (msg?.renderedHtml) return msg.renderedHtml
+  return renderMarkdown(msg?.content)
 }
 
 const props = defineProps({ sessionId: String, initialMessage: String })
@@ -442,9 +443,11 @@ async function sendMessage(msg, attachments = []) {
       content: t('chat.requestFailed', { msg: err }),
     })
   } finally {
+    const cur = messages.value[replyIndex]
     commitAssistant({
       streaming: false,
       stepsCollapsed: true,
+      renderedHtml: renderMarkdown(cur?.content || ''),
     })
     streamingMsg.value = null
     loading.value = false

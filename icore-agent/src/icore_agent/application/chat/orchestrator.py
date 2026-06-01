@@ -12,12 +12,12 @@ from strands import Agent, tool
 from strands.agent.conversation_manager.sliding_window_conversation_manager import (
     SlidingWindowConversationManager,
 )
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.config import settings
 from icore_agent.shared.logging.app_logger import get_logger
 
+from .model_factory import create_litellm_model
 from .prompts import build_orchestrator_system_prompt
 
 
@@ -91,6 +91,9 @@ def create_orchestrator(
     enable_tools: bool = True,
     agent_hint: str | None = None,
     session_id: str = "",
+    hooks: list[Any] | None = None,
+    user_id: str = "",
+    user_memory_prompt: str | None = None,
 ) -> Orchestrator:
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 
@@ -106,6 +109,9 @@ def create_orchestrator(
                            可节省 token 并彻底杜绝不必要的工具调用。
         agent_hint:        前端按钮传入的 agent 偏置（research/code/...）。
         session_id:        注入到 image_agent_tool 的会话 ID，用于生成图片存储路径。
+        hooks:             Strands lifecycle hooks for application-level observers.
+        user_id:           当前用户 public id，写入 LiteLLM metadata 以便 usage 回调记账。
+        user_memory_prompt: 用户长期记忆 prompt 片段。
     """
     # Pure-chat turns (enable_tools=False) go to the lighter fast model to
     # avoid paying glm-4.7's first-token latency for greetings and small talk.
@@ -114,14 +120,12 @@ def create_orchestrator(
     selected_model = primary_model if enable_tools else (
         settings.model_id_fast or primary_model
     )
-    model = LiteLLMModel(
+    model = create_litellm_model(
         model_id=selected_model,
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": settings.agent_temperature,
-            "metadata": {"session_id": session_id},
-            **settings.litellm_kwargs(model_id=selected_model),
-        },
+        max_tokens=settings.agent_max_tokens,
+        temperature=settings.agent_temperature,
+        user_id=user_id,
+        session_id=session_id,
     )
 
     # Window large enough to hold our pre-populated history (≤ memory_keep_recent=8)
@@ -133,8 +137,10 @@ def create_orchestrator(
         from .agents.code import code_agent_tool
         from .agents.data import data_agent_tool
         from .agents.research import research_agent_tool
+        from .tools.number_comparator import number_comparator
 
         tools = [
+            number_comparator,
             research_agent_tool,
             code_agent_tool,
             _make_scoped_knowledge_tool(session_id),
@@ -147,11 +153,17 @@ def create_orchestrator(
     orchestrator = Agent(
         model=model,
         system_prompt=build_orchestrator_system_prompt(
-            summary, attachments_text, image_attachments, data_attachments, agent_hint
+            summary,
+            attachments_text,
+            image_attachments,
+            data_attachments,
+            agent_hint,
+            user_memory_prompt,
         ),
         callback_handler=callback_handler,
         conversation_manager=conversation_manager,
         tools=tools,
+        hooks=hooks or [],
         # 串行执行工具，避免一次回复里多个 tool_use 被并发打到 LLM 和搜索
         # endpoint，瞬时 QPS 压爆 Z.AI RPM 配额。
         tool_executor=SequentialToolExecutor(),

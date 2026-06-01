@@ -44,14 +44,12 @@ class Settings(
 
     def effective_model_id(self) -> str:
         """Resolve the current user's BYOK model override or the default model id."""
-        try:
-            from ..shared.runtime.user_context import current_runtime_user
-
-            user = current_runtime_user()
-        except Exception:
-            user = None
-        byok = user.byok if user is not None else {}
-        return byok.get("model") or self.model_id
+        byok = self._runtime_byok()
+        if byok.get("enabled"):
+            byok_model = self._nonempty(byok.get("model"))
+            if byok_model:
+                return byok_model
+        return self.model_id
 
 
 # Singleton — import this everywhere; app_settings is an alias for backward compat

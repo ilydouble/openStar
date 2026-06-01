@@ -20,7 +20,6 @@ import re
 from typing import Any
 
 from strands import Agent, tool
-from strands.models.litellm import LiteLLMModel
 from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.shared.logging.app_logger import get_logger
@@ -28,6 +27,7 @@ from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.config import settings
 from icore_agent.infrastructure.memory.chroma_store import search as _chroma_search_raw
 from ..callback_ctx import sub_agent_callback
+from ..model_factory import create_litellm_model
 
 log = get_logger(__name__)
 
@@ -146,13 +146,9 @@ def _create_knowledge_agent(tenant_code: str = "") -> Agent:
             )
         return "\n\n".join(lines)
 
-    model = LiteLLMModel(
-        model_id=settings.effective_model_id(),
-        params={
-            "max_tokens": settings.agent_max_tokens,
-            "temperature": 0.1,
-            **settings.litellm_kwargs(model_id=settings.model_id),
-        },
+    model = create_litellm_model(
+        max_tokens=settings.agent_max_tokens,
+        temperature=0.1,
     )
     return Agent(
         model=model,

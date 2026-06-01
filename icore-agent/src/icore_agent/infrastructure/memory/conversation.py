@@ -23,6 +23,7 @@ import litellm
 import redis.asyncio as aioredis
 
 from icore_agent.config import settings
+from icore_agent.domain.chat import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
@@ -97,8 +98,14 @@ class ConversationMemory:
             resp = cast(Any, await litellm.acompletion(
                 model=settings.model_id,
                 messages=[
-                    {"role": "system", "content": _SUMMARY_SYSTEM},
-                    {"role": "user", "content": user_content},
+                    {
+                        "role": ChatCompletionRole.SYSTEM.value,
+                        "content": _SUMMARY_SYSTEM,
+                    },
+                    {
+                        "role": ChatCompletionRole.USER.value,
+                        "content": user_content,
+                    },
                 ],
                 max_tokens=512,
                 temperature=0.1,
@@ -124,16 +131,18 @@ class ConversationMemory:
         data = await self._load(session_id)
         return data["messages"]
 
-    async def append_message(self, session_id: str, role: str, content: str) -> None:
+    async def append_message(self, session_id: str, role: str, content: str) -> bool:
         """Append a message; triggers rolling compression when threshold is hit."""
         data = await self._load(session_id)
         data["messages"].append({"role": role, "content": content})
+        compressed = False
 
         if len(data["messages"]) > settings.memory_max_messages:
             keep = settings.memory_keep_recent
             to_compress = data["messages"][:-keep]
             data["summary"] = await self._compress(data["summary"], to_compress)
             data["messages"] = data["messages"][-keep:]
+            compressed = True
             log.info(
                 "conversation_rolled",
                 session_id=session_id,
@@ -149,6 +158,7 @@ class ConversationMemory:
             total_messages=len(data["messages"]),
             has_summary=bool(data["summary"]),
         )
+        return compressed
 
     async def clear(self, session_id: str) -> None:
         """Delete all messages and summary for a session."""

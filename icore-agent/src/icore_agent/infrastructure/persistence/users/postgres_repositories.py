@@ -7,12 +7,17 @@ from dataclasses import replace
 from typing import Any
 
 from icore_agent.application.workspace import WorkspaceMetadataService
+from icore_agent.application.account.byok import resolve_api_key_for_update
 from icore_agent.application.usage.policy import (
+    admin_usage_overview,
     current_timestamp,
     default_usage,
     ensure_current_usage,
     next_quota_reset,
-    plan_or_trial,
+
+    plan_or_trial as plan_or_free,
+    plan_usage_analytics,
+
 )
 from icore_agent.domain.account.plans import Plan
 from icore_agent.domain.user import UserProfile
@@ -58,6 +63,12 @@ class PostgresIdentityRepository:
             if user is None:
                 return None
             return self._workspace.ensure_organization_for_user(user)
+
+    def email_exists(self, email: str) -> bool:
+        """Return whether an email is registered using a single indexed lookup."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyUserRepository(session)
+            return repo.email_exists(email)
 
     def issue_token_for_user(self, user_id: str) -> str:
         """Issue a legacy opaque token mapped to the user public id."""
@@ -137,23 +148,29 @@ class PostgresBillingSummaryRepository:
             user, usage, should_save = ensure_current_usage(user)
             if should_save:
                 user = repo.save(user)
-            plan = plan_or_trial(user.plan)
+
+                usage = {**default_usage(), **dict(user.usage or {})}
+            plan = plan_or_free(user.plan)
+
             limits = plan.limits
+            analytics = plan_usage_analytics(usage)
             return {
                 "plan": plan.value,
                 "label": limits.label,
                 "limits": {
-                    "messages": limits.message_limit,
-                    "tokens": limits.token_limit,
-                    "images": limits.image_limit,
+                    "tasks": limits.task_limit,
                     "attachments": limits.attachment_limit,
                 },
                 "usage": {
-                    "messages": usage["message_count"],
-                    "tokens": usage["token_count"],
-                    "images": usage["image_count"],
-                    "attachments": usage["attachment_count"],
+                    "tasks": usage.get("task_count", 0),
+                    "tokens": usage.get("token_count", 0),
+                    "attachments": usage.get("attachment_count", 0),
+                    "estimated_cost": analytics["estimated_cost"],
+                    "model_calls": analytics["model_calls"],
+                    "active_models": analytics["active_models"],
                 },
+                "models_used": analytics["models_used"],
+                "by_model": analytics["by_model"],
                 "quota_period": {
                     "start": usage.get("quota_period_start", 0),
                     "next_reset": next_quota_reset(),
@@ -169,17 +186,19 @@ class PostgresBillingSummaryRepository:
         model: str,
     ) -> dict[str, Any]:
         """Persist BYOK settings for one user."""
-        byok = {
-            "enabled": bool(api_key),
-            "api_key": api_key.strip(),
-            "api_base": api_base.strip(),
-            "model": model.strip(),
-        }
         with sync_session_scope() as session:
             repo = SqlAlchemyUserRepository(session)
             user = repo.get_by_public_id(user_id)
             if user is None:
                 raise KeyError(user_id)
+            existing_key = str((user.byok or {}).get("api_key") or "").strip()
+            resolved_key = resolve_api_key_for_update(api_key, existing_key)
+            byok = {
+                "enabled": bool(resolved_key),
+                "api_key": resolved_key,
+                "api_base": api_base.strip(),
+                "model": model.strip(),
+            }
             repo.save(replace(user, byok=byok, updated_at=current_timestamp()))
         self._store.append_event("byok_updated", user_id=user_id)
         return byok
@@ -264,8 +283,13 @@ class PostgresUsageRepository:
         return self._store.usage_summary(user_id)
 
     def admin_overview(self, users: list[UserProfile]) -> dict[str, Any]:
-        """Return admin metrics combining PostgreSQL users and JSON usage events."""
-        return self._store.admin_overview(users)
+        """Return admin metrics from PostgreSQL usage plus JSON funnel metadata."""
+        funnel = self._store.account_funnel_meta()
+        return admin_usage_overview(
+            users,
+            new_trials_7d=int(funnel.get("new_trials_7d", 0) or 0),
+            leads=funnel.get("leads"),
+        )
 
 
 class PostgresTeamRepository:

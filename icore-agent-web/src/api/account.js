@@ -27,8 +27,8 @@ function extractSessionFromAuthResponse(payload) {
   }
 }
 
-export async function sendVerificationCode({ email }) {
-  return client.post(`${BASE}/send-verification-code`, { email })
+export async function sendVerificationCode({ email, purpose = 'register' }) {
+  return client.post(`${BASE}/send-verification-code`, { email, purpose })
 }
 
 export async function registerTrial({ name, email, verification_code }) {
@@ -125,6 +125,18 @@ export async function updateKnowledgeScope(payload) {
 
 export async function updateByok(payload) {
   return client.post(`${BASE}/billing/byok`, payload)
+}
+
+export async function fetchMemory() {
+  return client.get(`${BASE}/memory`)
+}
+
+export async function updateMemoryFact(factId, value) {
+  return client.put(`${BASE}/memory/facts/${factId}`, { value })
+}
+
+export async function deleteMemoryFact(factId) {
+  return client.delete(`${BASE}/memory/facts/${factId}`)
 }
 
 export function signOut() {

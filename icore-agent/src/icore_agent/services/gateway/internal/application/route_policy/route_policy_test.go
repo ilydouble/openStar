@@ -16,7 +16,7 @@ func TestDefaultRoutePolicyClassifiesLocalHealth(t *testing.T) {
 }
 
 func TestDefaultRoutePolicyClassifiesPublicUpstreamPrefixes(t *testing.T) {
-	policy := NewDefaultRoutePolicy("http://backend.local")
+	policy := NewDefaultRoutePolicy("http://backend.local", "http://payment.local")
 
 	route := policy.Resolve("/api/v1/account/send-verification-code")
 
@@ -29,11 +29,37 @@ func TestDefaultRoutePolicyClassifiesPublicUpstreamPrefixes(t *testing.T) {
 }
 
 func TestDefaultRoutePolicyProtectsUnknownAPIPaths(t *testing.T) {
-	policy := NewDefaultRoutePolicy("http://backend.local")
+	policy := NewDefaultRoutePolicy("http://backend.local", "http://payment.local")
 
 	route := policy.Resolve("/api/v1/account/me")
 
 	if route.Public || !route.AuthRequired || route.LocalHealth {
 		t.Fatalf("protected route = %#v", route)
+	}
+}
+
+func TestDefaultRoutePolicyProtectsPaymentAPIAndTargetsPaymentService(t *testing.T) {
+	policy := NewDefaultRoutePolicy("http://backend.local", "http://payment.local")
+
+	route := policy.Resolve("/api/v1/payment/native/prepay")
+
+	if route.Public || !route.AuthRequired || route.LocalHealth {
+		t.Fatalf("payment route = %#v, want protected upstream", route)
+	}
+	if route.UpstreamService != "payment-service" || route.UpstreamAddr != "http://payment.local" {
+		t.Fatalf("payment upstream target = %#v", route)
+	}
+}
+
+func TestDefaultRoutePolicyRoutesWechatPayWebhookPubliclyToPaymentService(t *testing.T) {
+	policy := NewDefaultRoutePolicy("http://backend.local", "http://payment.local")
+
+	route := policy.Resolve("/webhooks/wechatpay/native")
+
+	if !route.Public || route.AuthRequired || route.LocalHealth {
+		t.Fatalf("wechatpay webhook route = %#v, want public upstream", route)
+	}
+	if route.UpstreamService != "payment-service" || route.UpstreamAddr != "http://payment.local" {
+		t.Fatalf("wechatpay webhook upstream target = %#v", route)
 	}
 }

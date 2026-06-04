@@ -10,16 +10,16 @@ func NewRouter(handler *Handler) *sharedhttp.Router {
 		Message: "unauthorized",
 	})
 
-	router.GET("/health", handler.HandleHealth)
-	router.POST("/buckets/ensure", auth, handler.HandleEnsureBucket)
-	router.POST("/multipart/create", auth, handler.HandleCreateMultipart)
-	router.POST("/multipart/complete", auth, handler.HandleCompleteMultipart)
-	router.POST("/multipart/abort", auth, handler.HandleAbortMultipart)
-	router.POST("/presign/get", auth, handler.HandlePresignGet)
-	router.POST("/presign/put", auth, handler.HandlePresignPut)
-	router.POST("/objects/stat", auth, handler.HandleStatObject)
-	router.POST("/objects/delete", auth, handler.HandleDeleteObject)
-	router.GET("/objects/*object_path", auth, handler.HandleGetObject)
-	router.PUT("/objects/*object_path", auth, handler.HandlePutObject)
+	router.Get("/health", handler.HandleHealth)
+	router.With(auth).Post("/buckets/ensure", handler.HandleEnsureBucket)
+	router.With(auth).Post("/multipart/create", handler.HandleCreateMultipart)
+	router.With(auth).Post("/multipart/complete", handler.HandleCompleteMultipart)
+	router.With(auth).Post("/multipart/abort", handler.HandleAbortMultipart)
+	router.With(auth).Post("/presign/get", handler.HandlePresignGet)
+	router.With(auth).Post("/presign/put", handler.HandlePresignPut)
+	router.With(auth).Post("/objects/stat", handler.HandleStatObject)
+	router.With(auth).Post("/objects/delete", handler.HandleDeleteObject)
+	router.With(auth).Get("/objects/*", handler.HandleGetObject)
+	router.With(auth).Put("/objects/*", handler.HandlePutObject)
 	return router
 }

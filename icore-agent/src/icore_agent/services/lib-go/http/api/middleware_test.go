@@ -4,22 +4,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
 func TestTokenAuthRejectsMissingToken(t *testing.T) {
 	router := NewRouter()
-	router.GET(
+	router.Get(
 		"/protected",
 		TokenAuth(TokenAuthConfig{
 			Header:  "X-Service-Token",
 			Token:   "secret",
 			Message: "unauthorized",
-		}),
-		func(ctx *gin.Context) {
-			WriteJSON(ctx, http.StatusOK, gin.H{"ok": true})
-		},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		})).ServeHTTP,
 	)
 
 	response := httptest.NewRecorder()
@@ -32,16 +29,15 @@ func TestTokenAuthRejectsMissingToken(t *testing.T) {
 
 func TestTokenAuthAllowsMatchingToken(t *testing.T) {
 	router := NewRouter()
-	router.GET(
+	router.Get(
 		"/protected",
 		TokenAuth(TokenAuthConfig{
 			Header:  "X-Service-Token",
 			Token:   "secret",
 			Message: "unauthorized",
-		}),
-		func(ctx *gin.Context) {
-			WriteJSON(ctx, http.StatusOK, gin.H{"ok": true})
-		},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		})).ServeHTTP,
 	)
 
 	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
@@ -56,17 +52,16 @@ func TestTokenAuthAllowsMatchingToken(t *testing.T) {
 
 func TestTokenAuthCanAllowEmptyConfiguredToken(t *testing.T) {
 	router := NewRouter()
-	router.GET(
+	router.Get(
 		"/protected",
 		TokenAuth(TokenAuthConfig{
 			Header:          "X-Service-Token",
 			Token:           "",
 			Message:         "unauthorized",
 			AllowEmptyToken: true,
-		}),
-		func(ctx *gin.Context) {
-			WriteJSON(ctx, http.StatusOK, gin.H{"ok": true})
-		},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		})).ServeHTTP,
 	)
 
 	response := httptest.NewRecorder()

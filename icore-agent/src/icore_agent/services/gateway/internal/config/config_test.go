@@ -42,6 +42,8 @@ func TestLoadReadsGatewayRateLimitProfiles(t *testing.T) {
 	t.Setenv("GATEWAY_USER_ID_BURST", "22")
 	t.Setenv("ICORE_AGENT_RATE", "7")
 	t.Setenv("ICORE_AGENT_BURST", "14")
+	t.Setenv("PAYMENT_SERVICE_RATE", "3")
+	t.Setenv("PAYMENT_SERVICE_BURST", "6")
 
 	cfg := Load()
 
@@ -53,6 +55,19 @@ func TestLoadReadsGatewayRateLimitProfiles(t *testing.T) {
 	}
 	if cfg.ServiceRateLimitProfile("icore-agent") != (RateLimitProfile{RatePerSecond: 7, Burst: 14}) {
 		t.Fatalf("service profile = %#v", cfg.ServiceRateLimitProfile("icore-agent"))
+	}
+	if cfg.ServiceRateLimitProfile("payment-service") != (RateLimitProfile{RatePerSecond: 3, Burst: 6}) {
+		t.Fatalf("payment service profile = %#v", cfg.ServiceRateLimitProfile("payment-service"))
+	}
+}
+
+func TestLoadReadsPaymentServiceURL(t *testing.T) {
+	t.Setenv("GATEWAY_PAYMENT_SERVICE_URL", "http://payment.local")
+
+	cfg := Load()
+
+	if cfg.PaymentServiceURL != "http://payment.local" {
+		t.Fatalf("PaymentServiceURL = %q", cfg.PaymentServiceURL)
 	}
 }
 

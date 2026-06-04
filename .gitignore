@@ -47,6 +47,7 @@ build/
 .env.*.local
 icore-agent/dotenv/.env.*
 !icore-agent/dotenv/.env.*.example
+icore-agent/secrets/
 icore-agent-web/.env
 !icore-agent-web/.env.example
 

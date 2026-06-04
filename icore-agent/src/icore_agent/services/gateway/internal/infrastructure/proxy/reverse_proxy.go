@@ -10,25 +10,30 @@ import (
 
 // ReverseProxy forwards gateway traffic to one configured upstream service.
 type ReverseProxy struct {
-	proxy *httputil.ReverseProxy
+	defaultBackendURL string
+	transport         http.RoundTripper
 }
 
 // NewReverseProxy creates a reverse proxy for the configured backend URL.
 func NewReverseProxy(backendURL string, transport http.RoundTripper) *ReverseProxy {
-	backend, err := url.Parse(backendURL)
+	return &ReverseProxy{defaultBackendURL: backendURL, transport: transport}
+}
+
+func (proxy *ReverseProxy) newUpstreamProxy(upstreamURL string) *httputil.ReverseProxy {
+	backend, err := url.Parse(upstreamURL)
 	if err != nil {
 		panic(err)
 	}
-	proxy := httputil.NewSingleHostReverseProxy(backend)
-	if transport != nil {
-		proxy.Transport = transport
+	upstreamProxy := httputil.NewSingleHostReverseProxy(backend)
+	if proxy.transport != nil {
+		upstreamProxy.Transport = proxy.transport
 	}
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
+	originalDirector := upstreamProxy.Director
+	upstreamProxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Host = backend.Host
 	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+	upstreamProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -39,10 +44,13 @@ func NewReverseProxy(backendURL string, transport http.RoundTripper) *ReversePro
 			"timestamp":  time.Now().UTC().Format(time.RFC3339Nano),
 		})
 	}
-	return &ReverseProxy{proxy: proxy}
+	return upstreamProxy
 }
 
 // ServeHTTP forwards the request to the configured upstream.
-func (proxy *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	proxy.proxy.ServeHTTP(w, r)
+func (proxy *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, upstreamURL string) {
+	if upstreamURL == "" {
+		upstreamURL = proxy.defaultBackendURL
+	}
+	proxy.newUpstreamProxy(upstreamURL).ServeHTTP(w, r)
 }

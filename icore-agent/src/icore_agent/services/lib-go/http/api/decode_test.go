@@ -5,20 +5,18 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
 func TestDecodeJSONReadsBoundedRequestBody(t *testing.T) {
 	router := NewRouter()
-	router.POST("/decode", func(ctx *gin.Context) {
+	router.Post("/decode", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			Name string `json:"name"`
 		}
-		if !DecodeJSON(ctx, &request, 1024) {
+		if !DecodeJSON(w, r, &request, 1024) {
 			return
 		}
-		WriteJSON(ctx, http.StatusOK, gin.H{"name": request.Name})
+		WriteJSON(w, http.StatusOK, map[string]string{"name": request.Name})
 	})
 
 	response := httptest.NewRecorder()
@@ -37,14 +35,14 @@ func TestDecodeJSONReadsBoundedRequestBody(t *testing.T) {
 
 func TestDecodeJSONRejectsBodiesOverLimit(t *testing.T) {
 	router := NewRouter()
-	router.POST("/decode", func(ctx *gin.Context) {
+	router.Post("/decode", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			Name string `json:"name"`
 		}
-		if !DecodeJSON(ctx, &request, 4) {
+		if !DecodeJSON(w, r, &request, 4) {
 			return
 		}
-		WriteJSON(ctx, http.StatusOK, gin.H{"name": request.Name})
+		WriteJSON(w, http.StatusOK, map[string]string{"name": request.Name})
 	})
 
 	response := httptest.NewRecorder()

@@ -147,7 +147,7 @@ services:
       - icore-net
 ```
 
-When the payment app container is added later, it should depend on `payment-db-migrate` with `condition: service_completed_successfully`. If local development keeps the current `DB_USER=icore_agent` superuser temporarily, use the admin variables to point at that role only as a transitional development shortcut. Production should not do that.
+The payment app container depends on `payment-db-migrate` with `condition: service_completed_successfully`, then connects to the existing compose `postgres` service through `PAYMENT_DATABASE_URL`. If local development keeps the current `DB_USER=icore_agent` superuser temporarily, use the admin variables to point at that role only as a transitional development shortcut. Production should not do that.
 
 ## Environment Files
 

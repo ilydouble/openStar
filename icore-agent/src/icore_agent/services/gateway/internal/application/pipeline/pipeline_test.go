@@ -42,13 +42,15 @@ type fakeProxy struct {
 	userID    string
 	userRoles string
 	requestID string
+	upstream  string
 }
 
-func (proxy *fakeProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (proxy *fakeProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, upstream string) {
 	proxy.hit = true
 	proxy.userID = r.Header.Get("X-User-ID")
 	proxy.userRoles = r.Header.Get("X-User-Roles")
 	proxy.requestID = r.Header.Get(request_id.RequestIDHeader)
+	proxy.upstream = upstream
 	status := proxy.status
 	if status == 0 {
 		status = http.StatusOK
@@ -234,7 +236,7 @@ func TestPipelineRejectsInvalidToken(t *testing.T) {
 func newTestPipeline(auth deps.Authenticator, limiter deps.RateLimiter, proxy deps.UpstreamProxy, logger deps.AccessLogger) *Pipeline {
 	return NewPipeline(PipelineConfig{
 		ServiceName: "icore-gateway",
-		RoutePolicy: route_policy.NewDefaultRoutePolicy("http://backend.local"),
+		RoutePolicy: route_policy.NewDefaultRoutePolicy("http://backend.local", "http://payment.local"),
 		RequestIDPolicy: request_id.RequestIDPolicy{
 			Generate: func() string { return "generated-request-id" },
 		},

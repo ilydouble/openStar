@@ -105,13 +105,12 @@ Boundary rules:
 - `infrastructure/wechatpay`: SDK client, Native adapter, notify handler, and provider error mapping.
 - `infrastructure/persistence/postgres`: repositories and transactional outbox storage.
 - `interfaces/http`: Chi routes using `github.com/go-chi/chi/v5`, request/response DTOs, trusted gateway identity headers, optional service-token auth for internal routes, and callback endpoint.
-- `payment-service` HTTP code should use `net/http` plus Chi handler signatures and must not depend on the current `lib-go/http/api` package while that package still exposes Gin types.
+- `payment-service` HTTP code uses `net/http` plus Chi handler signatures. The shared `lib-go/http/api` package has been migrated to framework-neutral `net/http` helpers backed by Chi routing.
 
 Shared Go HTTP helper direction:
 
-- The current `lib-go/http/api` package is a legacy Gin helper used by existing services.
-- Future shared HTTP helpers should be Chi-compatible and should expose framework-neutral helpers for ApiEnvelope responses, bounded JSON decoding, and service-token middleware.
-- After the shared helper is migrated, `logging-service`, `storage-service`, and `payment-service` can converge on the same Chi-compatible helper surface.
+- Shared HTTP helpers should stay Chi-compatible and expose framework-neutral helpers for ApiEnvelope responses, bounded JSON decoding, and service-token middleware.
+- `logging-service`, `storage-service`, `gateway`, and `payment-service` should not introduce `github.com/gin-gonic/gin`.
 
 ## Payment Catalog
 
@@ -375,7 +374,11 @@ Required configuration:
 - `WECHATPAY_PUBLIC_KEY_ID`
 - `WECHATPAY_PUBLIC_KEY_PATH`
 - `WECHATPAY_NOTIFY_URL`
+- `WECHATPAY_API_HOST`
+- `WECHATPAY_REQUIRE_PRODUCTION_HOST`
 - `PAYMENT_ORDER_TTL`
+
+`WECHATPAY_API_HOST` is empty for the official production host. For sandbox verification, set it to the WeChat Pay sandbox API host and keep `WECHATPAY_REQUIRE_PRODUCTION_HOST=false`. Production deployments should set `WECHATPAY_REQUIRE_PRODUCTION_HOST=true` to prevent accidentally routing signed payment requests to a non-production endpoint.
 
 Secrets policy:
 

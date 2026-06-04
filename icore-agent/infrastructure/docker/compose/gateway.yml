@@ -22,6 +22,7 @@ services:
     environment:
       GATEWAY_ADDR: ${GATEWAY_ADDR:-:11000}
       GATEWAY_BACKEND_URL: ${GATEWAY_BACKEND_URL:-http://icore-agent:11001}
+      GATEWAY_PAYMENT_SERVICE_URL: ${GATEWAY_PAYMENT_SERVICE_URL:-http://payment-service:8080}
       GATEWAY_LOGGING_SERVICE_NAME: ${GATEWAY_LOGGING_SERVICE_NAME:-icore-gateway}
       GATEWAY_LOGGING_SERVICE_TIMEOUT: ${GATEWAY_LOGGING_SERVICE_TIMEOUT:-2s}
       GATEWAY_ACCESS_LOG_QUEUE_SIZE: ${GATEWAY_ACCESS_LOG_QUEUE_SIZE:-4096}
@@ -33,6 +34,8 @@ services:
       GATEWAY_USER_ID_BURST: ${GATEWAY_USER_ID_BURST:-20}
       ICORE_AGENT_RATE: ${ICORE_AGENT_RATE:-10}
       ICORE_AGENT_BURST: ${ICORE_AGENT_BURST:-20}
+      PAYMENT_SERVICE_RATE: ${PAYMENT_SERVICE_RATE:-5}
+      PAYMENT_SERVICE_BURST: ${PAYMENT_SERVICE_BURST:-10}
       GATEWAY_READ_HEADER_TIMEOUT: ${GATEWAY_READ_HEADER_TIMEOUT:-5s}
       GATEWAY_READ_TIMEOUT: ${GATEWAY_READ_TIMEOUT:-30s}
       GATEWAY_WRITE_TIMEOUT: ${GATEWAY_WRITE_TIMEOUT:-120s}
@@ -44,8 +47,8 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-gateway
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-gateway
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,payment-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-payment-service,icore-gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,payment-service,icore-agent,gateway,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service,icore-payment-service,icore-gateway
     ports:
       - '${GATEWAY_PORT_BIND:-11000:11000}'
     depends_on:
@@ -54,6 +57,8 @@ services:
       icore-agent:
         condition: service_healthy
       logging-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
     networks:
       - icore-net

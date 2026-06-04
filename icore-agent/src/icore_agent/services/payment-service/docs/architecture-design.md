@@ -383,7 +383,7 @@ Required configuration:
 
 Default local service-owned configuration files live under `payment-service/config/` and are mounted in compose at `/etc/icore/payment-service`:
 
-- catalog: `/etc/icore/payment-service/catalog/catalog_json.config`
+- catalog: `/etc/icore/payment-service/catalog/plan_items.json`
 - merchant private key: `/etc/icore/payment-service/wechatpay/secrets/apiclient_key.pem`
 - WeChat Pay public key: `/etc/icore/payment-service/wechatpay/public/wechatpay_public_key.pem`
 

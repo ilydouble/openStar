@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"icore-payment-service/internal/domain/catalog"
 )
 
 func TestLoadRequiresPaymentCatalogJSONPath(t *testing.T) {
@@ -80,9 +82,23 @@ func TestLoadRejectsCatalogMissingRequiredPlan(t *testing.T) {
 	}
 }
 
+func TestPlanItemsConfigFileContainsRequiredMonthlyCatalog(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "config", "catalog", "plan_items.json"))
+	if err != nil {
+		t.Fatalf("read plan_items.json: %v", err)
+	}
+	cat, err := catalog.ParseJSON(string(content))
+	if err != nil {
+		t.Fatalf("parse plan_items.json: %v", err)
+	}
+	if err := cat.ValidateRequiredMonthlyPlans([]string{"pro", "team", "premium", "byok"}); err != nil {
+		t.Fatalf("validate plan_items.json: %v", err)
+	}
+}
+
 func writeCatalogFile(t *testing.T, content string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "catalog_json.config")
+	path := filepath.Join(t.TempDir(), "plan_items.json")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write catalog file: %v", err)
 	}

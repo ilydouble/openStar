@@ -59,7 +59,7 @@ services:
       PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:change-me@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment}
       PAYMENT_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
       PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
-      PAYMENT_CATALOG_JSON_PATH: ${PAYMENT_CATALOG_JSON_PATH:-/etc/icore/payment-service/catalog/catalog_json.config}
+      PAYMENT_CATALOG_JSON_PATH: ${PAYMENT_CATALOG_JSON_PATH:-/etc/icore/payment-service/catalog/plan_items.json}
       PAYMENT_ORDER_TTL: ${PAYMENT_ORDER_TTL:-30m}
       PAYMENT_OUTBOX_POLL_INTERVAL: ${PAYMENT_OUTBOX_POLL_INTERVAL:-2s}
       PAYMENT_OUTBOX_BATCH_SIZE: ${PAYMENT_OUTBOX_BATCH_SIZE:-50}

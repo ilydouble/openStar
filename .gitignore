@@ -48,6 +48,8 @@ build/
 icore-agent/dotenv/.env.*
 !icore-agent/dotenv/.env.*.example
 icore-agent/secrets/
+icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/*
+!icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/.gitkeep
 icore-agent-web/.env
 !icore-agent-web/.env.example
 

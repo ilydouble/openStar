@@ -43,18 +43,18 @@ func NewCatalog(items []Item) (Catalog, error) {
 	return Catalog{items: indexed}, nil
 }
 
-// ParseJSON parses the PAYMENT_CATALOG_JSON document.
+// ParseJSON parses a payment catalog JSON document.
 func ParseJSON(raw string) (Catalog, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return Catalog{}, fmt.Errorf("PAYMENT_CATALOG_JSON is required")
+		return Catalog{}, fmt.Errorf("payment catalog JSON is required")
 	}
 	var payload catalogJSON
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return Catalog{}, fmt.Errorf("parse PAYMENT_CATALOG_JSON: %w", err)
+		return Catalog{}, fmt.Errorf("parse payment catalog JSON: %w", err)
 	}
 	if len(payload.Items) == 0 {
-		return Catalog{}, fmt.Errorf("PAYMENT_CATALOG_JSON must contain at least one item")
+		return Catalog{}, fmt.Errorf("payment catalog JSON must contain at least one item")
 	}
 	return NewCatalog(payload.Items)
 }

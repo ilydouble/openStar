@@ -366,6 +366,7 @@ Required configuration:
 - `PAYMENT_DATABASE_URL`
 - `PAYMENT_KAFKA_BROKERS`
 - `PAYMENT_KAFKA_TOPIC`
+- `PAYMENT_CATALOG_JSON_PATH`
 - `WECHATPAY_APP_ID`
 - `WECHATPAY_MCH_ID`
 - `WECHATPAY_MCH_CERT_SERIAL_NO`
@@ -379,6 +380,12 @@ Required configuration:
 - `PAYMENT_ORDER_TTL`
 
 `WECHATPAY_API_HOST` is empty for the official production host. For sandbox verification, set it to the WeChat Pay sandbox API host and keep `WECHATPAY_REQUIRE_PRODUCTION_HOST=false`. Production deployments should set `WECHATPAY_REQUIRE_PRODUCTION_HOST=true` to prevent accidentally routing signed payment requests to a non-production endpoint.
+
+Default local service-owned configuration files live under `payment-service/config/` and are mounted in compose at `/etc/icore/payment-service`:
+
+- catalog: `/etc/icore/payment-service/catalog/catalog_json.config`
+- merchant private key: `/etc/icore/payment-service/wechatpay/secrets/apiclient_key.pem`
+- WeChat Pay public key: `/etc/icore/payment-service/wechatpay/public/wechatpay_public_key.pem`
 
 Secrets policy:
 

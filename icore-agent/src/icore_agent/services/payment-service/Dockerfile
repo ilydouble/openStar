@@ -35,5 +35,6 @@ FROM alpine:3.20
 RUN adduser -D -H -u 10001 appuser
 USER appuser
 COPY --from=builder /out/payment-service /usr/local/bin/payment-service
+COPY payment-service/config /etc/icore/payment-service
 EXPOSE 8080
 ENTRYPOINT ["payment-service"]

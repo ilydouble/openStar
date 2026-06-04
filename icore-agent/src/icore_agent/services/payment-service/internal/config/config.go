@@ -35,7 +35,11 @@ type Config struct {
 
 // Load reads process environment and validates payment-owned configuration.
 func Load() (Config, error) {
-	cat, err := catalog.ParseJSON(os.Getenv("PAYMENT_CATALOG_JSON"))
+	catalogJSON, err := readRequiredFile("PAYMENT_CATALOG_JSON_PATH")
+	if err != nil {
+		return Config{}, err
+	}
+	cat, err := catalog.ParseJSON(catalogJSON)
 	if err != nil {
 		return Config{}, err
 	}
@@ -147,4 +151,16 @@ func envBool(name string, fallback bool) bool {
 		return fallback
 	}
 	return value
+}
+
+func readRequiredFile(envName string) (string, error) {
+	path := strings.TrimSpace(os.Getenv(envName))
+	if path == "" {
+		return "", fmt.Errorf("%s is required", envName)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s %q: %w", envName, path, err)
+	}
+	return string(content), nil
 }

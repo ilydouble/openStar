@@ -1,0 +1,35 @@
+services:
+  payment-db-migrate:
+    build:
+      context: ../../../src/icore_agent/services
+      dockerfile: payment-service/Dockerfile.migrate
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+    image: icore-payment-service-migrate:dev
+    container_name: icore-payment-db-migrate
+    restart: 'no'
+    environment:
+      POSTGRES_HOST: ${PAYMENT_DB_HOST:-postgres}
+      POSTGRES_PORT: ${PAYMENT_DB_PORT:-5432}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-icore_agent}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-change-me}
+      POSTGRES_ADMIN_DB: ${POSTGRES_ADMIN_DB:-icore_agent_db}
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:-icore_payment}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-change-me}
+      PAYMENT_DB_NAME: ${PAYMENT_DB_NAME:-icore_payment_db}
+      PAYMENT_DB_SCHEMA: ${PAYMENT_DB_SCHEMA:-payment}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,icore-postgres
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,icore-postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - icore-net

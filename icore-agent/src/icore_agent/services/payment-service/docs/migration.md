@@ -1,6 +1,6 @@
 # payment-service Database Migration Plan
 
-Status: draft for the future implementation. This document describes how `payment-service` should own its PostgreSQL schema with `golang-migrate`.
+Status: draft for the future implementation. This document is the source of truth for payment-owned PostgreSQL schema changes: `payment-service` uses an isolated PostgreSQL database and owns its schema with service-local `golang-migrate` migrations.
 
 ## Existing Pattern
 
@@ -178,6 +178,7 @@ PAYMENT_DATABASE_URL=postgres://icore_payment:<replace-with-payment-db-password>
 - Keep payment table migrations in `payment-service/migrations/`.
 - Use paired `.up.sql` and `.down.sql` files.
 - Do not put payment-service tables in `icore-agent/alembic/`; Alembic remains for the Python-owned database.
+- If Python later needs a processed-payment-event table for the account/billing Kafka consumer, that Python-owned table belongs under `icore-agent/alembic/`.
 - Do not let HTTP handlers issue schema changes or ad hoc SQL.
 - Keep table access behind payment-service repository types.
 - Avoid cross-database joins between `icore_agent_db` and `icore_payment_db`.

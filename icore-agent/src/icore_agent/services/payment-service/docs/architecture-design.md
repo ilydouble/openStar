@@ -14,13 +14,13 @@ Current account plans live in `icore-agent/src/icore_agent/domain/account/plans.
 - `premium`: USD 299/month, 5000 tasks/month
 - `byok`: USD 9/month, unlimited tasks with user-owned API key
 
-The current Python payment API is still a mock/Stripe-shaped facade under `interfaces/http/v1/payment`, and `application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow while keeping the Python backend responsible for user authentication, `ApiEnvelope`, account entitlements, and plan/quota application.
+The current Python payment API is still a mock/Stripe-shaped facade under `interfaces/http/v1/payment`, and `application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow. The gateway should enforce runtime JWT authentication for payment HTTP routes, while the Python backend remains responsible for issuing tokens, account entitlements, and plan/quota application.
 
 ## Source Review
 
 Checked sources:
 
-- Official Go SDK repository cloned to `/tmp/wechatpay-go`, tag `v0.2.21`, commit `6dbd7ce`.
+- Official Go SDK module `github.com/wechatpay-apiv3/wechatpay-go`, pinned in `payment-service/go.mod` at `v0.2.21`.
 - SDK Native package: `services/payments/native`.
 - SDK callback package: `core/notify`.
 - WeChat Pay merchant docs:
@@ -28,27 +28,30 @@ Checked sources:
   - Native prepay API: `https://pay.wechatpay.cn/doc/v3/merchant/4012791877`
   - Native query by merchant order number: `https://pay.wechatpay.cn/doc/v3/merchant/4012791880`
   - Payment success callback: `https://pay.wechatpay.cn/doc/v3/merchant/4012791861`
-  - Merchant API certificate: `https://pay.wechatpay.cn/doc/v3/merchant/4013053053`
+  - WeChat Pay public key: `https://pay.wechatpay.cn/doc/v3/merchant/4012153196`
   - API v3 key: `https://pay.wechatpay.cn/doc/v3/merchant/4013053267`
 
 Relevant SDK findings:
 
-- Client initialization should load the merchant private key and use `option.WithWechatPayAutoAuthCipher(mchID, mchCertificateSerialNumber, mchPrivateKey, mchAPIv3Key)`. This gives the client request signing, response signature verification, sensitive-field crypto, and automatic platform certificate download.
+- Client initialization should load the merchant private key, merchant certificate serial number, WeChat Pay public key id, and WeChat Pay public key. Use `option.WithWechatPayPublicKeyAuthCipher(mchID, mchCertificateSerialNumber, mchPrivateKey, wechatpayPublicKeyID, wechatpayPublicKey)` instead of the automatic platform-certificate download mode.
+- Request signing still uses the merchant private key and merchant certificate serial number. WeChat Pay response and callback signature verification should use the configured WeChat Pay public key.
 - Native payment uses `native.NativeApiService{Client: client}`.
 - The service supports:
   - `Prepay(ctx, native.PrepayRequest)` for `/v3/pay/transactions/native`; the response contains `code_url`.
   - `QueryOrderByOutTradeNo(ctx, native.QueryOrderByOutTradeNoRequest)`.
   - `QueryOrderById(ctx, native.QueryOrderByIdRequest)`.
   - `CloseOrder(ctx, native.CloseOrderRequest)`.
-- Payment callbacks should use `notify.Handler.ParseNotifyRequest(ctx, request, transaction)` to verify the WeChat Pay signature and decrypt the AES-GCM resource into `payments.Transaction`.
+- Payment callbacks should create the notify handler with `notify.NewRSANotifyHandler(mchAPIv3Key, verifiers.NewSHA256WithRSAPubkeyVerifier(wechatpayPublicKeyID, *wechatpayPublicKey))`, then use `handler.ParseNotifyRequest(ctx, request, transaction)` to verify the WeChat Pay signature and decrypt the AES-GCM resource into `payments.Transaction`.
 - The callback request body must not be consumed before `ParseNotifyRequest`.
 
 ## Goals
 
 - Add a Go `payment-service` that owns payment orders, WeChat Pay SDK integration, callback verification, reconciliation, and payment events.
 - Support WeChat Pay Native payment first: web checkout returns a `code_url`; the frontend renders the QR code.
+- Route payment checkout/order HTTP APIs directly from the gateway to `payment-service`. The Python backend should not proxy normal checkout traffic.
 - Keep account plan mutation in the Python account/billing domain. Payment service publishes a verified `payment.order.succeeded` event; Python applies the plan idempotently.
 - Use PostgreSQL as the payment order source of truth and Kafka as the integration event bus.
+- Use an isolated PostgreSQL database owned by `payment-service`, with service-local `golang-migrate` migrations under `payment-service/migrations/`.
 - Keep all relational access behind repository types. HTTP handlers should only validate transport input and call application services.
 - Use the existing `ApiEnvelope` shape for service responses and unwrap `data` at service-client boundaries.
 
@@ -89,7 +92,7 @@ payment-service/
       persistence/postgres/
       wechatpay/
     interfaces/
-      http/
+      http/v1/
 ```
 
 Boundary rules:
@@ -101,7 +104,7 @@ Boundary rules:
 - `application/reconciliation`: query WeChat Pay for pending orders and close expired orders.
 - `infrastructure/wechatpay`: SDK client, Native adapter, notify handler, and provider error mapping.
 - `infrastructure/persistence/postgres`: repositories and transactional outbox storage.
-- `interfaces/http`: Gin routes, request/response DTOs, service-token auth, and callback endpoint.
+- `interfaces/http`: Gin routes, request/response DTOs, trusted gateway identity headers, optional service-token auth for internal routes, and callback endpoint.
 
 ## Payment Catalog
 
@@ -119,14 +122,14 @@ The service must reject requests for disabled or unknown plans. It should not co
 
 ## HTTP Contract
 
-Public browser-facing APIs should stay in Python so JWT auth and `ApiEnvelope` behavior remain stable. Python will call `payment-service` over internal HTTP using a service token.
+Payment browser-facing APIs should be served by `payment-service` and reached through the Go gateway. The gateway remains responsible for validating the frontend JWT, stripping spoofable identity headers, and forwarding trusted identity headers such as `X-User-ID`.
 
-Internal payment-service endpoints:
+Gateway-routed payment-service endpoints:
 
 ```text
-POST /internal/v1/payments/native/prepay
-GET  /internal/v1/payments/orders/{out_trade_no}
-POST /internal/v1/payments/orders/{out_trade_no}/close
+POST /api/v1/payment/native/prepay
+GET  /api/v1/payment/orders/{out_trade_no}
+POST /api/v1/payment/orders/{out_trade_no}/close
 GET  /health
 GET  /ready
 ```
@@ -141,10 +144,9 @@ POST /webhooks/wechatpay/native
 
 ```json
 {
-  "user_id": "uuid-public-id",
   "plan_code": "pro",
   "billing_period": "monthly",
-  "client_request_id": "frontend-or-python-generated-id",
+  "client_request_id": "frontend-generated-id",
   "payer_client_ip": "203.0.113.10"
 }
 ```
@@ -165,7 +167,29 @@ POST /webhooks/wechatpay/native
 }
 ```
 
-Gateway routing needs one change during implementation: route `/webhooks/wechatpay/native` directly to `payment-service` without user auth, because WeChat Pay must send the original signed body to the service that verifies it. Normal frontend payment endpoints can continue to route to Python.
+The payment-service handler derives `user_id` from the trusted `X-User-ID` header set by the gateway, not from the client JSON body. `payer_client_ip` should be derived server-side from gateway-forwarded headers when possible; if accepted from the request body during early development, it must not drive security decisions.
+
+Gateway routing needs two changes during implementation:
+
+- Route `/api/v1/payment/native/prepay`, `/api/v1/payment/orders/{out_trade_no}`, and `/api/v1/payment/orders/{out_trade_no}/close` to `payment-service` as JWT-protected routes.
+- Route `/webhooks/wechatpay/native` directly to `payment-service` without user auth, because WeChat Pay must send the original signed body to the service that verifies it.
+
+## Python Boundary
+
+The current Python payment module is a mock/Stripe-shaped compatibility surface, not a real payment domain owner. It currently creates a fake checkout URL, accepts a no-op Stripe webhook, returns an empty order list, and upgrades plans directly through `BillingService`.
+
+With an independent `payment-service`, normal payment traffic should not pass through Python:
+
+- Checkout creation goes gateway -> `payment-service`.
+- Order status reads and user-initiated closes go gateway -> `payment-service`.
+- WeChat Pay callbacks go gateway -> `payment-service` with no JWT requirement.
+
+Python remains involved only where it owns account state:
+
+- Account registration/login and JWT issuance remain Python-owned.
+- Current plan and quota reads remain Python-owned.
+- Applying a verified paid order to `users.plan`, `plan_label`, BYOK flags, and quota metadata remains Python-owned through an idempotent Kafka consumer for `payment.order.succeeded`.
+- Direct BYOK/offline upgrade paths remain separate from WeChat Pay checkout unless product requirements later move them into the payment service.
 
 ## Domain Model
 
@@ -207,7 +231,7 @@ Core tables:
 - `payment_catalog_items`
   - plan-code and CNY pricing records, or use config first and migrate to table later.
 
-Because this repository requires schema changes under Alembic, these tables should be introduced by `icore-agent/alembic/` migrations even though the service itself is Go.
+Because `payment-service` owns an isolated PostgreSQL database, these tables must be introduced by service-local `golang-migrate` migrations under `payment-service/migrations/`. Alembic remains only for Python-owned database changes, such as a future processed-payment-event table used by the Python account/billing consumer.
 
 ## Idempotency
 
@@ -341,6 +365,8 @@ Required configuration:
 - `WECHATPAY_MCH_CERT_SERIAL_NO`
 - `WECHATPAY_MCH_PRIVATE_KEY_PATH`
 - `WECHATPAY_API_V3_KEY`
+- `WECHATPAY_PUBLIC_KEY_ID`
+- `WECHATPAY_PUBLIC_KEY_PATH`
 - `WECHATPAY_NOTIFY_URL`
 - `PAYMENT_ORDER_TTL`
 
@@ -349,13 +375,15 @@ Secrets policy:
 - Do not commit `.env` files, real private keys, certificates, or API v3 keys.
 - Keep `dotenv/.env.payment.example` complete with placeholders.
 - Mount the merchant private key as a read-only secret file.
+- Mount the WeChat Pay public key as a pinned read-only configuration file. The public key is not a secret, but the key id and file contents must be reviewed together because they define the trust anchor for response and callback verification.
 - Rotate merchant certificates by deploying a new private key path and serial number together.
+- Rotate the WeChat Pay public key by deploying the new public key id and public key file together.
 - Treat API v3 key rotation as a coordinated maintenance event because old keys stop working after replacement.
 
 Callback hardening:
 
 - Do not protect WeChat callbacks with the internal service token; WeChat cannot provide it.
-- Rely on SDK signature verification and AES-GCM decrypt before trusting any callback body.
+- Rely on SDK public-key signature verification and AES-GCM decrypt before trusting any callback body.
 - Log only sanitized identifiers and status; never log API v3 key, private key material, full Authorization header, or raw ciphertext payloads unless explicitly redacted.
 
 ## Failure Handling
@@ -382,9 +410,8 @@ Outbox failures:
 
 No Python changes are included in this design-only step, but implementation should later:
 
-- Replace mock checkout in `application/billing/service.py` with a payment-service client.
-- Keep FastAPI response envelopes unchanged.
-- Add a payment adapter that unwraps `data` from Go service envelopes at the adapter boundary.
+- Remove or stop routing frontend checkout/order calls to the current mock payment handlers once the gateway routes payment paths directly to `payment-service`.
+- Keep FastAPI response envelopes unchanged for Python-owned account APIs.
 - Add idempotent Kafka consumer logic to apply `payment.order.succeeded` to `users.plan`, `plan_label`, and quota metadata.
 - Align existing `upgrade_plan` validation with `Plan` values (`pro`, `team`, `premium`, `byok`) instead of the current mock-era list.
 - Keep direct BYOK/offline upgrade path separate from paid WeChat checkout.
@@ -403,8 +430,7 @@ Go service tests:
 
 Python tests later:
 
-- Payment service client envelope unwrapping.
-- Checkout handler returns existing API shape.
+- Payment routes are no longer handled by Python after gateway cutover.
 - Kafka success-event consumer applies plan exactly once.
 - Plan catalog/account plan alignment checks.
 

@@ -104,7 +104,14 @@ Boundary rules:
 - `application/reconciliation`: query WeChat Pay for pending orders and close expired orders.
 - `infrastructure/wechatpay`: SDK client, Native adapter, notify handler, and provider error mapping.
 - `infrastructure/persistence/postgres`: repositories and transactional outbox storage.
-- `interfaces/http`: Gin routes, request/response DTOs, trusted gateway identity headers, optional service-token auth for internal routes, and callback endpoint.
+- `interfaces/http`: Chi routes using `github.com/go-chi/chi/v5`, request/response DTOs, trusted gateway identity headers, optional service-token auth for internal routes, and callback endpoint.
+- `payment-service` HTTP code should use `net/http` plus Chi handler signatures and must not depend on the current `lib-go/http/api` package while that package still exposes Gin types.
+
+Shared Go HTTP helper direction:
+
+- The current `lib-go/http/api` package is a legacy Gin helper used by existing services.
+- Future shared HTTP helpers should be Chi-compatible and should expose framework-neutral helpers for ApiEnvelope responses, bounded JSON decoding, and service-token middleware.
+- After the shared helper is migrated, `logging-service`, `storage-service`, and `payment-service` can converge on the same Chi-compatible helper surface.
 
 ## Payment Catalog
 
@@ -427,6 +434,8 @@ Go service tests:
 - Repository tests for unique constraints and row-lock state transitions.
 - Outbox publisher tests.
 - Reconciliation tests for `SUCCESS`, unpaid, closed, expired, and transient provider errors.
+- HTTP route tests using Chi and `net/http/httptest`; `payment-service/go.mod` should not introduce `github.com/gin-gonic/gin`.
+- Shared HTTP helper migration tests should keep existing `logging-service` and `storage-service` route behavior covered while moving the helper surface from Gin to Chi.
 
 Python tests later:
 

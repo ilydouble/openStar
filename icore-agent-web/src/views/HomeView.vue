@@ -816,6 +816,11 @@ const UI_BY_ID = {
     panel:
       'bg-gradient-to-br from-emerald-100 to-emerald-50 border-emerald-200/80 dark:from-emerald-500/35 dark:to-emerald-950/55 dark:border-emerald-400/20',
   },
+  pi: {
+    emoji: '\u{1F916}',
+    panel:
+      'bg-gradient-to-br from-indigo-100 to-indigo-50 border-indigo-200/80 dark:from-indigo-500/35 dark:to-indigo-950/55 dark:border-indigo-400/20',
+  },
 }
 
 const messages = ref([])
@@ -1051,6 +1056,7 @@ const PILL_BY_ID = {
   chat:     'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:ring-violet-400/30',
   image:    'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-900/40 dark:text-fuchsia-200 dark:ring-fuchsia-400/30',
   data:     'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-400/30',
+  pi:       'bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:ring-indigo-400/30',
 }
 
 const shortcutItems = computed(() => {
@@ -1215,6 +1221,7 @@ const SHORTCUT_HINT = {
   chat: 'chat',
   image: 'image',
   data: 'data',
+  pi:   'pi',
 }
 
 function mapSessionSummary(item) {

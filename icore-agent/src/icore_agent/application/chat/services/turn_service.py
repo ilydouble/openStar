@@ -234,6 +234,7 @@ class ChatTurnService:
         result = None
         try:
             hooks = [tool_call_recorder] if tool_call_recorder is not None else []
+            print(f"[DEBUG] _invoke_agent: agent_hint={route.agent_hint!r}", flush=True)
             orchestrator = self._orchestrator_factory(
                 callback_handler=callback_handler,
                 summary=context.summary,
@@ -422,6 +423,7 @@ class ChatTurnService:
             AgentHint.DATA: "data_agent",
             AgentHint.CODE: "code_agent",
             AgentHint.CHAT: "chat",
+            AgentHint.PI: "pi_agent",
             ChatIntent.CHAT: "chat",
             ChatIntent.TASK: "orchestrator",
         }

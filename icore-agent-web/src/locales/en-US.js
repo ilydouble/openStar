@@ -382,6 +382,14 @@ export default {
         placeholder: 'Paste meeting notes, transcript, or scattered ideas and I will organize summary, decisions, and tasks.',
         home: false,
       },
+      {
+        id: 'pi',
+        role: 'Pi Coding Agent',
+        label: 'Pi Agent',
+        summary: 'Autonomous coding agent — writes, debugs, and reasons through complex tasks step by step.',
+        taskPreviews: ['Write code', 'Debug issue'],
+        placeholder: 'Describe what you want to build or fix and Pi will reason through it step by step.',
+      },
     ],
     templates: [
       {

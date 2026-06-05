@@ -31,6 +31,7 @@ services:
       - ../../../dotenv/.env.tools
       - ../../../dotenv/.env.media
       - ../../../dotenv/.env.storage
+      - ../../../dotenv/.env.pi
     environment:
       STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://storage-service:8090}
       STORAGE_SERVICE_TOKEN: ${STORAGE_SERVICE_TOKEN:-dev-storage-service-token}
@@ -54,6 +55,8 @@ services:
         condition: service_healthy
       logging-service:
         condition: service_healthy
+      pi-service:
+        condition: service_started
     networks:
       - icore-net
     healthcheck:

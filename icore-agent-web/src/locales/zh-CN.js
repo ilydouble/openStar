@@ -382,6 +382,14 @@ export default {
         placeholder: '粘贴会议记录、语音转写或杂乱想法，我会整理纪要、决策和待办。',
         home: false,
       },
+      {
+        id: 'pi',
+        role: 'Pi 编程智能体',
+        label: 'Pi Agent',
+        summary: '自主编程智能体，逐步推理并完成复杂代码任务。',
+        taskPreviews: ['写代码', '调试问题'],
+        placeholder: '描述你想构建或修复的内容，Pi 会一步步推理并完成任务。',
+      },
     ],
     templates: [
       {

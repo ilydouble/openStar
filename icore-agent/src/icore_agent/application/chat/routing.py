@@ -23,6 +23,7 @@ class AgentHint(str, Enum):
     IMAGE = "image"
     DATA = "data"
     CHAT = "chat"
+    PI = "pi"
 
 
 VALID_AGENT_HINTS = {hint.value for hint in AgentHint}
@@ -87,6 +88,12 @@ def resolve_routing(
         if resolved_hint is AgentHint.CHAT:
             return ChatRoutingDecision(
                 intent=ChatIntent.CHAT,
+                enable_tools=False,
+                agent_hint=resolved_hint,
+            )
+        if resolved_hint is AgentHint.PI:
+            return ChatRoutingDecision(
+                intent=ChatIntent.TASK,
                 enable_tools=False,
                 agent_hint=resolved_hint,
             )

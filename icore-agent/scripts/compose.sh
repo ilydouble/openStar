@@ -13,6 +13,7 @@ COMPOSE_FILES=(
   "infrastructure/docker/compose/click-house.yml"
   "infrastructure/docker/compose/storage-service.yml"
   "infrastructure/docker/compose/logging-service.yml"
+  "infrastructure/docker/compose/pi-service.yml"
   "infrastructure/docker/compose/backend.yml"
   "infrastructure/docker/compose/gateway.yml"
 )
@@ -34,6 +35,7 @@ ENV_FILES=(
   "dotenv/.env.rag"
   "dotenv/.env.tools"
   "dotenv/.env.media"
+  "dotenv/.env.pi"
 )
 
 cmd=(docker compose)

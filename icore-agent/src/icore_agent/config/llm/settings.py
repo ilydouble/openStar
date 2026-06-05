@@ -64,7 +64,7 @@ _LITELLM_PROVIDER_SPECS = (
 class LLMSettings(DomainSettings):
     """LLM provider and model settings loaded from the llm dotenv domain."""
 
-    env_domains = ("llm",)
+    env_domains = ("llm", "pi")
 
     model_id: str = "zai/glm-4.7"
     model_id_fast: str = "zai/glm-4.7"
@@ -79,6 +79,7 @@ class LLMSettings(DomainSettings):
     zai_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    pi_service_url: str = "http://pi-service:11002"
 
     def __init__(self, **values: Any) -> None:
         """Initialize LLM settings from explicit values and domain env files."""

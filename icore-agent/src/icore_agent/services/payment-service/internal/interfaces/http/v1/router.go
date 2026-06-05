@@ -13,11 +13,11 @@ func NewRouter(config HandlerConfig) *chi.Mux {
 	router.Get("/health", handler.health)
 	router.Get("/ready", handler.ready)
 	router.Post("/api/v1/payment/native/prepay", handler.createNativePrepay)
-	router.Get("/api/v1/payment/orders/{out_trade_no}", func(w http.ResponseWriter, r *http.Request) {
-		handler.getOrder(w, r, chi.URLParam(r, "out_trade_no"))
+	router.Get("/api/v1/payment/orders/{order_no}", func(w http.ResponseWriter, r *http.Request) {
+		handler.getOrder(w, r, chi.URLParam(r, "order_no"))
 	})
-	router.Post("/api/v1/payment/orders/{out_trade_no}/close", func(w http.ResponseWriter, r *http.Request) {
-		handler.closeOrder(w, r, chi.URLParam(r, "out_trade_no"))
+	router.Post("/api/v1/payment/orders/{order_no}/close", func(w http.ResponseWriter, r *http.Request) {
+		handler.closeOrder(w, r, chi.URLParam(r, "order_no"))
 	})
 	router.Post("/webhooks/wechatpay/native", handler.wechatPayNativeWebhook)
 	return router

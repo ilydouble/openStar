@@ -14,7 +14,7 @@ type Status string
 const (
 	// StatusCreated means the local order exists before provider prepay completes.
 	StatusCreated Status = "created"
-	// StatusPending means WeChat Pay returned a Native code_url.
+	// StatusPending means the provider returned a payable client payload.
 	StatusPending Status = "pending"
 	// StatusPaid means a verified provider transaction succeeded.
 	StatusPaid Status = "paid"
@@ -40,17 +40,13 @@ var (
 // Order is the payment-service source-of-truth aggregate persisted in PostgreSQL.
 type Order struct {
 	ID                  string
-	OutTradeNo          string
+	OrderNo             string
 	UserPublicID        string
 	PlanCode            string
 	BillingPeriod       string
 	AmountCents         int64
 	Currency            string
 	Status              Status
-	CodeURL             string
-	CodeURLExpiresAt    *time.Time
-	WechatTransactionID string
-	WechatTradeState    string
 	ClientRequestID     string
 	IdempotencyKey      string
 	Version             int64
@@ -58,6 +54,26 @@ type Order struct {
 	UpdatedAt           time.Time
 	PaidAt              *time.Time
 	ClosedAt            *time.Time
+	ProviderTransaction *ProviderTransactionRecord
+}
+
+// ProviderTransactionRecord is a persisted provider-side payment transaction for one local order.
+type ProviderTransactionRecord struct {
+	ID                    string
+	OrderID               string
+	Provider              string
+	PaymentMethod         string
+	MerchantID            string
+	MerchantOrderNo       string
+	ProviderTransactionID string
+	ProviderTradeState    string
+	Status                Status
+	PaymentPayload        map[string]any
+	ExpiresAt             *time.Time
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	PaidAt                *time.Time
+	ClosedAt              *time.Time
 }
 
 // ProviderNotification contains a verified and decrypted WeChat Pay notification.
@@ -70,14 +86,17 @@ type ProviderNotification struct {
 
 // ProviderTransaction contains provider transaction fields needed for validation and persistence.
 type ProviderTransaction struct {
-	AppID         string
-	MchID         string
-	OutTradeNo    string
-	TransactionID string
-	TradeState    string
-	Currency      string
-	AmountCents   int64
-	SuccessTime   *time.Time
+	AppID                 string
+	MchID                 string
+	Provider              string
+	PaymentMethod         string
+	MerchantID            string
+	MerchantOrderNo       string
+	ProviderTransactionID string
+	ProviderTradeState    string
+	Currency              string
+	AmountCents           int64
+	SuccessTime           *time.Time
 }
 
 // IdempotencyKey derives a deterministic key from user, requested plan, period, and client request id.

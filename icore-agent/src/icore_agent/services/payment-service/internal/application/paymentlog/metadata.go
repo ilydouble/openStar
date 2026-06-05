@@ -26,7 +26,7 @@ type Logger interface {
 
 // OrderMetadata contains non-secret local order fields for log metadata.
 type OrderMetadata struct {
-	OutTradeNo    string         `json:"out_trade_no,omitempty"`
+	OrderNo       string         `json:"order_no,omitempty"`
 	PlanCode      string         `json:"plan_code,omitempty"`
 	BillingPeriod string         `json:"billing_period,omitempty"`
 	AmountCents   int64          `json:"amount_cents,omitempty"`
@@ -103,7 +103,7 @@ func ProviderMetadataFromError(providerName string, merchantID string, api strin
 // OrderMetadataFromOrder extracts non-secret order fields from a payment order.
 func OrderMetadataFromOrder(order payment.Order) OrderMetadata {
 	return OrderMetadata{
-		OutTradeNo:    order.OutTradeNo,
+		OrderNo:       order.OrderNo,
 		PlanCode:      order.PlanCode,
 		BillingPeriod: order.BillingPeriod,
 		AmountCents:   order.AmountCents,

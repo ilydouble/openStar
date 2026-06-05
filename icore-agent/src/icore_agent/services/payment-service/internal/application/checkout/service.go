@@ -19,10 +19,10 @@ import (
 // Repository persists payment orders for checkout workflows.
 type Repository interface {
 	FindByIdempotencyKey(context.Context, string) (payment.Order, error)
-	FindByOutTradeNo(context.Context, string) (payment.Order, error)
+	FindByOrderNo(context.Context, string) (payment.Order, error)
 	CreateOrder(context.Context, payment.Order) error
-	MarkPending(context.Context, string, string, time.Time) (payment.Order, error)
-	FindByOutTradeNoForUser(context.Context, string, string) (payment.Order, error)
+	MarkProviderPending(context.Context, string, payment.ProviderTransactionRecord) (payment.Order, error)
+	FindByOrderNoForUser(context.Context, string, string) (payment.Order, error)
 	MarkClosed(context.Context, string, string, time.Time) (payment.Order, error)
 }
 
@@ -34,32 +34,32 @@ type Provider interface {
 
 // ServiceConfig wires checkout service dependencies and defaults.
 type ServiceConfig struct {
-	Catalog       catalog.Catalog
-	Repository    Repository
-	Provider      Provider
-	Logger        paymentlog.Logger
-	AppID         string
-	MchID         string
-	NotifyURL     string
-	OrderTTL      time.Duration
-	Now           func() time.Time
-	NewOrderID    func() string
-	NewOutTradeNo func(time.Time) string
+	Catalog    catalog.Catalog
+	Repository Repository
+	Provider   Provider
+	Logger     paymentlog.Logger
+	AppID      string
+	MchID      string
+	NotifyURL  string
+	OrderTTL   time.Duration
+	Now        func() time.Time
+	NewOrderID func() string
+	NewOrderNo func(time.Time) string
 }
 
 // Service owns payment checkout use cases.
 type Service struct {
-	catalog       catalog.Catalog
-	repository    Repository
-	provider      Provider
-	logger        paymentlog.Logger
-	appID         string
-	mchID         string
-	notifyURL     string
-	orderTTL      time.Duration
-	now           func() time.Time
-	newOrderID    func() string
-	newOutTradeNo func(time.Time) string
+	catalog    catalog.Catalog
+	repository Repository
+	provider   Provider
+	logger     paymentlog.Logger
+	appID      string
+	mchID      string
+	notifyURL  string
+	orderTTL   time.Duration
+	now        func() time.Time
+	newOrderID func() string
+	newOrderNo func(time.Time) string
 }
 
 // CreateNativePrepayInput is the trusted application request for WeChat Native prepay.
@@ -74,32 +74,32 @@ type CreateNativePrepayInput struct {
 
 // GetOrderInput identifies a user-scoped payment order lookup.
 type GetOrderInput struct {
-	UserID     string
-	OutTradeNo string
+	UserID  string
+	OrderNo string
 }
 
 // CloseOrderInput identifies a user-scoped order close request.
 type CloseOrderInput struct {
-	UserID     string
-	OutTradeNo string
-	RequestID  string
+	UserID    string
+	OrderNo   string
+	RequestID string
 }
 
 // ProviderPrepayRequest is the provider-neutral WeChat Native prepay request.
 type ProviderPrepayRequest struct {
-	AppID         string
-	MchID         string
-	Description   string
-	OutTradeNo    string
-	TimeExpire    time.Time
-	NotifyURL     string
-	AmountCents   int64
-	Currency      string
-	Attach        string
-	PayerClientIP string
+	AppID           string
+	MchID           string
+	Description     string
+	MerchantOrderNo string
+	TimeExpire      time.Time
+	NotifyURL       string
+	AmountCents     int64
+	Currency        string
+	Attach          string
+	PayerClientIP   string
 }
 
-// ProviderPrepayResult is the provider-neutral WeChat Native prepay response.
+// ProviderPrepayResult is the provider adapter response consumed by checkout.
 type ProviderPrepayResult struct {
 	CodeURL string
 }
@@ -112,29 +112,34 @@ type Amount struct {
 
 // NativePrepayResult is returned after a local order reaches prepay-created state.
 type NativePrepayResult struct {
-	OrderID    string         `json:"order_id"`
-	OutTradeNo string         `json:"out_trade_no"`
-	CodeURL    string         `json:"code_url"`
-	Status     payment.Status `json:"status"`
-	Amount     Amount         `json:"amount"`
-	ExpiresAt  *time.Time     `json:"expires_at"`
+	OrderID string         `json:"order_id"`
+	OrderNo string         `json:"order_no"`
+	Status  payment.Status `json:"status"`
+	Amount  Amount         `json:"amount"`
+	Payment PaymentResult  `json:"payment"`
+}
+
+// PaymentResult is the provider-neutral payment payload returned to HTTP clients.
+type PaymentResult struct {
+	Provider        string         `json:"provider"`
+	Method          string         `json:"method"`
+	MerchantOrderNo string         `json:"merchant_order_no"`
+	Payload         map[string]any `json:"payload"`
+	ExpiresAt       *time.Time     `json:"expires_at,omitempty"`
 }
 
 // OrderResult is the user-facing representation of one payment order.
 type OrderResult struct {
-	OrderID             string         `json:"order_id"`
-	OutTradeNo          string         `json:"out_trade_no"`
-	Status              payment.Status `json:"status"`
-	PlanCode            string         `json:"plan_code"`
-	BillingPeriod       string         `json:"billing_period"`
-	Amount              Amount         `json:"amount"`
-	CodeURL             string         `json:"code_url,omitempty"`
-	CodeURLExpiresAt    *time.Time     `json:"code_url_expires_at,omitempty"`
-	WechatTransactionID string         `json:"wechat_transaction_id,omitempty"`
-	WechatTradeState    string         `json:"wechat_trade_state,omitempty"`
-	PaidAt              *time.Time     `json:"paid_at,omitempty"`
-	ClosedAt            *time.Time     `json:"closed_at,omitempty"`
-	CreatedAt           time.Time      `json:"created_at"`
+	OrderID       string         `json:"order_id"`
+	OrderNo       string         `json:"order_no"`
+	Status        payment.Status `json:"status"`
+	PlanCode      string         `json:"plan_code"`
+	BillingPeriod string         `json:"billing_period"`
+	Amount        Amount         `json:"amount"`
+	Payment       *PaymentResult `json:"payment,omitempty"`
+	PaidAt        *time.Time     `json:"paid_at,omitempty"`
+	ClosedAt      *time.Time     `json:"closed_at,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
 }
 
 var (
@@ -158,22 +163,22 @@ func NewService(config ServiceConfig) *Service {
 	if newOrderID == nil {
 		newOrderID = func() string { return uuid.NewString() }
 	}
-	newOutTradeNo := config.NewOutTradeNo
-	if newOutTradeNo == nil {
-		newOutTradeNo = defaultOutTradeNo
+	newOrderNo := config.NewOrderNo
+	if newOrderNo == nil {
+		newOrderNo = defaultOrderNo
 	}
 	return &Service{
-		catalog:       config.Catalog,
-		repository:    config.Repository,
-		provider:      config.Provider,
-		logger:        config.Logger,
-		appID:         strings.TrimSpace(config.AppID),
-		mchID:         strings.TrimSpace(config.MchID),
-		notifyURL:     strings.TrimSpace(config.NotifyURL),
-		orderTTL:      orderTTL,
-		now:           now,
-		newOrderID:    newOrderID,
-		newOutTradeNo: newOutTradeNo,
+		catalog:    config.Catalog,
+		repository: config.Repository,
+		provider:   config.Provider,
+		logger:     config.Logger,
+		appID:      strings.TrimSpace(config.AppID),
+		mchID:      strings.TrimSpace(config.MchID),
+		notifyURL:  strings.TrimSpace(config.NotifyURL),
+		orderTTL:   orderTTL,
+		now:        now,
+		newOrderID: newOrderID,
+		newOrderNo: newOrderNo,
 	}
 }
 
@@ -208,7 +213,7 @@ func (service *Service) CreateNativePrepay(ctx context.Context, input CreateNati
 	now := service.now().UTC()
 	order := payment.Order{
 		ID:              service.newOrderID(),
-		OutTradeNo:      service.newOutTradeNo(now),
+		OrderNo:         service.newOrderNo(now),
 		UserPublicID:    input.UserID,
 		PlanCode:        input.PlanCode,
 		BillingPeriod:   input.BillingPeriod,
@@ -230,22 +235,34 @@ func (service *Service) CreateNativePrepay(ctx context.Context, input CreateNati
 func (service *Service) createProviderPrepay(ctx context.Context, order payment.Order, item catalog.Item, input CreateNativePrepayInput) (NativePrepayResult, error) {
 	expiresAt := service.now().UTC().Add(service.orderTTL)
 	providerResult, err := service.provider.PrepayNative(ctx, ProviderPrepayRequest{
-		AppID:         service.appID,
-		MchID:         service.mchID,
-		Description:   item.Description,
-		OutTradeNo:    order.OutTradeNo,
-		TimeExpire:    expiresAt,
-		NotifyURL:     service.notifyURL,
-		AmountCents:   item.AmountCents,
-		Currency:      item.Currency,
-		Attach:        item.EntitlementsVersion,
-		PayerClientIP: input.PayerClientIP,
+		AppID:           service.appID,
+		MchID:           service.mchID,
+		Description:     item.Description,
+		MerchantOrderNo: order.OrderNo,
+		TimeExpire:      expiresAt,
+		NotifyURL:       service.notifyURL,
+		AmountCents:     item.AmountCents,
+		Currency:        item.Currency,
+		Attach:          item.EntitlementsVersion,
+		PayerClientIP:   input.PayerClientIP,
 	})
 	if err != nil {
 		service.logProviderError(ctx, "payment provider prepay failed", traceIDForPrepay(input), paymentlog.OperationNativePrepay, order, input, err)
 		return NativePrepayResult{}, fmt.Errorf("wechat native prepay: %w", err)
 	}
-	pendingOrder, err := service.repository.MarkPending(ctx, order.OutTradeNo, providerResult.CodeURL, expiresAt)
+	pendingOrder, err := service.repository.MarkProviderPending(ctx, order.OrderNo, payment.ProviderTransactionRecord{
+		ID:              uuid.NewString(),
+		OrderID:         order.ID,
+		Provider:        payment.ProviderWeChatPay,
+		PaymentMethod:   payment.PaymentMethodNative,
+		MerchantID:      service.mchID,
+		MerchantOrderNo: order.OrderNo,
+		Status:          payment.StatusPending,
+		PaymentPayload:  map[string]any{"code_url": providerResult.CodeURL},
+		ExpiresAt:       &expiresAt,
+		CreatedAt:       service.now().UTC(),
+		UpdatedAt:       service.now().UTC(),
+	})
 	if err != nil {
 		return NativePrepayResult{}, err
 	}
@@ -255,11 +272,11 @@ func (service *Service) createProviderPrepay(ctx context.Context, order payment.
 // GetOrder returns one user-scoped payment order.
 func (service *Service) GetOrder(ctx context.Context, input GetOrderInput) (OrderResult, error) {
 	userID := strings.TrimSpace(input.UserID)
-	outTradeNo := strings.TrimSpace(input.OutTradeNo)
-	if userID == "" || outTradeNo == "" {
+	orderNo := strings.TrimSpace(input.OrderNo)
+	if userID == "" || orderNo == "" {
 		return OrderResult{}, ErrInvalidRequest
 	}
-	order, err := service.repository.FindByOutTradeNoForUser(ctx, outTradeNo, userID)
+	order, err := service.repository.FindByOrderNoForUser(ctx, orderNo, userID)
 	if err != nil {
 		return OrderResult{}, err
 	}
@@ -269,11 +286,11 @@ func (service *Service) GetOrder(ctx context.Context, input GetOrderInput) (Orde
 // CloseOrder closes one user-scoped unpaid payment order.
 func (service *Service) CloseOrder(ctx context.Context, input CloseOrderInput) (OrderResult, error) {
 	userID := strings.TrimSpace(input.UserID)
-	outTradeNo := strings.TrimSpace(input.OutTradeNo)
-	if userID == "" || outTradeNo == "" {
+	orderNo := strings.TrimSpace(input.OrderNo)
+	if userID == "" || orderNo == "" {
 		return OrderResult{}, ErrInvalidRequest
 	}
-	order, err := service.repository.FindByOutTradeNoForUser(ctx, outTradeNo, userID)
+	order, err := service.repository.FindByOrderNoForUser(ctx, orderNo, userID)
 	if err != nil {
 		return OrderResult{}, err
 	}
@@ -281,7 +298,7 @@ func (service *Service) CloseOrder(ctx context.Context, input CloseOrderInput) (
 		return OrderResult{}, payment.ErrInvalidOrderState
 	}
 	if order.Status != payment.StatusClosed && service.provider != nil {
-		if err := service.provider.CloseOrder(ctx, outTradeNo); err != nil {
+		if err := service.provider.CloseOrder(ctx, orderNo); err != nil {
 			service.logProviderError(ctx, "payment provider close order failed", strings.TrimSpace(input.RequestID), paymentlog.OperationCloseOrder, order, CreateNativePrepayInput{
 				UserID:          userID,
 				PlanCode:        order.PlanCode,
@@ -291,7 +308,7 @@ func (service *Service) CloseOrder(ctx context.Context, input CloseOrderInput) (
 			return OrderResult{}, fmt.Errorf("wechat close order: %w", err)
 		}
 	}
-	closed, err := service.repository.MarkClosed(ctx, outTradeNo, userID, service.now().UTC())
+	closed, err := service.repository.MarkClosed(ctx, orderNo, userID, service.now().UTC())
 	if err != nil {
 		return OrderResult{}, err
 	}
@@ -348,37 +365,56 @@ func normalizePrepayInput(input CreateNativePrepayInput) CreateNativePrepayInput
 
 func nativePrepayResultFromOrder(order payment.Order) NativePrepayResult {
 	return NativePrepayResult{
-		OrderID:    order.ID,
-		OutTradeNo: order.OutTradeNo,
-		CodeURL:    order.CodeURL,
-		Status:     order.Status,
+		OrderID: order.ID,
+		OrderNo: order.OrderNo,
+		Status:  order.Status,
 		Amount: Amount{
 			Currency: order.Currency,
 			Total:    order.AmountCents,
 		},
-		ExpiresAt: order.CodeURLExpiresAt,
+		Payment: paymentResultFromTransaction(order.ProviderTransaction),
 	}
 }
 
 func orderResultFromOrder(order payment.Order) OrderResult {
-	return OrderResult{
-		OrderID:             order.ID,
-		OutTradeNo:          order.OutTradeNo,
-		Status:              order.Status,
-		PlanCode:            order.PlanCode,
-		BillingPeriod:       order.BillingPeriod,
-		Amount:              Amount{Currency: order.Currency, Total: order.AmountCents},
-		CodeURL:             order.CodeURL,
-		CodeURLExpiresAt:    order.CodeURLExpiresAt,
-		WechatTransactionID: order.WechatTransactionID,
-		WechatTradeState:    order.WechatTradeState,
-		PaidAt:              order.PaidAt,
-		ClosedAt:            order.ClosedAt,
-		CreatedAt:           order.CreatedAt,
+	result := OrderResult{
+		OrderID:       order.ID,
+		OrderNo:       order.OrderNo,
+		Status:        order.Status,
+		PlanCode:      order.PlanCode,
+		BillingPeriod: order.BillingPeriod,
+		Amount:        Amount{Currency: order.Currency, Total: order.AmountCents},
+		PaidAt:        order.PaidAt,
+		ClosedAt:      order.ClosedAt,
+		CreatedAt:     order.CreatedAt,
+	}
+	if order.ProviderTransaction != nil {
+		paymentResult := paymentResultFromTransaction(order.ProviderTransaction)
+		result.Payment = &paymentResult
+	}
+	return result
+}
+
+// paymentResultFromTransaction converts a provider transaction into an HTTP-facing payment object.
+func paymentResultFromTransaction(transaction *payment.ProviderTransactionRecord) PaymentResult {
+	if transaction == nil {
+		return PaymentResult{Payload: map[string]any{}}
+	}
+	payload := transaction.PaymentPayload
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	return PaymentResult{
+		Provider:        transaction.Provider,
+		Method:          transaction.PaymentMethod,
+		MerchantOrderNo: transaction.MerchantOrderNo,
+		Payload:         payload,
+		ExpiresAt:       transaction.ExpiresAt,
 	}
 }
 
-func defaultOutTradeNo(now time.Time) string {
+// defaultOrderNo creates a compact merchant order number for provider requests.
+func defaultOrderNo(now time.Time) string {
 	random := rand.New(rand.NewSource(now.UnixNano()))
 	suffix := strconv.FormatInt(random.Int63(), 36)
 	value := "wx" + now.UTC().Format("20060102150405") + suffix

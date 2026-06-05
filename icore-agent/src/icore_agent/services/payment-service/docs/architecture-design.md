@@ -1,6 +1,6 @@
 # payment-service Architecture Design
 
-Status: draft for discussion. This document records the proposed WeChat Pay Native payment microservice design. It does not include implementation code.
+Status: draft for discussion. This document records the phase 1 WeChat Pay Native payment microservice design with a provider-neutral payment core.
 
 ## Context
 
@@ -46,7 +46,7 @@ Relevant SDK findings:
 
 ## Goals
 
-- Add a Go `payment-service` that owns payment orders, WeChat Pay SDK integration, callback verification, reconciliation, and payment events.
+- Add a Go `payment-service` that owns payment orders, provider transaction records, WeChat Pay SDK integration, callback verification, reconciliation, and payment events.
 - Support WeChat Pay Native payment first: web checkout returns a `code_url`; the frontend renders the QR code.
 - Route payment checkout/order HTTP APIs directly from the gateway to `payment-service`. The Python backend should not proxy normal checkout traffic.
 - Keep account plan mutation in the Python account/billing domain. Payment service publishes a verified `payment.order.succeeded` event; Python applies the plan idempotently.
@@ -99,7 +99,7 @@ Boundary rules:
 
 - `domain/payment`: order aggregate, status transitions, amount/currency value objects, idempotency rules.
 - `domain/catalog`: payable SKU and plan-price definitions. It mirrors account plan codes but owns payment prices.
-- `application/checkout`: create Native prepay order and return `code_url`.
+- `application/checkout`: create provider prepay orders and return provider payloads. For WeChat Pay Native, the payload contains `code_url`.
 - `application/notification`: verify callback, persist provider transaction state, and create outbox event.
 - `application/reconciliation`: query WeChat Pay for pending orders and close expired orders.
 - `infrastructure/wechatpay`: SDK client, Native adapter, notify handler, and provider error mapping.
@@ -134,8 +134,8 @@ Gateway-routed payment-service endpoints:
 
 ```text
 POST /api/v1/payment/native/prepay
-GET  /api/v1/payment/orders/{out_trade_no}
-POST /api/v1/payment/orders/{out_trade_no}/close
+GET  /api/v1/payment/orders/{order_no}
+POST /api/v1/payment/orders/{order_no}/close
 GET  /health
 GET  /ready
 ```
@@ -162,14 +162,21 @@ POST /webhooks/wechatpay/native
 ```json
 {
   "order_id": "uuid",
-  "out_trade_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
-  "code_url": "weixin://wxpay/bizpayurl?...",
+  "order_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
   "status": "pending",
   "amount": {
     "currency": "CNY",
     "total": 19900
   },
-  "expires_at": "2026-05-31T12:30:00Z"
+  "payment": {
+    "provider": "wechatpay",
+    "method": "native",
+    "merchant_order_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
+    "payload": {
+      "code_url": "weixin://wxpay/bizpayurl?..."
+    },
+    "expires_at": "2026-05-31T12:30:00Z"
+  }
 }
 ```
 
@@ -177,7 +184,7 @@ The payment-service handler derives `user_id` from the trusted `X-User-ID` heade
 
 Gateway routing needs two changes during implementation:
 
-- Route `/api/v1/payment/native/prepay`, `/api/v1/payment/orders/{out_trade_no}`, and `/api/v1/payment/orders/{out_trade_no}/close` to `payment-service` as JWT-protected routes.
+- Route `/api/v1/payment/native/prepay`, `/api/v1/payment/orders/{order_no}`, and `/api/v1/payment/orders/{order_no}/close` to `payment-service` as JWT-protected routes.
 - Route `/webhooks/wechatpay/native` directly to `payment-service` without user auth, because WeChat Pay must send the original signed body to the service that verifies it.
 
 ## Python Boundary
@@ -212,24 +219,32 @@ Core tables:
 
 - `payment_orders`
   - `id`
-  - `out_trade_no` unique, WeChat merchant order number, 6-32 allowed characters.
+  - `order_no` unique, service-owned order number used by HTTP clients, 6-32 allowed characters.
   - `user_public_id`
   - `plan_code`
   - `billing_period`
   - `amount_cents`
   - `currency`
   - `status`
-  - `code_url`
-  - `code_url_expires_at`
-  - `wechat_transaction_id`
-  - `wechat_trade_state`
   - `client_request_id`
   - `idempotency_key`
   - `version`
   - `created_at`, `updated_at`, `paid_at`, `closed_at`
+- `payment_provider_transactions`
+  - provider-specific transaction projection linked to `payment_orders`.
+  - `provider`, for example `wechatpay`.
+  - `payment_method`, for example `native`.
+  - `merchant_id`
+  - `merchant_order_no`, unique per provider and merchant account.
+  - `provider_transaction_id`, unique per provider and merchant account when present.
+  - `provider_trade_state`
+  - `status`
+  - `payment_payload` JSONB for provider-returned client payloads such as WeChat Pay `code_url`.
+  - `expires_at`, `created_at`, `updated_at`
 - `payment_order_events`
   - append-only audit trail for local and provider events.
-  - unique `provider_event_id` for WeChat notifications.
+  - unique `provider_event_id` scoped by `provider` and `merchant_id`.
+  - provider-neutral merchant and transaction identifiers for callback/reconciliation traceability.
   - sanitized payload only; do not store secrets.
 - `payment_outbox`
   - transactional event records to publish to Kafka after DB commit.
@@ -245,25 +260,26 @@ Idempotency must exist at three layers.
 
 Client prepay idempotency:
 
-- Python generates or forwards `client_request_id`.
+- The frontend generates `client_request_id`; the gateway forwards it to payment-service with the trusted user identity.
 - Payment service derives an `idempotency_key` from `user_id`, `plan_code`, `billing_period`, and `client_request_id`.
-- If the same key is seen with the same payload and an active `pending` order exists, return the existing `code_url`.
+- If the same key is seen with the same payload and an active `pending` order exists, return the existing provider payment payload.
 - If the same key is seen with different amount/plan/period, return conflict.
 - If an order is already `paid`, return the paid order state instead of creating another charge.
 
-WeChat merchant order idempotency:
+Provider merchant order idempotency:
 
-- `out_trade_no` is unique in PostgreSQL and unique under the WeChat merchant account.
-- Generate it as a compact ASCII-safe value, for example `wx` plus ULID, staying within WeChat's 32-character limit.
-- Never reuse `out_trade_no` for a changed amount or plan.
+- `order_no` is unique in PostgreSQL.
+- `merchant_order_no` is unique under each `(provider, merchant_id)` pair and is currently the same value as `order_no` for WeChat Pay Native.
+- Generate the order number as a compact ASCII-safe value, for example `wx` plus ULID, staying within WeChat's 32-character limit while WeChat is the first provider.
+- Never reuse `merchant_order_no` for a changed amount or plan.
 
 Callback idempotency:
 
-- Store WeChat notification `id` with a unique constraint.
+- Store provider notification `id` with a unique constraint scoped by provider and merchant account.
 - Parse and verify the callback before mutating state.
 - Process callback state transitions inside a DB transaction with a row lock on `payment_orders`.
 - If a duplicate success notification arrives for an already-paid order, record the duplicate event and return success.
-- Compare callback amount, currency, `appid`, `mchid`, `out_trade_no`, and transaction id before marking paid.
+- Compare callback amount, currency, merchant/app identity, `merchant_order_no`, and provider transaction id before marking paid.
 
 ## Concurrency And Capacity
 
@@ -271,7 +287,7 @@ The service should be stateless at the HTTP layer and horizontally scalable.
 
 Concurrency controls:
 
-- Use PostgreSQL unique constraints for `out_trade_no`, `idempotency_key`, and `provider_event_id`.
+- Use PostgreSQL unique constraints for `order_no`, `idempotency_key`, provider merchant order ids, provider transaction ids, and provider event ids.
 - Use row-level locks or optimistic `version` checks when transitioning order state.
 - Partition Kafka events by `user_public_id` for ordered entitlement application per user.
 - Use short context deadlines for WeChat API calls and callback processing.
@@ -310,14 +326,21 @@ Important event types:
   "event_type": "payment.order.succeeded",
   "occurred_at": "2026-05-31T12:01:00Z",
   "order_id": "uuid",
-  "out_trade_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
-  "wechat_transaction_id": "420000...",
+  "order_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
   "user_id": "uuid-public-id",
   "plan_code": "pro",
   "billing_period": "monthly",
   "amount": {
     "currency": "CNY",
     "total": 19900
+  },
+  "provider": {
+    "name": "wechatpay",
+    "method": "native",
+    "merchant_id": "1900000000",
+    "merchant_order_no": "wx01HZY7M6W3J9X4P0Q8M2N7K5A",
+    "transaction_id": "420000...",
+    "trade_state": "SUCCESS"
   },
   "entitlements_version": "account-plans-v2"
 }
@@ -408,7 +431,7 @@ Callback hardening:
 Prepay failures:
 
 - Validation failure: return 400-style envelope to Python.
-- WeChat `OUT_TRADE_NO_USED`: query by `out_trade_no`; if payload matches existing order, return existing state; otherwise mark local order failed and require a new order id.
+- WeChat `OUT_TRADE_NO_USED`: query by provider merchant order number; if payload matches existing order, return existing state; otherwise mark local order failed and require a new order id.
 - WeChat frequency/system/network failures: retry with bounded backoff only when the request body is identical.
 
 Callback failures:

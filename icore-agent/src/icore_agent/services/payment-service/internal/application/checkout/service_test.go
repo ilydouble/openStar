@@ -12,71 +12,89 @@ import (
 )
 
 type memoryOrderRepository struct {
-	orders        map[string]payment.Order
-	idempotencies map[string]string
+	orders               map[string]payment.Order
+	providerTransactions map[string]payment.ProviderTransactionRecord
+	idempotencies        map[string]string
 }
 
 func newMemoryOrderRepository() *memoryOrderRepository {
 	return &memoryOrderRepository{
-		orders:        map[string]payment.Order{},
-		idempotencies: map[string]string{},
+		orders:               map[string]payment.Order{},
+		providerTransactions: map[string]payment.ProviderTransactionRecord{},
+		idempotencies:        map[string]string{},
 	}
 }
 
 func (repo *memoryOrderRepository) FindByIdempotencyKey(_ context.Context, key string) (payment.Order, error) {
-	outTradeNo, ok := repo.idempotencies[key]
+	orderNo, ok := repo.idempotencies[key]
 	if !ok {
 		return payment.Order{}, payment.ErrOrderNotFound
 	}
-	return repo.orders[outTradeNo], nil
+	return repo.orderWithPayment(orderNo), nil
 }
 
-func (repo *memoryOrderRepository) FindByOutTradeNo(_ context.Context, outTradeNo string) (payment.Order, error) {
-	order, ok := repo.orders[outTradeNo]
+func (repo *memoryOrderRepository) FindByOrderNo(_ context.Context, orderNo string) (payment.Order, error) {
+	order, ok := repo.orders[orderNo]
 	if !ok {
 		return payment.Order{}, payment.ErrOrderNotFound
 	}
+	order.ProviderTransaction = repo.providerTransactionForOrder(order.ID)
 	return order, nil
 }
 
 func (repo *memoryOrderRepository) CreateOrder(_ context.Context, order payment.Order) error {
-	if _, exists := repo.orders[order.OutTradeNo]; exists {
-		return errors.New("duplicate out_trade_no")
+	if _, exists := repo.orders[order.OrderNo]; exists {
+		return errors.New("duplicate order_no")
 	}
-	repo.orders[order.OutTradeNo] = order
-	repo.idempotencies[order.IdempotencyKey] = order.OutTradeNo
+	repo.orders[order.OrderNo] = order
+	repo.idempotencies[order.IdempotencyKey] = order.OrderNo
 	return nil
 }
 
-func (repo *memoryOrderRepository) MarkPending(_ context.Context, outTradeNo string, codeURL string, expiresAt time.Time) (payment.Order, error) {
-	order, ok := repo.orders[outTradeNo]
+func (repo *memoryOrderRepository) MarkProviderPending(_ context.Context, orderNo string, transaction payment.ProviderTransactionRecord) (payment.Order, error) {
+	order, ok := repo.orders[orderNo]
 	if !ok {
 		return payment.Order{}, payment.ErrOrderNotFound
 	}
 	order.Status = payment.StatusPending
-	order.CodeURL = codeURL
-	order.CodeURLExpiresAt = &expiresAt
-	repo.orders[outTradeNo] = order
-	return order, nil
+	repo.orders[orderNo] = order
+	transaction.OrderID = order.ID
+	repo.providerTransactions[order.ID] = transaction
+	return repo.orderWithPayment(orderNo), nil
 }
 
-func (repo *memoryOrderRepository) FindByOutTradeNoForUser(_ context.Context, outTradeNo string, userID string) (payment.Order, error) {
-	order, ok := repo.orders[outTradeNo]
+func (repo *memoryOrderRepository) FindByOrderNoForUser(_ context.Context, orderNo string, userID string) (payment.Order, error) {
+	order, ok := repo.orders[orderNo]
 	if !ok || order.UserPublicID != userID {
 		return payment.Order{}, payment.ErrOrderNotFound
 	}
+	order.ProviderTransaction = repo.providerTransactionForOrder(order.ID)
 	return order, nil
 }
 
-func (repo *memoryOrderRepository) MarkClosed(_ context.Context, outTradeNo string, userID string, closedAt time.Time) (payment.Order, error) {
-	order, ok := repo.orders[outTradeNo]
+func (repo *memoryOrderRepository) MarkClosed(_ context.Context, orderNo string, userID string, closedAt time.Time) (payment.Order, error) {
+	order, ok := repo.orders[orderNo]
 	if !ok || order.UserPublicID != userID {
 		return payment.Order{}, payment.ErrOrderNotFound
 	}
 	order.Status = payment.StatusClosed
 	order.ClosedAt = &closedAt
-	repo.orders[outTradeNo] = order
-	return order, nil
+	repo.orders[orderNo] = order
+	return repo.orderWithPayment(orderNo), nil
+}
+
+func (repo *memoryOrderRepository) orderWithPayment(orderNo string) payment.Order {
+	order := repo.orders[orderNo]
+	order.ProviderTransaction = repo.providerTransactionForOrder(order.ID)
+	return order
+}
+
+func (repo *memoryOrderRepository) providerTransactionForOrder(orderID string) *payment.ProviderTransactionRecord {
+	transaction, ok := repo.providerTransactions[orderID]
+	if !ok {
+		return nil
+	}
+	return &transaction
 }
 
 type fakeProvider struct {
@@ -138,7 +156,7 @@ func TestCreateNativePrepayCreatesPendingOrderFromCatalog(t *testing.T) {
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOutTradeNo: func(time.Time) string {
+		NewOrderNo: func(time.Time) string {
 			return "wx202606041200000000000001"
 		},
 	})
@@ -154,8 +172,11 @@ func TestCreateNativePrepayCreatesPendingOrderFromCatalog(t *testing.T) {
 		t.Fatalf("CreateNativePrepay returned error: %v", err)
 	}
 
-	if result.OutTradeNo != "wx202606041200000000000001" || result.CodeURL != provider.codeURL || result.Status != payment.StatusPending {
+	if result.OrderNo != "wx202606041200000000000001" || result.Status != payment.StatusPending {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.Payment.Provider != payment.ProviderWeChatPay || result.Payment.Payload["code_url"] != provider.codeURL {
+		t.Fatalf("payment = %#v", result.Payment)
 	}
 	if result.Amount.Total != 19900 || result.Amount.Currency != "CNY" {
 		t.Fatalf("amount = %#v", result.Amount)
@@ -167,7 +188,7 @@ func TestCreateNativePrepayCreatesPendingOrderFromCatalog(t *testing.T) {
 	if call.AmountCents != 19900 || call.Currency != "CNY" || call.Description != "Pro monthly" {
 		t.Fatalf("provider request = %#v", call)
 	}
-	if call.OutTradeNo != result.OutTradeNo || call.PayerClientIP != "203.0.113.10" {
+	if call.MerchantOrderNo != result.OrderNo || call.PayerClientIP != "203.0.113.10" {
 		t.Fatalf("provider request identity = %#v", call)
 	}
 }
@@ -186,7 +207,7 @@ func TestCreateNativePrepayReturnsExistingPendingOrderForSameIdempotencyKey(t *t
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOutTradeNo: func(time.Time) string {
+		NewOrderNo: func(time.Time) string {
 			return "wx202606041200000000000001"
 		},
 	})
@@ -210,7 +231,7 @@ func TestCreateNativePrepayReturnsExistingPendingOrderForSameIdempotencyKey(t *t
 		t.Fatalf("second prepay returned error: %v", err)
 	}
 
-	if second.OutTradeNo != first.OutTradeNo || second.CodeURL != first.CodeURL {
+	if second.OrderNo != first.OrderNo || second.Payment.Payload["code_url"] != first.Payment.Payload["code_url"] {
 		t.Fatalf("second = %#v, first = %#v", second, first)
 	}
 	if len(provider.calls) != 1 {
@@ -224,7 +245,7 @@ func TestCreateNativePrepayRetriesProviderForExistingCreatedOrder(t *testing.T) 
 	key := payment.IdempotencyKey("user-1", "pro", "monthly", "req-1")
 	repo.orders["wx202606041200000000000001"] = payment.Order{
 		ID:              "11111111-1111-1111-1111-111111111111",
-		OutTradeNo:      "wx202606041200000000000001",
+		OrderNo:         "wx202606041200000000000001",
 		UserPublicID:    "user-1",
 		PlanCode:        "pro",
 		BillingPeriod:   "monthly",
@@ -259,14 +280,14 @@ func TestCreateNativePrepayRetriesProviderForExistingCreatedOrder(t *testing.T) 
 		t.Fatalf("CreateNativePrepay returned error: %v", err)
 	}
 
-	if result.Status != payment.StatusPending || result.CodeURL != provider.codeURL {
+	if result.Status != payment.StatusPending || result.Payment.Payload["code_url"] != provider.codeURL {
 		t.Fatalf("result = %#v", result)
 	}
 	if len(provider.calls) != 1 {
 		t.Fatalf("provider calls = %d, want 1", len(provider.calls))
 	}
-	if provider.calls[0].OutTradeNo != "wx202606041200000000000001" {
-		t.Fatalf("provider out_trade_no = %q", provider.calls[0].OutTradeNo)
+	if provider.calls[0].MerchantOrderNo != "wx202606041200000000000001" {
+		t.Fatalf("provider merchant_order_no = %q", provider.calls[0].MerchantOrderNo)
 	}
 }
 
@@ -294,7 +315,7 @@ func TestCreateNativePrepayLogsProviderErrorWithWrappedMetadata(t *testing.T) {
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOutTradeNo: func(time.Time) string {
+		NewOrderNo: func(time.Time) string {
 			return "wx202606041200000000000001"
 		},
 	})
@@ -335,7 +356,7 @@ func TestCreateNativePrepayLogsProviderErrorWithWrappedMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("order metadata = %#v, want paymentlog.OrderMetadata", event.metadata["order"])
 	}
-	if orderMetadata.OutTradeNo != "wx202606041200000000000001" || orderMetadata.AmountCents != 19900 {
+	if orderMetadata.OrderNo != "wx202606041200000000000001" || orderMetadata.AmountCents != 19900 {
 		t.Fatalf("order metadata = %#v", orderMetadata)
 	}
 	requestMetadata, ok := event.metadata["request"].(paymentlog.RequestMetadata)

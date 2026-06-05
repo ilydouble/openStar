@@ -191,15 +191,18 @@ PAYMENT_DATABASE_URL=postgres://icore_payment:<replace-with-payment-db-password>
 The first migration should create the payment source-of-truth tables:
 
 - `payment_orders`
+- `payment_provider_transactions`
 - `payment_order_events`
 - `payment_outbox`
 - optionally `payment_catalog_items` if pricing is stored in the database instead of config
 
 Use database constraints for critical invariants:
 
-- unique `out_trade_no`
+- unique service order number `order_no`
 - unique `idempotency_key`
-- unique provider notification/event id
+- unique provider merchant order per `(provider, merchant_id, merchant_order_no)`
+- unique provider transaction id per `(provider, merchant_id, provider_transaction_id)` when present
+- unique provider notification/event id scoped by `(provider, merchant_id, provider_event_id)`
 - enum/check constraints for local payment status
 - indexes for pending-order reconciliation and outbox publishing
 

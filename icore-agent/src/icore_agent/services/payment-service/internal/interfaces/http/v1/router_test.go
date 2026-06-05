@@ -21,15 +21,20 @@ func (service *fakeCheckoutService) CreateNativePrepay(_ context.Context, input 
 	service.received = input
 	expiresAt := time.Date(2026, 6, 4, 12, 30, 0, 0, time.UTC)
 	return checkout.NativePrepayResult{
-		OrderID:    "11111111-1111-1111-1111-111111111111",
-		OutTradeNo: "wx202606041200000000000001",
-		CodeURL:    "weixin://wxpay/bizpayurl?pr=test",
-		Status:     payment.StatusPending,
+		OrderID: "11111111-1111-1111-1111-111111111111",
+		OrderNo: "wx202606041200000000000001",
+		Payment: checkout.PaymentResult{
+			Provider:        payment.ProviderWeChatPay,
+			Method:          payment.PaymentMethodNative,
+			MerchantOrderNo: "wx202606041200000000000001",
+			Payload:         map[string]any{"code_url": "weixin://wxpay/bizpayurl?pr=test"},
+			ExpiresAt:       &expiresAt,
+		},
+		Status: payment.StatusPending,
 		Amount: checkout.Amount{
 			Currency: "CNY",
 			Total:    19900,
 		},
-		ExpiresAt: &expiresAt,
 	}, nil
 }
 
@@ -93,7 +98,15 @@ func TestPrepayUsesTrustedGatewayUserIDAndReturnsEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatalf("data = %#v", body.Data)
 	}
-	if data["out_trade_no"] != "wx202606041200000000000001" || data["code_url"] == "" {
+	if data["order_no"] != "wx202606041200000000000001" || data["out_trade_no"] != nil || data["wechat_transaction_id"] != nil {
 		t.Fatalf("data = %#v", data)
+	}
+	paymentData, ok := data["payment"].(map[string]any)
+	if !ok {
+		t.Fatalf("payment = %#v", data["payment"])
+	}
+	payload, ok := paymentData["payload"].(map[string]any)
+	if !ok || payload["code_url"] == "" {
+		t.Fatalf("payment payload = %#v", paymentData["payload"])
 	}
 }

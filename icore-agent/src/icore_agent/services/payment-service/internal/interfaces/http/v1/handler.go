@@ -102,15 +102,15 @@ func (handler *handler) createNativePrepay(w http.ResponseWriter, r *http.Reques
 	writeSuccess(w, http.StatusCreated, result)
 }
 
-func (handler *handler) getOrder(w http.ResponseWriter, r *http.Request, outTradeNo string) {
+func (handler *handler) getOrder(w http.ResponseWriter, r *http.Request, orderNo string) {
 	userID := trustedUserID(r)
 	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing_user_id", "missing trusted user id")
 		return
 	}
 	result, err := handler.checkout.GetOrder(r.Context(), checkout.GetOrderInput{
-		UserID:     userID,
-		OutTradeNo: outTradeNo,
+		UserID:  userID,
+		OrderNo: orderNo,
 	})
 	if err != nil {
 		writeApplicationError(w, err)
@@ -119,16 +119,16 @@ func (handler *handler) getOrder(w http.ResponseWriter, r *http.Request, outTrad
 	writeSuccess(w, http.StatusOK, result)
 }
 
-func (handler *handler) closeOrder(w http.ResponseWriter, r *http.Request, outTradeNo string) {
+func (handler *handler) closeOrder(w http.ResponseWriter, r *http.Request, orderNo string) {
 	userID := trustedUserID(r)
 	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing_user_id", "missing trusted user id")
 		return
 	}
 	result, err := handler.checkout.CloseOrder(r.Context(), checkout.CloseOrderInput{
-		UserID:     userID,
-		OutTradeNo: outTradeNo,
-		RequestID:  requestIDFromGatewayHeaders(r),
+		UserID:    userID,
+		OrderNo:   orderNo,
+		RequestID: requestIDFromGatewayHeaders(r),
 	})
 	if err != nil {
 		writeApplicationError(w, err)

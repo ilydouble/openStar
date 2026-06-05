@@ -68,7 +68,7 @@ func (service *Service) HandleWechatPayNative(ctx context.Context, request *http
 		service.logProviderWarning(ctx, "payment provider notification merchant mismatch", requestIDFromRequest(request), notification, ErrNotificationMismatch)
 		return ErrNotificationMismatch
 	}
-	if transaction.TradeState != "SUCCESS" {
+	if transaction.ProviderTradeState != "SUCCESS" {
 		service.logProviderWarning(ctx, "payment provider notification ignored", requestIDFromRequest(request), notification, ErrNotificationNotSuccess)
 		return ErrNotificationNotSuccess
 	}
@@ -110,7 +110,7 @@ func (service *Service) notificationMetadata(notification payment.ProviderNotifi
 	return paymentlog.Metadata(
 		paymentlog.OperationNativeNotification,
 		paymentlog.OrderMetadata{
-			OutTradeNo:  transaction.OutTradeNo,
+			OrderNo:     transaction.MerchantOrderNo,
 			AmountCents: transaction.AmountCents,
 			Currency:    transaction.Currency,
 		},

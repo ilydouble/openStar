@@ -28,7 +28,7 @@ type recordingNotificationRepository struct {
 
 func (repo *recordingNotificationRepository) MarkPaidByProvider(_ context.Context, notification payment.ProviderNotification) (payment.Order, error) {
 	repo.calls = append(repo.calls, notification)
-	return payment.Order{OutTradeNo: notification.Transaction.OutTradeNo, Status: payment.StatusPaid}, nil
+	return payment.Order{OrderNo: notification.Transaction.MerchantOrderNo, Status: payment.StatusPaid}, nil
 }
 
 type recordedLogEvent struct {
@@ -73,7 +73,7 @@ func TestHandleWechatPayNativePersistsVerifiedSuccessNotification(t *testing.T) 
 	if len(repo.calls) != 1 {
 		t.Fatalf("repo calls = %d, want 1", len(repo.calls))
 	}
-	if repo.calls[0].EventID != "evt-1" || repo.calls[0].Transaction.TransactionID != "4200001" {
+	if repo.calls[0].EventID != "evt-1" || repo.calls[0].Transaction.ProviderTransactionID != "4200001" {
 		t.Fatalf("notification = %#v", repo.calls[0])
 	}
 }
@@ -142,14 +142,17 @@ func successNotification() payment.ProviderNotification {
 		EventID:   "evt-1",
 		EventType: "TRANSACTION.SUCCESS",
 		Transaction: payment.ProviderTransaction{
-			AppID:         "wx-app",
-			MchID:         "mch-1",
-			OutTradeNo:    "wx202606041200000000000001",
-			TransactionID: "4200001",
-			TradeState:    "SUCCESS",
-			Currency:      "CNY",
-			AmountCents:   19900,
+			AppID:                 "wx-app",
+			MchID:                 "mch-1",
+			Provider:              payment.ProviderWeChatPay,
+			PaymentMethod:         payment.PaymentMethodNative,
+			MerchantID:            "mch-1",
+			MerchantOrderNo:       "wx202606041200000000000001",
+			ProviderTransactionID: "4200001",
+			ProviderTradeState:    "SUCCESS",
+			Currency:              "CNY",
+			AmountCents:           19900,
 		},
-		RawPayload: []byte(`{"out_trade_no":"wx202606041200000000000001"}`),
+		RawPayload: []byte(`{"merchant_order_no":"wx202606041200000000000001"}`),
 	}
 }

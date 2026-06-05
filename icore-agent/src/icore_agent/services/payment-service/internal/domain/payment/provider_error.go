@@ -5,6 +5,8 @@ import "fmt"
 const (
 	// ProviderWeChatPay is the provider name used for WeChat Pay integrations.
 	ProviderWeChatPay = "wechatpay"
+	// PaymentMethodNative is the provider method for QR-code Native payments.
+	PaymentMethodNative = "native"
 )
 
 // ProviderError describes a failed provider operation without exposing SDK-specific details to callers.

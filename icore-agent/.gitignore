@@ -58,3 +58,6 @@ vendor/
 *.swp
 *.swo
 *~
+
+# keys
+*.pem

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"icore-payment-service/internal/application/paymentlog"
 	"icore-payment-service/internal/domain/catalog"
 	"icore-payment-service/internal/domain/payment"
 
@@ -36,6 +37,7 @@ type ServiceConfig struct {
 	Catalog       catalog.Catalog
 	Repository    Repository
 	Provider      Provider
+	Logger        paymentlog.Logger
 	AppID         string
 	MchID         string
 	NotifyURL     string
@@ -50,6 +52,7 @@ type Service struct {
 	catalog       catalog.Catalog
 	repository    Repository
 	provider      Provider
+	logger        paymentlog.Logger
 	appID         string
 	mchID         string
 	notifyURL     string
@@ -65,6 +68,7 @@ type CreateNativePrepayInput struct {
 	PlanCode        string
 	BillingPeriod   string
 	ClientRequestID string
+	RequestID       string
 	PayerClientIP   string
 }
 
@@ -78,6 +82,7 @@ type GetOrderInput struct {
 type CloseOrderInput struct {
 	UserID     string
 	OutTradeNo string
+	RequestID  string
 }
 
 // ProviderPrepayRequest is the provider-neutral WeChat Native prepay request.
@@ -161,6 +166,7 @@ func NewService(config ServiceConfig) *Service {
 		catalog:       config.Catalog,
 		repository:    config.Repository,
 		provider:      config.Provider,
+		logger:        config.Logger,
 		appID:         strings.TrimSpace(config.AppID),
 		mchID:         strings.TrimSpace(config.MchID),
 		notifyURL:     strings.TrimSpace(config.NotifyURL),
@@ -236,6 +242,7 @@ func (service *Service) createProviderPrepay(ctx context.Context, order payment.
 		PayerClientIP: input.PayerClientIP,
 	})
 	if err != nil {
+		service.logProviderError(ctx, "payment provider prepay failed", traceIDForPrepay(input), paymentlog.OperationNativePrepay, order, input, err)
 		return NativePrepayResult{}, fmt.Errorf("wechat native prepay: %w", err)
 	}
 	pendingOrder, err := service.repository.MarkPending(ctx, order.OutTradeNo, providerResult.CodeURL, expiresAt)
@@ -275,6 +282,12 @@ func (service *Service) CloseOrder(ctx context.Context, input CloseOrderInput) (
 	}
 	if order.Status != payment.StatusClosed && service.provider != nil {
 		if err := service.provider.CloseOrder(ctx, outTradeNo); err != nil {
+			service.logProviderError(ctx, "payment provider close order failed", strings.TrimSpace(input.RequestID), paymentlog.OperationCloseOrder, order, CreateNativePrepayInput{
+				UserID:          userID,
+				PlanCode:        order.PlanCode,
+				BillingPeriod:   order.BillingPeriod,
+				ClientRequestID: order.ClientRequestID,
+			}, err)
 			return OrderResult{}, fmt.Errorf("wechat close order: %w", err)
 		}
 	}
@@ -285,11 +298,50 @@ func (service *Service) CloseOrder(ctx context.Context, input CloseOrderInput) (
 	return orderResultFromOrder(closed), nil
 }
 
+// logProviderError records provider failures with payment and provider metadata.
+func (service *Service) logProviderError(ctx context.Context, message string, traceID string, operation string, order payment.Order, input CreateNativePrepayInput, err error) {
+	if service.logger == nil {
+		return
+	}
+	metadata := paymentlog.Metadata(
+		operation,
+		paymentlog.OrderMetadataFromOrder(order),
+		paymentlog.ProviderMetadataFromError(payment.ProviderWeChatPay, service.mchID, providerAPIForOperation(operation), err),
+		paymentlog.RequestMetadata{
+			ClientRequestID: input.ClientRequestID,
+			UserPublicID:    input.UserID,
+			PayerClientIP:   input.PayerClientIP,
+		},
+	)
+	_ = service.logger.Error(ctx, message, traceID, metadata)
+}
+
+// providerAPIForOperation returns the provider API label for a payment workflow operation.
+func providerAPIForOperation(operation string) string {
+	switch operation {
+	case paymentlog.OperationNativePrepay:
+		return "native.prepay"
+	case paymentlog.OperationCloseOrder:
+		return "native.close_order"
+	default:
+		return ""
+	}
+}
+
+// traceIDForPrepay returns the gateway request id when available and falls back to client idempotency id.
+func traceIDForPrepay(input CreateNativePrepayInput) string {
+	if strings.TrimSpace(input.RequestID) != "" {
+		return strings.TrimSpace(input.RequestID)
+	}
+	return strings.TrimSpace(input.ClientRequestID)
+}
+
 func normalizePrepayInput(input CreateNativePrepayInput) CreateNativePrepayInput {
 	input.UserID = strings.TrimSpace(input.UserID)
 	input.PlanCode = strings.TrimSpace(input.PlanCode)
 	input.BillingPeriod = strings.TrimSpace(input.BillingPeriod)
 	input.ClientRequestID = strings.TrimSpace(input.ClientRequestID)
+	input.RequestID = strings.TrimSpace(input.RequestID)
 	input.PayerClientIP = strings.TrimSpace(input.PayerClientIP)
 	return input
 }

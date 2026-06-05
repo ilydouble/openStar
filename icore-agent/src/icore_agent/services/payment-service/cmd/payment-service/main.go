@@ -16,6 +16,7 @@ import (
 	"icore-payment-service/internal/infrastructure/wechatpay"
 	httpv1 "icore-payment-service/internal/interfaces/http/v1"
 	httpserver "icore-services-lib-go/http/server"
+	sharedlogging "icore-services-lib-go/logging"
 	sharedkafka "icore-services-lib-go/mq/kafka"
 )
 
@@ -28,6 +29,17 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	loggingClient := sharedlogging.NewLoggingServiceClient(sharedlogging.LoggingServiceClientConfig{
+		BaseURL:   cfg.LoggingServiceURL,
+		Token:     cfg.LoggingServiceToken,
+		Timeout:   cfg.LoggingServiceTimeout,
+		QueueSize: cfg.LoggingQueueSize,
+	})
+	appLogger := sharedlogging.NewAppLogger(sharedlogging.AppLoggerConfig{
+		Service: cfg.LoggingServiceName,
+		Emitter: loggingClient,
+	})
 
 	db, err := postgresrepo.Open(ctx, postgresrepo.DBConfig{
 		DatabaseURL:     cfg.DatabaseURL,
@@ -50,6 +62,7 @@ func main() {
 		Catalog:    cfg.Catalog,
 		Repository: repository,
 		Provider:   wechatProvider,
+		Logger:     appLogger,
 		AppID:      cfg.WeChatPay.AppID,
 		MchID:      cfg.WeChatPay.MchID,
 		NotifyURL:  cfg.WeChatPay.NotifyURL,
@@ -60,6 +73,7 @@ func main() {
 		MchID:      cfg.WeChatPay.MchID,
 		Provider:   wechatProvider,
 		Repository: repository,
+		Logger:     appLogger,
 	})
 
 	kafkaProducer := sharedkafka.NewKafkaPublisher(sharedkafka.Config{
@@ -83,6 +97,9 @@ func main() {
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("payment-service shutdown failed: %v", err)
+		}
+		if err := loggingClient.Close(shutdownCtx); err != nil {
+			log.Printf("payment-service log drain failed: %v", err)
 		}
 	}()
 

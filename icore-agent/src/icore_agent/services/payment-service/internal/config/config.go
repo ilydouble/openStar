@@ -14,23 +14,28 @@ import (
 
 // Config is the payment-service runtime configuration.
 type Config struct {
-	Addr               string
-	DatabaseURL        string
-	DBMaxOpenConns     int
-	DBMaxIdleConns     int
-	DBConnMaxLifetime  time.Duration
-	KafkaBrokers       []string
-	KafkaTopic         string
-	Catalog            catalog.Catalog
-	WeChatPay          wechatpay.Config
-	OrderTTL           time.Duration
-	ReadHeaderTimeout  time.Duration
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	ShutdownTimeout    time.Duration
-	OutboxPollInterval time.Duration
-	OutboxBatchSize    int
+	Addr                  string
+	DatabaseURL           string
+	DBMaxOpenConns        int
+	DBMaxIdleConns        int
+	DBConnMaxLifetime     time.Duration
+	KafkaBrokers          []string
+	KafkaTopic            string
+	LoggingServiceURL     string
+	LoggingServiceToken   string
+	LoggingServiceName    string
+	LoggingServiceTimeout time.Duration
+	LoggingQueueSize      int
+	Catalog               catalog.Catalog
+	WeChatPay             wechatpay.Config
+	OrderTTL              time.Duration
+	ReadHeaderTimeout     time.Duration
+	ReadTimeout           time.Duration
+	WriteTimeout          time.Duration
+	IdleTimeout           time.Duration
+	ShutdownTimeout       time.Duration
+	OutboxPollInterval    time.Duration
+	OutboxBatchSize       int
 }
 
 // Load reads process environment and validates payment-owned configuration.
@@ -53,14 +58,19 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Addr:              envString("PAYMENT_SERVICE_ADDR", ":8080"),
-		DatabaseURL:       databaseURL,
-		DBMaxOpenConns:    envInt("PAYMENT_DB_MAX_OPEN_CONNS", 10),
-		DBMaxIdleConns:    envInt("PAYMENT_DB_MAX_IDLE_CONNS", 5),
-		DBConnMaxLifetime: envDuration("PAYMENT_DB_CONN_MAX_LIFETIME", 30*time.Minute),
-		KafkaBrokers:      envCSV("PAYMENT_KAFKA_BROKERS", "kafka:9092"),
-		KafkaTopic:        envString("PAYMENT_KAFKA_TOPIC", "payment.events.v1"),
-		Catalog:           cat,
+		Addr:                  envString("PAYMENT_SERVICE_ADDR", ":8080"),
+		DatabaseURL:           databaseURL,
+		DBMaxOpenConns:        envInt("PAYMENT_DB_MAX_OPEN_CONNS", 10),
+		DBMaxIdleConns:        envInt("PAYMENT_DB_MAX_IDLE_CONNS", 5),
+		DBConnMaxLifetime:     envDuration("PAYMENT_DB_CONN_MAX_LIFETIME", 30*time.Minute),
+		KafkaBrokers:          envCSV("PAYMENT_KAFKA_BROKERS", "kafka:9092"),
+		KafkaTopic:            envString("PAYMENT_KAFKA_TOPIC", "payment.events.v1"),
+		LoggingServiceURL:     envString("LOGGING_SERVICE_URL", "http://logging-service:8091"),
+		LoggingServiceToken:   envString("LOGGING_SERVICE_TOKEN", ""),
+		LoggingServiceName:    envString("PAYMENT_LOGGING_SERVICE_NAME", "payment-service"),
+		LoggingServiceTimeout: envDuration("PAYMENT_LOGGING_SERVICE_TIMEOUT", 2*time.Second),
+		LoggingQueueSize:      envInt("PAYMENT_LOGGING_QUEUE_SIZE", 4096),
+		Catalog:               cat,
 		WeChatPay: wechatpay.Config{
 			AppID:                    envString("WECHATPAY_APP_ID", ""),
 			MchID:                    envString("WECHATPAY_MCH_ID", ""),

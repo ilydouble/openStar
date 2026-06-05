@@ -59,6 +59,11 @@ services:
       PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:change-me@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment}
       PAYMENT_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
       PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
+      PAYMENT_LOGGING_SERVICE_NAME: ${PAYMENT_LOGGING_SERVICE_NAME:-payment-service}
+      PAYMENT_LOGGING_SERVICE_TIMEOUT: ${PAYMENT_LOGGING_SERVICE_TIMEOUT:-2s}
+      PAYMENT_LOGGING_QUEUE_SIZE: ${PAYMENT_LOGGING_QUEUE_SIZE:-4096}
       PAYMENT_CATALOG_JSON_PATH: ${PAYMENT_CATALOG_JSON_PATH:-/etc/icore/payment-service/catalog/plan_items.json}
       PAYMENT_ORDER_TTL: ${PAYMENT_ORDER_TTL:-30m}
       PAYMENT_OUTBOX_POLL_INTERVAL: ${PAYMENT_OUTBOX_POLL_INTERVAL:-2s}
@@ -74,8 +79,8 @@ services:
       WECHATPAY_API_HOST: ${WECHATPAY_API_HOST:-}
       WECHATPAY_HTTP_TIMEOUT: ${WECHATPAY_HTTP_TIMEOUT:-10s}
       WECHATPAY_REQUIRE_PRODUCTION_HOST: ${WECHATPAY_REQUIRE_PRODUCTION_HOST:-false}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-payment-service
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-payment-service
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,logging-service,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-logging-service,icore-payment-service
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,logging-service,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-logging-service,icore-payment-service
     expose:
       - '8080'
     volumes:
@@ -83,6 +88,8 @@ services:
     depends_on:
       payment-db-migrate:
         condition: service_completed_successfully
+      logging-service:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:

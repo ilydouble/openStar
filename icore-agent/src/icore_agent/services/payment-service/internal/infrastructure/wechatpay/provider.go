@@ -2,6 +2,7 @@ package wechatpay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -108,10 +109,10 @@ func (provider *NativeProvider) PrepayNative(ctx context.Context, request checko
 		},
 	})
 	if err != nil {
-		return checkout.ProviderPrepayResult{}, err
+		return checkout.ProviderPrepayResult{}, newProviderError("native.prepay", err)
 	}
 	if response == nil || response.CodeUrl == nil || strings.TrimSpace(*response.CodeUrl) == "" {
-		return checkout.ProviderPrepayResult{}, fmt.Errorf("wechatpay prepay response missing code_url")
+		return checkout.ProviderPrepayResult{}, newProviderError("native.prepay", fmt.Errorf("wechatpay prepay response missing code_url"))
 	}
 	return checkout.ProviderPrepayResult{CodeURL: *response.CodeUrl}, nil
 }
@@ -122,7 +123,10 @@ func (provider *NativeProvider) CloseOrder(ctx context.Context, outTradeNo strin
 		OutTradeNo: core.String(outTradeNo),
 		Mchid:      core.String(provider.mchID),
 	})
-	return err
+	if err != nil {
+		return newProviderError("native.close_order", err)
+	}
+	return nil
 }
 
 // ParseNotification verifies and decrypts a WeChat Pay notification request.
@@ -130,7 +134,7 @@ func (provider *NativeProvider) ParseNotification(ctx context.Context, request *
 	transaction := new(payments.Transaction)
 	notifyRequest, err := provider.notify.ParseNotifyRequest(ctx, request, transaction)
 	if err != nil {
-		return payment.ProviderNotification{}, err
+		return payment.ProviderNotification{}, newProviderError("native.notification", err)
 	}
 	return payment.ProviderNotification{
 		EventID:   notifyRequest.ID,
@@ -147,6 +151,55 @@ func (provider *NativeProvider) ParseNotification(ctx context.Context, request *
 		},
 		RawPayload: []byte(notifyRequest.Resource.Plaintext),
 	}, nil
+}
+
+// newProviderError converts WeChat Pay SDK errors into provider-neutral payment errors.
+func newProviderError(api string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr *core.APIError
+	if errors.As(err, &apiErr) {
+		return &payment.ProviderError{
+			Provider:       payment.ProviderWeChatPay,
+			API:            api,
+			HTTPStatus:     apiErr.StatusCode,
+			Code:           strings.TrimSpace(apiErr.Code),
+			Message:        strings.TrimSpace(apiErr.Message),
+			RequestID:      headerValue(apiErr.Header, "Request-Id"),
+			ResponseSerial: headerValue(apiErr.Header, "Wechatpay-Serial"),
+			Err:            err,
+		}
+	}
+	return &payment.ProviderError{
+		Provider: payment.ProviderWeChatPay,
+		API:      api,
+		Message:  safeProviderErrorMessage(err),
+		Err:      err,
+	}
+}
+
+// headerValue returns a trimmed HTTP header value.
+func headerValue(header http.Header, name string) string {
+	if header == nil {
+		return ""
+	}
+	return strings.TrimSpace(header.Get(name))
+}
+
+// safeProviderErrorMessage returns a bounded error message without sensitive WeChat Pay headers.
+func safeProviderErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(strings.ReplaceAll(err.Error(), "\n", " "))
+	if strings.Contains(strings.ToLower(message), "wechatpay-signature") {
+		return "wechatpay provider request failed"
+	}
+	if len(message) > 512 {
+		return message[:512]
+	}
+	return message
 }
 
 func (config Config) validate() error {

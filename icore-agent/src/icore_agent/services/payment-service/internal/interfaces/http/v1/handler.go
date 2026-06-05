@@ -92,6 +92,7 @@ func (handler *handler) createNativePrepay(w http.ResponseWriter, r *http.Reques
 		PlanCode:        body.PlanCode,
 		BillingPeriod:   body.BillingPeriod,
 		ClientRequestID: body.ClientRequestID,
+		RequestID:       requestIDFromGatewayHeaders(r),
 		PayerClientIP:   payerClientIP,
 	})
 	if err != nil {
@@ -127,6 +128,7 @@ func (handler *handler) closeOrder(w http.ResponseWriter, r *http.Request, outTr
 	result, err := handler.checkout.CloseOrder(r.Context(), checkout.CloseOrderInput{
 		UserID:     userID,
 		OutTradeNo: outTradeNo,
+		RequestID:  requestIDFromGatewayHeaders(r),
 	})
 	if err != nil {
 		writeApplicationError(w, err)
@@ -156,6 +158,11 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 
 func trustedUserID(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-User-ID"))
+}
+
+// requestIDFromGatewayHeaders extracts the gateway request correlation id.
+func requestIDFromGatewayHeaders(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Request-ID"))
 }
 
 func clientIPFromGatewayHeaders(r *http.Request) string {

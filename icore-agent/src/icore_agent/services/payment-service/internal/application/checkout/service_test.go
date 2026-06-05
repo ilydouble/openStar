@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"icore-payment-service/internal/application/paymentlog"
 	"icore-payment-service/internal/domain/catalog"
 	"icore-payment-service/internal/domain/payment"
 )
@@ -79,16 +80,47 @@ func (repo *memoryOrderRepository) MarkClosed(_ context.Context, outTradeNo stri
 }
 
 type fakeProvider struct {
-	codeURL string
-	calls   []ProviderPrepayRequest
+	codeURL   string
+	prepayErr error
+	closeErr  error
+	calls     []ProviderPrepayRequest
 }
 
 func (provider *fakeProvider) PrepayNative(_ context.Context, request ProviderPrepayRequest) (ProviderPrepayResult, error) {
 	provider.calls = append(provider.calls, request)
+	if provider.prepayErr != nil {
+		return ProviderPrepayResult{}, provider.prepayErr
+	}
 	return ProviderPrepayResult{CodeURL: provider.codeURL}, nil
 }
 
 func (provider *fakeProvider) CloseOrder(_ context.Context, _ string) error {
+	return provider.closeErr
+}
+
+type recordedLogEvent struct {
+	level    string
+	message  string
+	traceID  string
+	metadata map[string]any
+}
+
+type recordingLogger struct {
+	events []recordedLogEvent
+}
+
+func (logger *recordingLogger) Info(_ context.Context, message string, traceID string, metadata map[string]any) error {
+	logger.events = append(logger.events, recordedLogEvent{level: "info", message: message, traceID: traceID, metadata: metadata})
+	return nil
+}
+
+func (logger *recordingLogger) Warning(_ context.Context, message string, traceID string, metadata map[string]any) error {
+	logger.events = append(logger.events, recordedLogEvent{level: "warning", message: message, traceID: traceID, metadata: metadata})
+	return nil
+}
+
+func (logger *recordingLogger) Error(_ context.Context, message string, traceID string, metadata map[string]any) error {
+	logger.events = append(logger.events, recordedLogEvent{level: "error", message: message, traceID: traceID, metadata: metadata})
 	return nil
 }
 
@@ -235,6 +267,83 @@ func TestCreateNativePrepayRetriesProviderForExistingCreatedOrder(t *testing.T) 
 	}
 	if provider.calls[0].OutTradeNo != "wx202606041200000000000001" {
 		t.Fatalf("provider out_trade_no = %q", provider.calls[0].OutTradeNo)
+	}
+}
+
+func TestCreateNativePrepayLogsProviderErrorWithWrappedMetadata(t *testing.T) {
+	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	repo := newMemoryOrderRepository()
+	provider := &fakeProvider{prepayErr: &payment.ProviderError{
+		Provider:       payment.ProviderWeChatPay,
+		API:            "native.prepay",
+		HTTPStatus:     403,
+		Code:           "NO_AUTH",
+		Message:        "merchant payment function is limited",
+		RequestID:      "wechat-request-id",
+		ResponseSerial: "wechatpay-public-key-serial",
+	}}
+	logger := &recordingLogger{}
+	service := NewService(ServiceConfig{
+		Catalog:    testCatalog(t),
+		Repository: repo,
+		Provider:   provider,
+		Logger:     logger,
+		AppID:      "wx-app",
+		MchID:      "mch-1",
+		NotifyURL:  "https://pay.example.com/webhooks/wechatpay/native",
+		OrderTTL:   30 * time.Minute,
+		Now:        func() time.Time { return now },
+		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
+		NewOutTradeNo: func(time.Time) string {
+			return "wx202606041200000000000001"
+		},
+	})
+
+	_, err := service.CreateNativePrepay(context.Background(), CreateNativePrepayInput{
+		UserID:          "user-1",
+		PlanCode:        "pro",
+		BillingPeriod:   "monthly",
+		ClientRequestID: "client-request-id",
+		RequestID:       "gateway-request-id",
+		PayerClientIP:   "203.0.113.10",
+	})
+	if err == nil {
+		t.Fatal("CreateNativePrepay returned nil error, want provider error")
+	}
+
+	if len(logger.events) != 1 {
+		t.Fatalf("log events = %d, want 1", len(logger.events))
+	}
+	event := logger.events[0]
+	if event.level != "error" || event.message != "payment provider prepay failed" || event.traceID != "gateway-request-id" {
+		t.Fatalf("event identity = %#v", event)
+	}
+	providerMetadata, ok := event.metadata["provider"].(paymentlog.ProviderMetadata)
+	if !ok {
+		t.Fatalf("provider metadata = %#v, want paymentlog.ProviderMetadata", event.metadata["provider"])
+	}
+	if providerMetadata.Name != payment.ProviderWeChatPay || providerMetadata.API != "native.prepay" {
+		t.Fatalf("provider metadata identity = %#v", providerMetadata)
+	}
+	if providerMetadata.Error == nil || providerMetadata.Error.Code != "NO_AUTH" || providerMetadata.Error.HTTPStatus != 403 {
+		t.Fatalf("provider error metadata = %#v", providerMetadata.Error)
+	}
+	if providerMetadata.RequestID != "wechat-request-id" || providerMetadata.ResponseSerial != "wechatpay-public-key-serial" {
+		t.Fatalf("provider correlation metadata = %#v", providerMetadata)
+	}
+	orderMetadata, ok := event.metadata["order"].(paymentlog.OrderMetadata)
+	if !ok {
+		t.Fatalf("order metadata = %#v, want paymentlog.OrderMetadata", event.metadata["order"])
+	}
+	if orderMetadata.OutTradeNo != "wx202606041200000000000001" || orderMetadata.AmountCents != 19900 {
+		t.Fatalf("order metadata = %#v", orderMetadata)
+	}
+	requestMetadata, ok := event.metadata["request"].(paymentlog.RequestMetadata)
+	if !ok {
+		t.Fatalf("request metadata = %#v, want paymentlog.RequestMetadata", event.metadata["request"])
+	}
+	if requestMetadata.ClientRequestID != "client-request-id" || requestMetadata.PayerClientIP != "203.0.113.10" {
+		t.Fatalf("request metadata = %#v", requestMetadata)
 	}
 }
 

@@ -63,6 +63,38 @@ func TestLoadParsesRequiredMonthlyCatalog(t *testing.T) {
 	if cfg.WeChatPay.AppID != "wx-app" || cfg.WeChatPay.MchID != "mch-1" {
 		t.Fatalf("wechat config = %#v", cfg.WeChatPay)
 	}
+	if cfg.LoggingServiceName != "payment-service" || cfg.LoggingServiceTimeout.String() != "2s" || cfg.LoggingQueueSize != 4096 {
+		t.Fatalf("logging defaults = name:%q timeout:%s queue:%d", cfg.LoggingServiceName, cfg.LoggingServiceTimeout, cfg.LoggingQueueSize)
+	}
+}
+
+func TestLoadParsesPaymentLoggingConfig(t *testing.T) {
+	t.Setenv("PAYMENT_DATABASE_URL", "postgres://icore_payment:secret@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment")
+	t.Setenv("PAYMENT_CATALOG_JSON_PATH", writeCatalogFile(t, `{
+		"items": [
+			{"plan_code":"pro","billing_period":"monthly","currency":"CNY","amount_cents":19900,"description":"Pro monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"team","billing_period":"monthly","currency":"CNY","amount_cents":69900,"description":"Team monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"premium","billing_period":"monthly","currency":"CNY","amount_cents":199900,"description":"Premium monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"byok","billing_period":"monthly","currency":"CNY","amount_cents":6900,"description":"BYOK monthly","entitlements_version":"account-plans-v2","enabled":true}
+		]
+	}`))
+	t.Setenv("LOGGING_SERVICE_URL", "http://logging-service:8091")
+	t.Setenv("LOGGING_SERVICE_TOKEN", "dev-token")
+	t.Setenv("PAYMENT_LOGGING_SERVICE_NAME", "payment-service-dev")
+	t.Setenv("PAYMENT_LOGGING_SERVICE_TIMEOUT", "3s")
+	t.Setenv("PAYMENT_LOGGING_QUEUE_SIZE", "512")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.LoggingServiceURL != "http://logging-service:8091" || cfg.LoggingServiceToken != "dev-token" {
+		t.Fatalf("logging target = url:%q token:%q", cfg.LoggingServiceURL, cfg.LoggingServiceToken)
+	}
+	if cfg.LoggingServiceName != "payment-service-dev" || cfg.LoggingServiceTimeout.String() != "3s" || cfg.LoggingQueueSize != 512 {
+		t.Fatalf("payment logging config = name:%q timeout:%s queue:%d", cfg.LoggingServiceName, cfg.LoggingServiceTimeout, cfg.LoggingQueueSize)
+	}
 }
 
 func TestLoadRejectsCatalogMissingRequiredPlan(t *testing.T) {

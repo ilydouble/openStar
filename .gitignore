@@ -143,8 +143,3 @@ lerna-debug.log*
 # ----------------------
 ft-base-services-dev_v3.0.0.1/
 ft-operation-mng-services-dev_v3.0.0.1/
-
-# ----------------------
-# Local clones / external repos
-# ----------------------
-pi/

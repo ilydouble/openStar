@@ -1,0 +1,7 @@
+# Exclude large directories not needed for pi-source-service Docker build
+icore-agent/
+icore-agent-web/
+pi-service/
+**/node_modules
+**/.git
+**/*.log

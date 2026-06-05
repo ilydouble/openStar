@@ -13,7 +13,7 @@ COMPOSE_FILES=(
   "infrastructure/docker/compose/click-house.yml"
   "infrastructure/docker/compose/storage-service.yml"
   "infrastructure/docker/compose/logging-service.yml"
-  "infrastructure/docker/compose/pi-service.yml"
+  "infrastructure/docker/compose/pi-source-service.yml"
   "infrastructure/docker/compose/backend.yml"
   "infrastructure/docker/compose/gateway.yml"
 )

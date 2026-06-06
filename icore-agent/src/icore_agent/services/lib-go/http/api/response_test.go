@@ -68,8 +68,12 @@ func TestWriteErrorUsesSharedErrorEnvelope(t *testing.T) {
 	if payload["data"] != nil {
 		t.Fatalf("unexpected data %#v", payload["data"])
 	}
-	if payload["error_code"] != http.StatusText(http.StatusUnauthorized) {
-		t.Fatalf("unexpected error code %#v", payload["error_code"])
+	if _, ok := payload["error_reason"]; ok {
+		t.Fatalf("unexpected error_reason %#v", payload["error_reason"])
+	}
+	legacyErrorCodeKey := "error" + "_code"
+	if _, ok := payload[legacyErrorCodeKey]; ok {
+		t.Fatalf("unexpected legacy error code %#v", payload[legacyErrorCodeKey])
 	}
 	if payload["timestamp"] == "" {
 		t.Fatal("timestamp should be populated")

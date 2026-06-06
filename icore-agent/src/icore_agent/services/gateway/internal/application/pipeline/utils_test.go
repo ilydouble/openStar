@@ -45,8 +45,12 @@ func TestWriteJSONErrorUsesApiEnvelope(t *testing.T) {
 	if payload["data"] != nil {
 		t.Fatalf("data = %#v, want nil", payload["data"])
 	}
-	if payload["error_code"] != http.StatusText(http.StatusUnauthorized) {
-		t.Fatalf("error_code = %#v", payload["error_code"])
+	if _, ok := payload["error_reason"]; ok {
+		t.Fatalf("error_reason = %#v, want omitted", payload["error_reason"])
+	}
+	legacyErrorCodeKey := "error" + "_code"
+	if _, ok := payload[legacyErrorCodeKey]; ok {
+		t.Fatalf("legacy error code = %#v, want omitted", payload[legacyErrorCodeKey])
 	}
 }
 

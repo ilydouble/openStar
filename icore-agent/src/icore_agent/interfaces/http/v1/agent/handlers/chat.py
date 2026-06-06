@@ -11,6 +11,7 @@ from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_chat_turn_service, get_current_user
+from ...envelope import make_api_envelope
 from ...streaming import sse_response
 from ..schemas.chat import ChatRequest, ChatResponse
 
@@ -37,15 +38,15 @@ async def chat(
         if msg.startswith("task_quota_exceeded:"):
             return JSONResponse(
                 status_code=402,
-                content={
-                    "code": 402,
-                    "error_code": "quota_exceeded",
-                    "message": "本月免费任务次数已用完，请升级套餐继续使用。",
-                    "data": {
+                content=make_api_envelope(
+                    code=402,
+                    message="本月免费任务次数已用完，请升级套餐继续使用。",
+                    data={
                         "upgrade_url": _UPGRADE_URL,
                         "current_plan": user.plan,
                     },
-                },
+                    error_reason="quota_exceeded",
+                ),
             )
         raise HTTPException(status_code=403, detail=msg) from exc
     except LookupError as exc:

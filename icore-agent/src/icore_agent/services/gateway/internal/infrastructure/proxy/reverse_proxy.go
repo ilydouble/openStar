@@ -1,11 +1,11 @@
 package proxy
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
+
+	sharedhttp "icore-services-lib-go/http/api"
 )
 
 // ReverseProxy forwards gateway traffic to one configured upstream service.
@@ -33,16 +33,8 @@ func (proxy *ReverseProxy) newUpstreamProxy(upstreamURL string) *httputil.Revers
 		originalDirector(req)
 		req.Host = backend.Host
 	}
-	upstreamProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"code":       http.StatusBadGateway,
-			"message":    "upstream unavailable",
-			"data":       nil,
-			"error_code": http.StatusText(http.StatusBadGateway),
-			"timestamp":  time.Now().UTC().Format(time.RFC3339Nano),
-		})
+	upstreamProxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		sharedhttp.WriteError(w, http.StatusBadGateway, "upstream unavailable")
 	}
 	return upstreamProxy
 }

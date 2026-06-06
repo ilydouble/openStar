@@ -1,11 +1,11 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
-	"time"
+
+	sharedhttp "icore-services-lib-go/http/api"
 )
 
 func getClientIP(r *http.Request) string {
@@ -44,20 +44,11 @@ func classifyUserAgentType(value string) string {
 
 // writeJSON writes the gateway-local ApiEnvelope response.
 func writeJSON(w http.ResponseWriter, status int, payload any) {
-	envelope := map[string]any{
-		"code":      status,
-		"message":   "操作成功",
-		"data":      payload,
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-	}
 	if status >= http.StatusBadRequest {
-		envelope["message"] = messageFromPayload(payload)
-		envelope["data"] = nil
-		envelope["error_code"] = http.StatusText(status)
+		sharedhttp.WriteError(w, status, messageFromPayload(payload))
+		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(envelope)
+	sharedhttp.WriteJSON(w, status, payload)
 }
 
 // messageFromPayload extracts a stable error message from local response data.

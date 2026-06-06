@@ -47,17 +47,23 @@ def test_first_payment_migration_creates_order_event_and_outbox_tables() -> None
         PAYMENT_SERVICE / "migrations/000001_create_payment_orders.down.sql"
     )
 
-    for table in ("payment_orders", "payment_order_events", "payment_outbox"):
+    for table in (
+        "payment_orders",
+        "payment_provider_transactions",
+        "payment_order_events",
+        "payment_outbox",
+    ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in up
         assert f"DROP TABLE IF EXISTS {table}" in down
 
     assert "payment_catalog_items" not in up
-    assert "out_trade_no" in up
+    assert "order_no" in up
     assert "idempotency_key" in up
-    assert "wechat_transaction_id" in up
+    assert "merchant_order_no" in up
+    assert "provider_transaction_id" in up
     assert "provider_event_id" in up
     assert "CHECK (status IN" in up
-    assert "CREATE INDEX IF NOT EXISTS idx_payment_orders_reconciliation" in up
+    assert "CREATE INDEX IF NOT EXISTS idx_payment_provider_transactions_reconciliation" in up
     assert "CREATE INDEX IF NOT EXISTS idx_payment_outbox_pending" in up
 
 

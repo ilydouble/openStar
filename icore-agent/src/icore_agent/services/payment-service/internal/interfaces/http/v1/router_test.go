@@ -17,6 +17,14 @@ type fakeCheckoutService struct {
 	received checkout.CreateNativePrepayInput
 }
 
+type apiEnvelopeForTest struct {
+	Code        int            `json:"code"`
+	Message     string         `json:"message"`
+	Data        map[string]any `json:"data"`
+	Timestamp   string         `json:"timestamp"`
+	ErrorReason string         `json:"error_reason,omitempty"`
+}
+
 func (service *fakeCheckoutService) CreateNativePrepay(_ context.Context, input checkout.CreateNativePrepayInput) (checkout.NativePrepayResult, error) {
 	service.received = input
 	expiresAt := time.Date(2026, 6, 4, 12, 30, 0, 0, time.UTC)
@@ -56,12 +64,12 @@ func TestPrepayRequiresTrustedGatewayUserID(t *testing.T) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", response.Code)
 	}
-	var body envelope
+	var body apiEnvelopeForTest
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response body is not JSON: %v", err)
 	}
-	if body.ErrorCode == nil || *body.ErrorCode != "missing_user_id" {
-		t.Fatalf("error_code = %#v", body.ErrorCode)
+	if body.ErrorReason != "missing_user_id" {
+		t.Fatalf("error_reason = %#v", body.ErrorReason)
 	}
 }
 
@@ -90,14 +98,11 @@ func TestPrepayUsesTrustedGatewayUserIDAndReturnsEnvelope(t *testing.T) {
 		t.Fatalf("payer client ip = %q", service.received.PayerClientIP)
 	}
 
-	var body envelope
+	var body apiEnvelopeForTest
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response body is not JSON: %v", err)
 	}
-	data, ok := body.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("data = %#v", body.Data)
-	}
+	data := body.Data
 	if data["order_no"] != "wx202606041200000000000001" || data["out_trade_no"] != nil || data["wechat_transaction_id"] != nil {
 		t.Fatalf("data = %#v", data)
 	}

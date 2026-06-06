@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"strings"
 
 	"icore-payment-service/internal/application/checkout"
 	"icore-payment-service/internal/domain/payment"
+
+	sharedhttp "icore-services-lib-go/http/api"
+	sharedheaders "icore-services-lib-go/http/headers"
 )
 
 // CheckoutService is the application checkout surface used by HTTP handlers.
@@ -79,7 +81,7 @@ func (handler *handler) createNativePrepay(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body nativePrepayRequest
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := sharedhttp.DecodeJSONStrict(w, r, &body, sharedhttp.DefaultJSONBodyLimit); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "invalid payment request")
 		return
 	}
@@ -149,37 +151,17 @@ func (handler *handler) wechatPayNativeWebhook(w http.ResponseWriter, r *http.Re
 	writeWechatWebhookSuccess(w)
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
-}
-
 func trustedUserID(r *http.Request) string {
-	return strings.TrimSpace(r.Header.Get("X-User-ID"))
+	return strings.TrimSpace(r.Header.Get(sharedheaders.HeaderXUserID))
 }
 
 // requestIDFromGatewayHeaders extracts the gateway request correlation id.
 func requestIDFromGatewayHeaders(r *http.Request) string {
-	return strings.TrimSpace(r.Header.Get("X-Request-ID"))
+	return strings.TrimSpace(r.Header.Get(sharedheaders.HeaderXRequestID))
 }
 
 func clientIPFromGatewayHeaders(r *http.Request) string {
-	if forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwardedFor != "" {
-		parts := strings.Split(forwardedFor, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
-		}
-	}
-	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
-		return realIP
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return strings.TrimSpace(r.RemoteAddr)
+	return sharedheaders.ClientIP(r)
 }
 
 func writeApplicationError(w http.ResponseWriter, err error) {

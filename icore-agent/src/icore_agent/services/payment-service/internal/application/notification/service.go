@@ -8,6 +8,8 @@ import (
 
 	"icore-payment-service/internal/application/paymentlog"
 	"icore-payment-service/internal/domain/payment"
+
+	sharedheaders "icore-services-lib-go/http/headers"
 )
 
 // Provider parses and verifies provider callback requests.
@@ -124,5 +126,5 @@ func requestIDFromRequest(request *http.Request) string {
 	if request == nil {
 		return ""
 	}
-	return strings.TrimSpace(request.Header.Get("X-Request-ID"))
+	return strings.TrimSpace(request.Header.Get(sharedheaders.HeaderXRequestID))
 }

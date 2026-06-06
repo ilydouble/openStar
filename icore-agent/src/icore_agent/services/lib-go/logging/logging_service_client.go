@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	sharedheaders "icore-services-lib-go/http/headers"
 )
 
 // Emitter sends one LogEvent to a logging sink.
@@ -153,7 +155,7 @@ func (client *LoggingServiceClient) post(ctx context.Context, event LogEvent) er
 		request.Header.Set("X-Logging-Service-Token", client.token)
 	}
 	if event.TraceID != "" {
-		request.Header.Set("X-Request-ID", event.TraceID)
+		request.Header.Set(sharedheaders.HeaderXRequestID, event.TraceID)
 	}
 
 	response, err := client.client.Do(request)

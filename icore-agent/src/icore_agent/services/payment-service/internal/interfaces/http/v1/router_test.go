@@ -73,6 +73,31 @@ func TestPrepayRequiresTrustedGatewayUserID(t *testing.T) {
 	}
 }
 
+func TestPrepayRejectsUnknownRequestFields(t *testing.T) {
+	router := NewRouter(HandlerConfig{Checkout: &fakeCheckoutService{}})
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/payment/native/prepay", bytes.NewBufferString(`{
+		"plan_code": "pro",
+		"billing_period": "monthly",
+		"client_request_id": "req-1",
+		"unexpected": true
+	}`))
+	request.Header.Set("X-User-ID", "gateway-user-1")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 body=%s", response.Code, response.Body.String())
+	}
+	var body apiEnvelopeForTest
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response body is not JSON: %v", err)
+	}
+	if body.ErrorReason != "invalid_request" {
+		t.Fatalf("error_reason = %#v", body.ErrorReason)
+	}
+}
+
 func TestPrepayUsesTrustedGatewayUserIDAndReturnsEnvelope(t *testing.T) {
 	service := &fakeCheckoutService{}
 	router := NewRouter(HandlerConfig{Checkout: service})

@@ -1,26 +1,11 @@
 package pipeline
 
 import (
-	"net"
 	"net/http"
 	"strings"
 
 	sharedhttp "icore-services-lib-go/http/api"
 )
-
-func getClientIP(r *http.Request) string {
-	if forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwardedFor != "" {
-		return strings.TrimSpace(strings.Split(forwardedFor, ",")[0])
-	}
-	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
-		return realIP
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
 
 func classifyUserAgentType(value string) string {
 	lower := strings.ToLower(value)

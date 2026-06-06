@@ -97,6 +97,28 @@ func TestLoadParsesPaymentLoggingConfig(t *testing.T) {
 	}
 }
 
+func TestLoadParsesNumericDurationWithSharedEnvconfig(t *testing.T) {
+	t.Setenv("PAYMENT_DATABASE_URL", "postgres://icore_payment:secret@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment")
+	t.Setenv("PAYMENT_CATALOG_JSON_PATH", writeCatalogFile(t, `{
+		"items": [
+			{"plan_code":"pro","billing_period":"monthly","currency":"CNY","amount_cents":19900,"description":"Pro monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"team","billing_period":"monthly","currency":"CNY","amount_cents":69900,"description":"Team monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"premium","billing_period":"monthly","currency":"CNY","amount_cents":199900,"description":"Premium monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"byok","billing_period":"monthly","currency":"CNY","amount_cents":6900,"description":"BYOK monthly","entitlements_version":"account-plans-v2","enabled":true}
+		]
+	}`))
+	t.Setenv("PAYMENT_ORDER_TTL", "45")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.OrderTTL.String() != "45s" {
+		t.Fatalf("OrderTTL = %s, want 45s", cfg.OrderTTL)
+	}
+}
+
 func TestLoadRejectsCatalogMissingRequiredPlan(t *testing.T) {
 	t.Setenv("PAYMENT_DATABASE_URL", "postgres://icore_payment:secret@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment")
 	t.Setenv("PAYMENT_CATALOG_JSON_PATH", writeCatalogFile(t, `{

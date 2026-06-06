@@ -212,20 +212,30 @@
                     :key="item.labelKey"
                     type="button"
                     role="menuitem"
-                    class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm
-                           text-zinc-900 transition-all duration-200
-                           hover:bg-zinc-100/90
-                           dark:text-white dark:hover:bg-white/10"
-                    @click.stop="handleMenuItemClick(item)"
+                    :disabled="item.comingSoon"
+                    :aria-disabled="item.comingSoon"
+                    :title="item.comingSoon ? t('home.chatInput.comingSoon') : undefined"
+                    :class="[
+                      'group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-all duration-200',
+                      item.comingSoon
+                        ? 'cursor-not-allowed opacity-50 text-zinc-400 dark:text-zinc-500'
+                        : 'text-zinc-900 hover:bg-zinc-100/90 dark:text-white dark:hover:bg-white/10',
+                    ]"
+                    @click.stop="item.comingSoon ? undefined : handleMenuItemClick(item)"
                   >
                     <component
                       :is="item.icon"
-                      class="h-4 w-4 shrink-0 text-zinc-500 transition-colors duration-200
-                             group-hover:text-zinc-900
-                             dark:text-zinc-400 dark:group-hover:text-white"
+                      class="h-4 w-4 shrink-0 transition-colors duration-200"
+                      :class="item.comingSoon
+                        ? 'text-zinc-300 dark:text-zinc-600'
+                        : 'text-zinc-500 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white'"
                       stroke-width="2"
                     />
-                    {{ t(item.labelKey) }}
+                    <span class="flex-1">{{ t(item.labelKey) }}</span>
+                    <span
+                      v-if="item.comingSoon"
+                      class="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+                    >{{ t('home.chatInput.comingSoon') }}</span>
                   </button>
                 </template>
               </div>
@@ -902,11 +912,11 @@ function handleDrop(e) {
 }
 
 const plusMenuItems = [
-  { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode', action: 'openModePicker' },
-  { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
-  { icon: Image,     labelKey: 'home.chatInput.createImage',    action: null },
-  { icon: Brain,     labelKey: 'home.chatInput.thinkDeeply',    action: null },
-  { icon: Search,    labelKey: 'home.chatInput.searchInternet', action: null },
+  { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode',     action: 'openModePicker' },
+  { icon: Paperclip,  labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
+  { icon: Image,      labelKey: 'home.chatInput.createImage',    action: null, comingSoon: true },
+  { icon: Brain,      labelKey: 'home.chatInput.thinkDeeply',    action: null, comingSoon: true },
+  { icon: Search,     labelKey: 'home.chatInput.searchInternet', action: null, comingSoon: true },
 ]
 
 function closePlusMenu() {

@@ -308,6 +308,23 @@
                       <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
                       <span v-else v-html="assistantMessageHtml(msg)" />
                     </div>
+                    <div v-if="!msg.streaming && msg.content" class="flex items-center pl-1 pt-1">
+                      <button
+                        type="button"
+                        class="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+                        :title="t('chat.copyMessage')"
+                        @click="copyMessage(msg)"
+                      >
+                        <svg v-if="copiedMsgId !== msg.id" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                        <svg v-else class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span>{{ copiedMsgId === msg.id ? t('chat.copied') : t('chat.copy') }}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
                   </div>
@@ -824,6 +841,22 @@ const UI_BY_ID = {
 }
 
 const messages = ref([])
+const copiedMsgId = ref(null)
+
+async function copyMessage(msg) {
+  const text = msg?.content || ''
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedMsgId.value = msg.id
+    setTimeout(() => {
+      if (copiedMsgId.value === msg.id) copiedMsgId.value = null
+    }, 2000)
+  } catch {
+    // clipboard API not available
+  }
+}
+
 const chatListItems = computed(() => messages.value.filter(shouldShowChatMessage))
 const {
   visibleItems: virtualVisibleItems,

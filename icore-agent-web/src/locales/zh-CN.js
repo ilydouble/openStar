@@ -288,6 +288,7 @@ export default {
       createImage: '生成图片',
       thinkDeeply: '深度思考',
       searchInternet: '联网搜索',
+      comingSoon: '即将推出',
       selectMode: '选择模式',
       modePickerBack: '返回',
     },
@@ -726,6 +727,9 @@ export default {
     sendMessage: '发送消息',
     stopGenerating: '停止生成',
     stopHint: '停止当前回复',
+    copy: '复制',
+    copied: '已复制',
+    copyMessage: '复制消息',
     incognito: {
       active: '无痕模式 — 此对话不会保存到历史记录',
       enable: '开启无痕模式',

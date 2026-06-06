@@ -10,6 +10,7 @@
 - 🌐 多模型支持（通过 LiteLLM）
 - 💾 对话记忆（Redis）
 - 🔒 可配置的认证
+- 🤖 Pi Agent — 独立代码分析微服务，具备只读文件工具（ls、read、grep、find），通过 pi-source-service Node.js 服务提供能力
 
 ## 快速开始
 
@@ -50,6 +51,12 @@ icore-agent
 | AGENT_TEMPERATURE | 温度参数 | 0.1 |
 | TIMEOUT_INTERVAL | LLM 请求超时秒数 | 30 |
 | MAX_RETRIES | LLM 请求最大重试次数 | 3 |
+| PI_SERVICE_URL | Pi Agent 微服务地址 | http://pi-service:11002 |
+| PI_SERVICE_PORT | Pi Agent 服务端口 | 11002 |
+| PI_PROVIDER | Pi Agent 使用的 LLM 提供商 | zai |
+| PI_MODEL_ID | Pi Agent 使用的模型 ID | glm-4.7 |
+| PI_MAX_TOKENS | Pi Agent 最大 token 数 | 8192 |
+| PI_BASE_URL | Pi Agent API 地址覆盖（仅 zai/zai-coding-cn） | https://open.bigmodel.cn/api/paas/v4 |
 
 环境变量按业务域拆分到 `dotenv/.env.{domain}`，模板文件为
 `dotenv/.env.{domain}.example`。真实 `.env.{domain}` 文件只用于本地运行，不提交。
@@ -62,6 +69,8 @@ icore-agent
 ```
 
 `compose.sh` 会自动为 Docker Compose 加载所有分域环境变量文件。
+
+Pi Agent 微服务（`pi-source-service`）作为独立容器运行，通过 `infrastructure/docker/compose/pi-source-service.yml` 纳入编排。工作区目录通过只读卷挂载至容器内 `/workspace`，Pi Agent 可读取项目源码进行分析。
 
 ## 开发
 

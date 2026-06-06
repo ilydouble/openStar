@@ -288,6 +288,7 @@ export default {
       createImage: 'Create image',
       thinkDeeply: 'Think deeply',
       searchInternet: 'Search the internet',
+      comingSoon: 'Coming soon',
       selectMode: 'Select mode',
       modePickerBack: 'Back',
     },
@@ -728,6 +729,9 @@ export default {
     sendMessage: 'Send message',
     stopGenerating: 'Stop generating',
     stopHint: 'Stop the current response',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyMessage: 'Copy message',
     incognito: {
       active: 'Incognito — this chat is not saved to history',
       enable: 'Enable incognito mode',

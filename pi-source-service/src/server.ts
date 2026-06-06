@@ -1,5 +1,7 @@
+import { mkdirSync } from "fs";
 import express, { type Request, type Response } from "express";
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { createReadOnlyTools } from "@earendil-works/pi-coding-agent";
 import {
 	getModel,
 	getEnvApiKey,
@@ -13,16 +15,48 @@ registerBuiltInApiProviders();
 const PORT = parseInt(process.env.PI_SERVICE_PORT ?? "11002");
 const PROVIDER = (process.env.PI_PROVIDER ?? "anthropic") as KnownProvider;
 const MODEL_ID = process.env.PI_MODEL_ID ?? "claude-sonnet-4-6";
+// PI_BASE_URL: ZAI/OpenAI-compatible providers üçün URL override.
+// Claude, GPT, Gemini kimi provayderlərdə ignore edilir.
+const ZAI_PROVIDERS = new Set(["zai", "zai-coding-cn"]);
+const PI_BASE_URL = ZAI_PROVIDERS.has(PROVIDER) ? (process.env.PI_BASE_URL ?? null) : null;
 const MAX_TOKENS = parseInt(process.env.PI_MAX_TOKENS ?? "8192");
+const WORKSPACE = process.env.PI_WORKSPACE ?? "/workspace";
+// Max concurrent sessions — evicts oldest when limit is reached
+const MAX_SESSIONS = parseInt(process.env.PI_MAX_SESSIONS ?? "500");
+// Session idle TTL in ms — sessions unused longer than this are garbage collected
+const SESSION_TTL_MS = parseInt(process.env.PI_SESSION_TTL_MS ?? String(30 * 60 * 1000));
 
-// Session store: session_id → Agent
-const sessions = new Map<string, Agent>();
+// Ensure workspace directory exists at startup
+mkdirSync(WORKSPACE, { recursive: true });
+
+// Session store: session_id → { agent, lastUsed }
+interface SessionEntry {
+	agent: Agent;
+	lastUsed: number;
+}
+const sessions = new Map<string, SessionEntry>();
+
+// Periodic GC: remove sessions idle longer than SESSION_TTL_MS
+setInterval(() => {
+	const now = Date.now();
+	let removed = 0;
+	for (const [id, entry] of sessions) {
+		if (now - entry.lastUsed > SESSION_TTL_MS) {
+			entry.agent.abort();
+			sessions.delete(id);
+			removed++;
+		}
+	}
+	if (removed > 0) {
+		console.log(`[pi-src] gc: removed ${removed} idle sessions, active=${sessions.size}`);
+	}
+}, 5 * 60 * 1000);
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/health", (_req: Request, res: Response) => {
-	res.json({ status: "ok", provider: PROVIDER, model: MODEL_ID });
+	res.json({ status: "ok", provider: PROVIDER, model: MODEL_ID, sessions: sessions.size });
 });
 
 interface ChatRequest {
@@ -52,18 +86,36 @@ app.post("/v1/chat", async (req: Request, res: Response) => {
 		}
 	};
 
-	let agent = sessions.get(session_id);
+	let entry = sessions.get(session_id);
 
-	if (!agent) {
+	if (!entry) {
+		// Evict oldest session when at capacity
+		if (sessions.size >= MAX_SESSIONS) {
+			let oldestId = "";
+			let oldestTime = Infinity;
+			for (const [id, e] of sessions) {
+				if (e.lastUsed < oldestTime) {
+					oldestTime = e.lastUsed;
+					oldestId = id;
+				}
+			}
+			if (oldestId) {
+				sessions.get(oldestId)?.agent.abort();
+				sessions.delete(oldestId);
+				console.log(`[pi-src] evicted oldest session=${oldestId}, active=${sessions.size}`);
+			}
+		}
+
 		const apiKey = process.env.PI_API_KEY ?? getEnvApiKey(PROVIDER) ?? undefined;
-		const model = getModel(PROVIDER, MODEL_ID as never);
+		const modelBase = getModel(PROVIDER, MODEL_ID as never);
+		const model = PI_BASE_URL ? { ...modelBase, baseUrl: PI_BASE_URL } : modelBase;
 
-		agent = new Agent({
+		const agent = new Agent({
 			initialState: {
 				systemPrompt: system_prompt ?? "",
 				model,
 				thinkingLevel: "off",
-				tools: [],
+				tools: createReadOnlyTools(WORKSPACE),
 			},
 			streamFn: (m, context, opts) =>
 				streamSimple(m, context, {
@@ -93,8 +145,13 @@ app.post("/v1/chat", async (req: Request, res: Response) => {
 			});
 		}
 
-		sessions.set(session_id, agent);
+		entry = { agent, lastUsed: Date.now() };
+		sessions.set(session_id, entry);
+	} else {
+		entry.lastUsed = Date.now();
 	}
+
+	const { agent } = entry;
 
 	const unsubscribe = agent.subscribe((event) => {
 		switch (event.type) {
@@ -128,9 +185,9 @@ app.post("/v1/chat", async (req: Request, res: Response) => {
 });
 
 app.delete("/v1/session/:id", (req: Request, res: Response) => {
-	const agent = sessions.get(req.params.id);
-	if (agent) {
-		agent.abort();
+	const entry = sessions.get(req.params.id);
+	if (entry) {
+		entry.agent.abort();
 		sessions.delete(req.params.id);
 	}
 	res.json({ ok: true });
@@ -141,11 +198,12 @@ app.use((req: Request, res: Response) => {
 	res.on("close", () => {
 		const sessionId = (req.body as ChatRequest | undefined)?.session_id;
 		if (sessionId) {
-			sessions.get(sessionId)?.abort();
+			sessions.get(sessionId)?.agent.abort();
 		}
 	});
 });
 
 app.listen(PORT, () => {
 	console.log(`pi-source-service running on port ${PORT} (${PROVIDER}/${MODEL_ID})`);
+	console.log(`[pi-src] workspace=${WORKSPACE} max_sessions=${MAX_SESSIONS} ttl=${SESSION_TTL_MS}ms`);
 });

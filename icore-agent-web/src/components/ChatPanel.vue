@@ -91,7 +91,7 @@
               ]"
             >
               <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
-              <span v-else v-html="assistantMessageHtml(msg)" />
+              <span v-else-if="msg.content" v-html="assistantMessageHtml(msg)" />
             </div>
           </div>
         </div>

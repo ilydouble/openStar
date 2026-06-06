@@ -363,8 +363,7 @@ class ChatTurnService:
             if kind == "token":
                 text = payload if isinstance(payload, str) else str(payload)
                 full_reply.append(text)
-                for character in text:
-                    yield ChatStreamEvent.token(character)
+                yield ChatStreamEvent.token(text)
             elif kind == "status":
                 step_idx += 1
                 status_payload = payload if isinstance(payload, dict) else {}

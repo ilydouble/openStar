@@ -79,7 +79,7 @@ function *yieldTokenChunks(text) {
   const t = String(text ?? '')
   if (!t) return
   // Chunk long token bursts so the UI can update incrementally during streaming.
-  const SLICE = 6
+  const SLICE = 30
   if (t.length <= SLICE) {
     yield { kind: 'token', text: t }
     return

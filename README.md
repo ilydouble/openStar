@@ -8,6 +8,7 @@
 - **研究助手** - 多源网络检索、事实交叉验证、结构化研究报告生成
 - **代码工程师** - 编写、审查、调试代码，支持序列化 bash 任务执行
 - **知识问答** - 从企业内部文档中精准检索并生成有据可查的答案
+- **Pi Agent** - 独立代码分析微服务（pi-source-service），具备只读文件工具（ls、read、grep、find），可深度分析项目源码、定位 Bug、提出改进建议
 
 ### 🛠️ 工具集
 - 网络搜索（Tavily / DDG）
@@ -113,6 +114,14 @@ DB_NAME=icore_agent_db
 
 # dotenv/.env.tools
 TAVILY_API_KEY=your-tavily-api-key
+
+# dotenv/.env.pi
+PI_SERVICE_URL=http://pi-service:11002
+PI_SERVICE_PORT=11002
+PI_PROVIDER=zai
+PI_MODEL_ID=glm-4.7
+PI_MAX_TOKENS=8192
+PI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 ```
 
 ## 🚀 运行
@@ -167,6 +176,10 @@ iCore/
 │   ├── tests/                  # 测试
 │   ├── dotenv/                 # 分域环境变量模板和本地配置
 │   └── pyproject.toml          # 项目配置
+│
+├── pi-source-service/           # Pi Agent 微服务（Node.js/TypeScript）
+│   ├── src/server.ts            # Express 服务器，SSE 流式输出
+│   └── Dockerfile               # 多阶段构建
 │
 └── icore-agent-web/             # 前端应用
     ├── src/

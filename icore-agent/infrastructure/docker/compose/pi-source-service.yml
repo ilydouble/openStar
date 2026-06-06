@@ -13,8 +13,6 @@ services:
       PI_SERVICE_PORT: ${PI_SERVICE_PORT:-11002}
     expose:
       - '${PI_SERVICE_PORT:-11002}'
-    volumes:
-      - /mnt/c/Users/Turqut/openStar2/pi-source-service:/workspace:ro
     networks:
       - icore-net
     healthcheck:

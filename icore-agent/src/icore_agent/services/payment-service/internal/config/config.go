@@ -21,6 +21,7 @@ type Config struct {
 	DBConnMaxLifetime     time.Duration
 	KafkaBrokers          []string
 	KafkaTopic            string
+	KafkaCheckTimeout     time.Duration
 	LoggingServiceURL     string
 	LoggingServiceToken   string
 	LoggingServiceName    string
@@ -36,6 +37,7 @@ type Config struct {
 	ShutdownTimeout       time.Duration
 	OutboxPollInterval    time.Duration
 	OutboxBatchSize       int
+	OutboxPublishTimeout  time.Duration
 }
 
 // Load reads process environment and validates payment-owned configuration.
@@ -65,6 +67,7 @@ func Load() (Config, error) {
 		DBConnMaxLifetime:     envconfig.Duration("PAYMENT_DB_CONN_MAX_LIFETIME", 30*time.Minute),
 		KafkaBrokers:          envconfig.CSV("PAYMENT_KAFKA_BROKERS", "kafka:9092"),
 		KafkaTopic:            envconfig.String("PAYMENT_KAFKA_TOPIC", "payment.events.v1"),
+		KafkaCheckTimeout:     envconfig.Duration("PAYMENT_KAFKA_CHECK_TIMEOUT", 10*time.Second),
 		LoggingServiceURL:     envconfig.String("LOGGING_SERVICE_URL", "http://logging-service:8091"),
 		LoggingServiceToken:   envconfig.String("LOGGING_SERVICE_TOKEN", ""),
 		LoggingServiceName:    envconfig.String("PAYMENT_LOGGING_SERVICE_NAME", "payment-service"),
@@ -92,6 +95,10 @@ func Load() (Config, error) {
 		ShutdownTimeout:    envconfig.Duration("PAYMENT_SHUTDOWN_TIMEOUT", 10*time.Second),
 		OutboxPollInterval: envconfig.Duration("PAYMENT_OUTBOX_POLL_INTERVAL", 2*time.Second),
 		OutboxBatchSize:    envconfig.Int("PAYMENT_OUTBOX_BATCH_SIZE", 50),
+		OutboxPublishTimeout: envconfig.Duration(
+			"PAYMENT_OUTBOX_PUBLISH_TIMEOUT",
+			10*time.Second,
+		),
 	}, nil
 }
 

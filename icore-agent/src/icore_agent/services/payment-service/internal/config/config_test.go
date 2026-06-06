@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"icore-payment-service/internal/domain/catalog"
 )
@@ -94,6 +95,32 @@ func TestLoadParsesPaymentLoggingConfig(t *testing.T) {
 	}
 	if cfg.LoggingServiceName != "payment-service-dev" || cfg.LoggingServiceTimeout.String() != "3s" || cfg.LoggingQueueSize != 512 {
 		t.Fatalf("payment logging config = name:%q timeout:%s queue:%d", cfg.LoggingServiceName, cfg.LoggingServiceTimeout, cfg.LoggingQueueSize)
+	}
+}
+
+func TestLoadParsesKafkaAndOutboxTimeouts(t *testing.T) {
+	t.Setenv("PAYMENT_DATABASE_URL", "postgres://icore_payment:secret@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment")
+	t.Setenv("PAYMENT_CATALOG_JSON_PATH", writeCatalogFile(t, `{
+		"items": [
+			{"plan_code":"pro","billing_period":"monthly","currency":"CNY","amount_cents":19900,"description":"Pro monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"team","billing_period":"monthly","currency":"CNY","amount_cents":69900,"description":"Team monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"premium","billing_period":"monthly","currency":"CNY","amount_cents":199900,"description":"Premium monthly","entitlements_version":"account-plans-v2","enabled":true},
+			{"plan_code":"byok","billing_period":"monthly","currency":"CNY","amount_cents":6900,"description":"BYOK monthly","entitlements_version":"account-plans-v2","enabled":true}
+		]
+	}`))
+	t.Setenv("PAYMENT_KAFKA_CHECK_TIMEOUT", "4s")
+	t.Setenv("PAYMENT_OUTBOX_PUBLISH_TIMEOUT", "7s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.KafkaCheckTimeout != 4*time.Second {
+		t.Fatalf("KafkaCheckTimeout = %s, want 4s", cfg.KafkaCheckTimeout)
+	}
+	if cfg.OutboxPublishTimeout != 7*time.Second {
+		t.Fatalf("OutboxPublishTimeout = %s, want 7s", cfg.OutboxPublishTimeout)
 	}
 }
 

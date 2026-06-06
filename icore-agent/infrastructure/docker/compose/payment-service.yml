@@ -59,6 +59,7 @@ services:
       PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:change-me@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment}
       PAYMENT_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
       PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      PAYMENT_KAFKA_CHECK_TIMEOUT: ${PAYMENT_KAFKA_CHECK_TIMEOUT:-10s}
       LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
       PAYMENT_LOGGING_SERVICE_NAME: ${PAYMENT_LOGGING_SERVICE_NAME:-payment-service}
@@ -68,6 +69,7 @@ services:
       PAYMENT_ORDER_TTL: ${PAYMENT_ORDER_TTL:-30m}
       PAYMENT_OUTBOX_POLL_INTERVAL: ${PAYMENT_OUTBOX_POLL_INTERVAL:-2s}
       PAYMENT_OUTBOX_BATCH_SIZE: ${PAYMENT_OUTBOX_BATCH_SIZE:-50}
+      PAYMENT_OUTBOX_PUBLISH_TIMEOUT: ${PAYMENT_OUTBOX_PUBLISH_TIMEOUT:-10s}
       WECHATPAY_APP_ID: ${WECHATPAY_APP_ID:-}
       WECHATPAY_MCH_ID: ${WECHATPAY_MCH_ID:-}
       WECHATPAY_MCH_CERT_SERIAL_NO: ${WECHATPAY_MCH_CERT_SERIAL_NO:-}
@@ -90,6 +92,8 @@ services:
         condition: service_completed_successfully
       logging-service:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
     networks:

@@ -37,3 +37,15 @@ func TestInitialMigrationUsesProviderNeutralPaymentSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestClaimPendingOutboxRecoversExpiredPublishingRows(t *testing.T) {
+	source, err := os.ReadFile("repository.go")
+	if err != nil {
+		t.Fatalf("read repository.go: %v", err)
+	}
+	sql := string(source)
+
+	if !strings.Contains(sql, "status = 'publishing'\n    AND next_attempt_at <= now()") {
+		t.Fatalf("ClaimPendingOutbox must reclaim expired publishing rows")
+	}
+}

@@ -79,7 +79,9 @@ def test_payment_compose_and_env_are_loaded_by_compose_script() -> None:
     assert "dotenv/.env.payment" in compose_script
     assert "payment-db-migrate:" in compose
     assert "postgres:" in compose
+    assert "kafka-init:" in compose
     assert "condition: service_healthy" in compose
+    assert "condition: service_completed_successfully" in compose
     assert "payment-service/Dockerfile.migrate" in compose
     assert "POSTGRES_ADMIN_USER" in env_example
     assert "PAYMENT_DATABASE_URL" in env_example

@@ -325,8 +325,13 @@ SET status = 'publishing',
 WHERE id IN (
   SELECT id
   FROM payment_outbox
-  WHERE status = 'pending'
+  WHERE (
+    status = 'pending'
     AND next_attempt_at <= now()
+  ) OR (
+    status = 'publishing'
+    AND next_attempt_at <= now()
+  )
   ORDER BY created_at
   LIMIT $1
   FOR UPDATE SKIP LOCKED

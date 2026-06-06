@@ -196,6 +196,9 @@ def test_object_and_logging_infra_have_init_services():
     assert "kafka-init:" in kafka
     assert "--if-not-exists" in kafka
     assert 'topic "$$LOGGING_KAFKA_TOPIC"' in kafka
+    assert "PAYMENT_KAFKA_TOPIC" in kafka
+    assert "PAYMENT_KAFKA_PARTITIONS" in kafka
+    assert 'topic "$$PAYMENT_KAFKA_TOPIC"' in kafka
 
 
 def test_go_microservice_dockerfiles_use_buildkit_caches():

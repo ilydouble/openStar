@@ -80,14 +80,31 @@ func main() {
 		Brokers: cfg.KafkaBrokers,
 		Topic:   cfg.KafkaTopic,
 	})
+	checkCtx, cancelCheck := context.WithTimeout(ctx, cfg.KafkaCheckTimeout)
+	if err := kafkaProducer.Check(checkCtx); err != nil {
+		cancelCheck()
+		log.Fatalf("payment-service kafka startup check failed for brokers=%v topic=%q: %v", cfg.KafkaBrokers, cfg.KafkaTopic, err)
+	}
+	cancelCheck()
 	defer kafkaProducer.Close()
-	outboxPublisher := outboxkafka.NewPublisher(repository, kafkaProducer, cfg.OutboxBatchSize)
+	outboxPublisher := outboxkafka.NewPublisherWithConfig(repository, kafkaProducer, outboxkafka.PublisherConfig{
+		BatchSize:      cfg.OutboxBatchSize,
+		PublishTimeout: cfg.OutboxPublishTimeout,
+		Logger:         log.Default(),
+	})
 	go outboxPublisher.Run(ctx, cfg.OutboxPollInterval)
 
 	router := httpv1.NewRouter(httpv1.HandlerConfig{
 		Checkout:     checkoutService,
 		Notification: notificationService,
-		ReadyCheck:   repository.Check,
+		ReadyCheck: func(ctx context.Context) error {
+			if err := repository.Check(ctx); err != nil {
+				return err
+			}
+			checkCtx, cancel := context.WithTimeout(ctx, cfg.KafkaCheckTimeout)
+			defer cancel()
+			return kafkaProducer.Check(checkCtx)
+		},
 	})
 	server := httpserver.New(cfg.HTTPServerConfig(), router)
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Developing Go Microservices"
+  short_description: "规范复用 lib-go 开发 Go 微服务与数据库迁移"
+  default_prompt: "Use $developing-go-microservices to implement a Go microservice change that reuses lib-go and follows service-owned database migration rules."

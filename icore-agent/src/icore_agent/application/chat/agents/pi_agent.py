@@ -37,10 +37,12 @@ class PiAgentRunner:
         session_id: str,
         system_prompt: str = "",
         callback_handler: Callable[..., None] | None = None,
+        workspace_dir: str | None = None,
     ) -> None:
         self.session_id = session_id
         self.system_prompt = system_prompt
         self.callback_handler = callback_handler
+        self.workspace_dir = workspace_dir
         self.messages: list[dict[str, Any]] = []
 
     def __call__(self, message: str) -> str:
@@ -51,6 +53,12 @@ class PiAgentRunner:
             "message": message,
             "system_prompt": self.system_prompt,
         }
+        if self.workspace_dir:
+            # Tells pi-service to confine this session's tools to the
+            # extracted project sandbox (re-validated independently on that
+            # side via resolveSandboxWorkspace — see server.ts). Absent →
+            # pi-service falls back to its default read-only workspace.
+            payload["workspace_dir"] = self.workspace_dir
 
         full_reply: list[str] = []
         cb = self.callback_handler
@@ -117,6 +125,7 @@ def create_pi_orchestrator(
     callback_handler: Callable[..., None] | None = None,
     session_id: str = "",
     summary: str | None = None,
+    workspace_dir: str | None = None,
     **_kwargs: Any,
 ) -> PiAgentRunner:
     """Factory matching the OrchestratorFactory signature used by ChatTurnService."""
@@ -124,4 +133,5 @@ def create_pi_orchestrator(
         session_id=session_id,
         system_prompt=summary or "",
         callback_handler=callback_handler,
+        workspace_dir=workspace_dir,
     )

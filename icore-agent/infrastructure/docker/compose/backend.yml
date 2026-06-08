@@ -1,4 +1,19 @@
 services:
+  # Named volumes are created root-owned on first use, but icore-agent runs as
+  # the unprivileged `icore` user (uid/gid 999 — see Dockerfile). Without this
+  # one-shot chown, PiWorkspaceService.extract_into_sandbox fails with
+  # PermissionError when it tries to mkdir inside the shared sandbox volume.
+  # Idempotent — safe to run on every `up`.
+  pi-workspace-volume-init:
+    image: busybox:latest
+    container_name: icore-pi-workspace-volume-init
+    restart: 'no'
+    command: ['sh', '-c', 'chown -R 999:999 /workspace/projects && echo "pi-projects-workspace ownership ok"']
+    volumes:
+      - pi-projects-workspace:/workspace/projects
+    networks:
+      - icore-net
+
   icore-agent:
     build:
       context: ../../..
@@ -46,6 +61,9 @@ services:
     volumes:
       - ../../../src:/app/src:ro
       - seq-workspace:/tmp/icore-seq-workspace
+      # Pi mode: extracted project sandboxes live here (path matches
+      # `pi_workspace_sandbox_root` default and pi-service's PI_WORKSPACE_ROOT).
+      - pi-projects-workspace:/workspace/projects
     depends_on:
       postgres:
         condition: service_healthy

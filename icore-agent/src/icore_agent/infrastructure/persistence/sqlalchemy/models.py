@@ -4,6 +4,7 @@
 from ..files.models import FileAssetRecord as FileAssetRecord  # noqa: E402,F401
 from ..organizations.models import Organization as Organization  # noqa: E402,F401
 from ..organizations.models import OrgMember as OrgMember  # noqa: E402,F401
+from ..pi_workspaces.models import PiWorkspace as PiWorkspace  # noqa: E402,F401
 from ..projects.models import Project as Project  # noqa: E402,F401
 from ..projects.models import ProjectSession as ProjectSession  # noqa: E402,F401
 from ..sessions.models import ChatMessage as ChatMessage  # noqa: E402,F401
@@ -20,6 +21,7 @@ __all__ = [
     "LlmToolCall",
     "OrgMember",
     "Organization",
+    "PiWorkspace",
     "Project",
     "ProjectSession",
     "User",

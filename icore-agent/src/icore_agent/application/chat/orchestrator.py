@@ -94,6 +94,7 @@ def create_orchestrator(
     hooks: list[Any] | None = None,
     user_id: str = "",
     user_memory_prompt: str | None = None,
+    pi_workspace_dir: str | None = None,
 ) -> Orchestrator:
     print(f"[DEBUG] create_orchestrator called: agent_hint={agent_hint!r}", flush=True)
     # Pi agent hint bypasses Strands entirely — delegate to pi-service.
@@ -103,6 +104,7 @@ def create_orchestrator(
             callback_handler=callback_handler,
             session_id=session_id,
             summary=summary,
+            workspace_dir=pi_workspace_dir,
         )
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 

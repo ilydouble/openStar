@@ -8,6 +8,7 @@ from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
 from icore_agent.application.chat import ChatHistoryService, ChatTurnService
 from icore_agent.application.files import FileAssetService
+from icore_agent.application.pi_workspaces import PiWorkspaceService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
@@ -21,6 +22,9 @@ from icore_agent.infrastructure.control_plane import (
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
+from icore_agent.infrastructure.persistence.pi_workspaces import (
+    SqlAlchemyPiWorkspaceRepository,
+)
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
     add_documents,
@@ -90,6 +94,18 @@ file_asset_service = FileAssetService(
     bucket=settings.file_storage_bucket,
     default_expires_in=settings.file_upload_url_expires_in,
 )
+pi_workspace_service = PiWorkspaceService(
+    repository=SqlAlchemyPiWorkspaceRepository(),
+    storage_client=StorageServiceClient(
+        base_url=settings.storage_service_url,
+        token=settings.storage_service_token,
+        timeout=settings.storage_service_timeout,
+    ),
+    bucket=settings.pi_workspace_bucket,
+    default_expires_in=settings.pi_workspace_upload_url_expires_in,
+    max_size_mb=settings.pi_workspace_max_size_mb,
+    max_files=settings.pi_workspace_max_files,
+)
 
 
 def get_account_service() -> AccountService:
@@ -122,6 +138,11 @@ def get_file_asset_service() -> FileAssetService:
     return file_asset_service
 
 
+def get_pi_workspace_service() -> PiWorkspaceService:
+    """Return the singleton Pi workspace service used by HTTP handlers."""
+    return pi_workspace_service
+
+
 def get_chat_history_service() -> ChatHistoryService:
     """Return the singleton chat history service used by agent handlers."""
     return chat_history_service
@@ -141,6 +162,7 @@ def get_chat_turn_service() -> ChatTurnService:
         orchestrator_factory=create_orchestrator,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
+        pi_workspace_service=pi_workspace_service,
     )
 
 

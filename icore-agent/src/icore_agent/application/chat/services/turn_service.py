@@ -59,6 +59,7 @@ class ChatTurnService:
         orchestrator_factory: OrchestratorFactory,
         usage_service: UsageService | None = None,
         user_memory_service: UserMemoryService | None = None,
+        pi_workspace_service: Any | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
     ) -> None:
         """Create a chat turn service with its application dependencies."""
@@ -68,7 +69,40 @@ class ChatTurnService:
         self._orchestrator_factory = orchestrator_factory
         self._usage_service = usage_service
         self._user_memory_service = user_memory_service
+        self._pi_workspace_service = pi_workspace_service
         self._wall_budget_sec = wall_budget_sec
+
+    def _resolve_pi_workspace_dir(self, command: ChatTurnCommand) -> str | None:
+        """Extract the user's selected Pi project into its sandbox directory.
+
+        Returns the absolute path Pi should be confined to, or ``None`` when
+        Pi mode isn't using an uploaded project (falls back to pi-service's
+        default read-only workspace). Never raises — a missing/foreign/corrupt
+        workspace silently degrades to "no project selected" rather than
+        failing the whole turn, since the user can simply re-pick a project.
+        """
+        workspace_id = (command.pi_workspace_id or "").strip()
+        if not workspace_id or self._pi_workspace_service is None:
+            return None
+        try:
+            from pathlib import Path
+
+            sandbox_root = Path(settings.pi_workspace_sandbox_root) / command.user_id / workspace_id
+            resolved = self._pi_workspace_service.extract_into_sandbox(
+                owner_user_id=command.user_id,
+                workspace_id=workspace_id,
+                destination_root=sandbox_root,
+            )
+            return str(resolved)
+        except Exception:
+            log.warning(
+                "pi_workspace_resolve_failed",
+                session_id=command.session_id,
+                user_id=command.user_id,
+                workspace_id=workspace_id,
+                exc_info=True,
+            )
+            return None
 
     def _check_task_quota(self, command: ChatTurnCommand) -> None:
         """Raise PermissionError if the user's monthly task quota is exhausted."""
@@ -234,7 +268,12 @@ class ChatTurnService:
         result = None
         try:
             hooks = [tool_call_recorder] if tool_call_recorder is not None else []
-            print(f"[DEBUG] _invoke_agent: agent_hint={route.agent_hint!r}", flush=True)
+            agent_hint_value = route.agent_hint.value if route.agent_hint else None
+            pi_workspace_dir = (
+                self._resolve_pi_workspace_dir(command)
+                if (agent_hint_value or "").strip().lower() == "pi"
+                else None
+            )
             orchestrator = self._orchestrator_factory(
                 callback_handler=callback_handler,
                 summary=context.summary,
@@ -242,11 +281,12 @@ class ChatTurnService:
                 image_attachments=context.image_attachment_payloads,
                 data_attachments=context.data_attachment_payloads,
                 enable_tools=enable_tools,
-                agent_hint=route.agent_hint.value if route.agent_hint else None,
+                agent_hint=agent_hint_value,
                 session_id=command.session_id,
                 hooks=hooks,
                 user_id=command.user_id,
                 user_memory_prompt=context.user_memory_prompt,
+                pi_workspace_dir=pi_workspace_dir,
             )
             runner = cast(AgentRunner, orchestrator)
             runner.messages = context.strands_history

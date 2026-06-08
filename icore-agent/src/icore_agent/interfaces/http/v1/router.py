@@ -9,6 +9,7 @@ from .files import router as files_router
 from .health import router as health_router
 from .knowledge import router as knowledge_router
 from .payment import router as payment_router
+from .pi_workspaces import router as pi_workspaces_router
 
 
 def include_api_routers(app: FastAPI) -> None:
@@ -20,3 +21,4 @@ def include_api_routers(app: FastAPI) -> None:
     app.include_router(files_router)
     app.include_router(knowledge_router)
     app.include_router(payment_router)
+    app.include_router(pi_workspaces_router)

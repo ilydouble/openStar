@@ -4,6 +4,7 @@ import { formatApiErrorMessage, readJsonResponse } from './client.js'
 
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
+const PI_WORKSPACE_BASE = '/api/v1/pi/workspaces'
 
 /**
  * Thrown when the backend returns 402 quota_exceeded.
@@ -116,6 +117,14 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
     ? options.templateId.trim()
     : ''
   const incognito = Boolean(options?.incognito)
+  // Pi mode: id of the user-uploaded project workspace Pi should analyze.
+  // Only meaningful alongside agentHint === 'pi' — backend resolves it through
+  // PiWorkspaceService (ownership-checked) and extracts it into a sandbox
+  // before pointing the Pi agent at it. Absent → Pi falls back to its
+  // default read-only service workspace.
+  const piWorkspaceId = typeof options?.piWorkspaceId === 'string'
+    ? options.piWorkspaceId.trim()
+    : ''
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -129,6 +138,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       ...(agentMessage ? { agent_message: agentMessage } : {}),
       ...(templateId ? { template_id: templateId } : {}),
       ...(incognito ? { incognito: true } : {}),
+      ...(piWorkspaceId ? { pi_workspace_id: piWorkspaceId } : {}),
     }),
     // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
     cache: 'no-store',
@@ -390,6 +400,121 @@ export async function uploadFileAsset(file) {
     mode: assetMode(file.name || '', contentType),
     download_url: downloadUrl,
   }
+}
+
+/**
+ * Bütün layihə qovluğunu (File[] - webkitdirectory ilə seçilmiş) zip arxivinə
+ * sıxır. Toxunulmamış halda saxlanılır (DEFLATE 0) ki, brauzerdə tez işləsin —
+ * tam sıxılma serverdə arxivi inspektə edərkən artıq edilmir, server tərəfdə
+ * checksum/limit/path-traversal yoxlamaları zəruri qoruma qatıdır.
+ * @param {File[]} files - `webkitRelativePath` daşıyan fayllar
+ * @returns {Promise<{ blob: Blob, fileCount: number }>}
+ */
+async function zipProjectFiles(files) {
+  const { default: JSZip } = await import('jszip')
+  const zip = new JSZip()
+  let fileCount = 0
+  for (const file of files) {
+    const relPath = file.webkitRelativePath || file.name
+    if (!relPath) continue
+    zip.file(relPath, file)
+    fileCount += 1
+  }
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+  return { blob, fileCount }
+}
+
+/**
+ * SHA-256 hesabla (Blob üçün) — sha256File ilə eyni alqoritm, fərqli giriş tipi.
+ * @param {Blob} blob
+ * @returns {Promise<string>}
+ */
+async function sha256Blob(blob) {
+  const buffer = await blob.arrayBuffer()
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * Pi mode üçün bütün layihə qovluğunu yükləyir: client-side zip → presigned URL
+ * → birbaşa MinIO-ya PUT → complete (checksum + sandbox təhlükəsizlik yoxlaması).
+ * Mirrors `uploadFileAsset`'s presign/PUT/complete flow 1:1, only the bucket
+ * and verification differ (server validates the zip's internal structure too).
+ * @param {File[]} files - `<input webkitdirectory multiple>` ilə seçilmiş fayllar
+ * @param {string} title - layihənin görünən adı (məs. kök qovluğun adı)
+ * @param {(progress: {stage: string, loaded?: number, total?: number}) => void} [onProgress]
+ * @returns {Promise<{id: string, title: string, status: string, size_bytes: number,
+ *   file_count: number, created_at: number, updated_at: number}>}
+ */
+export async function uploadPiProjectFolder(files, title, onProgress) {
+  if (!files?.length) throw new Error('No files selected')
+
+  onProgress?.({ stage: 'zipping' })
+  const { blob, fileCount } = await zipProjectFiles(files)
+  const checksum = await sha256Blob(blob)
+
+  onProgress?.({ stage: 'requesting-url' })
+  const urlResp = await fetch(`${PI_WORKSPACE_BASE}/upload-url/`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'pi-workspace-upload-url'),
+    body: JSON.stringify({
+      title: (title || '').slice(0, 200) || 'Untitled project',
+      checksum_sha256: checksum,
+    }),
+  })
+  if (!urlResp.ok) await readAgentError(urlResp)
+  const upload = await readJsonResponse(urlResp)
+
+  onProgress?.({ stage: 'uploading', total: blob.size })
+  const putResp = await fetch(upload.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/zip' },
+    body: blob,
+  })
+  if (!putResp.ok) {
+    throw new Error(formatApiErrorMessage(putResp.status, '', putResp.url || ''))
+  }
+
+  onProgress?.({ stage: 'verifying' })
+  const completeResp = await fetch(`${PI_WORKSPACE_BASE}/${encodeURIComponent(upload.workspace_id)}/complete/`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'pi-workspace-complete'),
+    body: JSON.stringify({ checksum_sha256: checksum }),
+  })
+  if (!completeResp.ok) await readAgentError(completeResp)
+  const completed = await readJsonResponse(completeResp)
+
+  onProgress?.({ stage: 'done' })
+  return { ...completed, file_count: completed.file_count ?? fileCount }
+}
+
+/**
+ * Cari istifadəçinin Pi mode üçün yüklədiyi layihələrin siyahısını qaytarır.
+ * @returns {Promise<Array<{id: string, title: string, status: string, size_bytes: number,
+ *   file_count: number, created_at: number, updated_at: number}>>}
+ */
+export async function listPiWorkspaces() {
+  const resp = await fetch(`${PI_WORKSPACE_BASE}/`, {
+    headers: mergeAgentAuthHeaders({}, 'pi-workspace-list'),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  const payload = await readJsonResponse(resp)
+  return payload.workspaces || []
+}
+
+/**
+ * Bir Pi layihəsini (öz workspace-ini) silir — soft-delete + storage təmizliyi.
+ * @param {string} workspaceId
+ */
+export async function deletePiWorkspace(workspaceId) {
+  const resp = await fetch(`${PI_WORKSPACE_BASE}/${encodeURIComponent(workspaceId)}/`, {
+    method: 'DELETE',
+    headers: mergeAgentAuthHeaders({}, 'pi-workspace-delete'),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
 }
 
 function assetMode(filename, contentType) {

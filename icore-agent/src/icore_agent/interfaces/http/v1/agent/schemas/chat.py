@@ -16,6 +16,10 @@ class ChatRequest(BaseModel):
     agent_message: str | None = Field(default=None, max_length=32_000)
     template_id: str | None = Field(default=None, max_length=64)
     incognito: bool = False
+    # Pi mode: id of a previously-uploaded project workspace (PiWorkspace) the
+    # user wants Pi to analyze. Backend resolves ownership, extracts it into a
+    # sandbox, and binds the Pi agent's tools to that directory only.
+    pi_workspace_id: str | None = Field(default=None, max_length=64)
 
 
 class ChatResponse(BaseModel):

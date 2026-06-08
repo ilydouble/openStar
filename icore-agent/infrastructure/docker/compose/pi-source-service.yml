@@ -11,8 +11,17 @@ services:
       - ../../../dotenv/.env.llm
     environment:
       PI_SERVICE_PORT: ${PI_SERVICE_PORT:-11002}
+      # Per-project sandbox root — must match the path icore-agent extracts
+      # uploaded projects into (`pi_workspace_sandbox_root`, mounted from the
+      # same shared volume below). chat requests' `workspace_dir` is rejected
+      # unless it resolves inside this root (see resolveSandboxWorkspace).
+      PI_WORKSPACE_ROOT: /workspace/projects
     expose:
       - '${PI_SERVICE_PORT:-11002}'
+    volumes:
+      # Shared with backend: backend extracts uploaded project archives here,
+      # Pi's sandboxed read-only tools are pointed at subdirectories of it.
+      - pi-projects-workspace:/workspace/projects
     networks:
       - icore-net
     healthcheck:

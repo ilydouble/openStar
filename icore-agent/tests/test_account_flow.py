@@ -160,14 +160,14 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
         "/api/v1/account/login",
         json={"email": email, "verification_code": code},
     )
-    assert login.status_code == 200, login.text
+    assert login.status_code == 200, login.TEXT
     body = _api_data(login)
     token = body["access_token"]
     assert token
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200, me.text
+    assert me.status_code == 200, me.TEXT
     assert _api_data(me)["email"] == email
 
 

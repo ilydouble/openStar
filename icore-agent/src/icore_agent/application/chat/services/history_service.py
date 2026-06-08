@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.domain.chat import ChatCompletionRole
+from icore_agent.domain.chat.session import SessionItem
+from icore_agent.domain.chat.turn import Turn, TurnError, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
@@ -111,6 +113,62 @@ class ChatHistoryService:
                 metadata=metadata,
             )
             return int(message.id)
+
+    def create_turn(self, public_id: str, user_id: str, turn: Turn) -> None:
+        """Persist the start of one domain turn."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyChatHistoryRepository(session)
+            row = repo.get_session_by_public_id(public_id)
+            if row is None or row.deleted_at is not None or row.user_id != user_id:
+                raise LookupError("Session not found")
+            repo.create_turn(row, turn)
+
+    def upsert_session_item(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        turn_id: str,
+        item: SessionItem,
+    ) -> None:
+        """Persist or update one domain item inside a turn."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyChatHistoryRepository(session)
+            row = repo.get_session_by_public_id(public_id)
+            if row is None or row.deleted_at is not None or row.user_id != user_id:
+                raise LookupError("Session not found")
+            turn = repo.get_turn(row, turn_id)
+            if turn is None:
+                raise LookupError("Turn not found")
+            repo.upsert_session_item(row, turn, item)
+
+    def complete_turn(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        turn_id: str,
+        status: TurnStatus,
+        error: TurnError | None,
+        completed_at,
+        duration_ms: int | None,
+    ) -> None:
+        """Persist the final state of one domain turn."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyChatHistoryRepository(session)
+            row = repo.get_session_by_public_id(public_id)
+            if row is None or row.deleted_at is not None or row.user_id != user_id:
+                raise LookupError("Session not found")
+            turn = repo.get_turn(row, turn_id)
+            if turn is None:
+                raise LookupError("Turn not found")
+            repo.complete_turn(
+                turn,
+                status=status,
+                error=error,
+                completed_at=completed_at,
+                duration_ms=duration_ms,
+            )
 
     def start_tool_call(
         self,

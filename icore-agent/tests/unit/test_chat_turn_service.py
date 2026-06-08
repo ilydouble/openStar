@@ -7,24 +7,22 @@ from typing import Any
 
 import pytest
 
+from icore_agent.application.agent.tool import StrandsToolEventBridge
 from icore_agent.application.chat import (
     ChatStreamEventKind,
     ChatTurnCommand,
     ChatTurnService,
 )
-from icore_agent.application.chat.context import dedupe_file_uuids
-from icore_agent.application.chat.routing import AgentHint, ChatIntent, resolve_routing
-from icore_agent.application.chat.tool_calls import ChatToolCallRecorder
+from icore_agent.application.agent.context import dedupe_file_uuids
+from icore_agent.application.chat.routing import ChatIntent, resolve_routing
 from icore_agent.domain.user import AuthenticatedUser
 
 
-def test_resolve_routing_honors_agent_hint() -> None:
-    """Explicit agent hints should select tool-enabled routing."""
-    decision = resolve_routing("hello", "research")
+def test_resolve_routing_classifies_task_keywords() -> None:
+    """Routing should classify task-like messages for turn metadata."""
+    decision = resolve_routing("帮我搜索今天的 AI 新闻")
 
     assert decision.intent is ChatIntent.TASK
-    assert decision.enable_tools is True
-    assert decision.agent_hint is AgentHint.RESEARCH
 
 
 def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
@@ -60,9 +58,10 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
         ("session-1", "user", "Hello"),
         ("session-1", "assistant", "assistant reply"),
     ]
-    assert factory.calls[0]["enable_tools"] is False
+    assert "enable_tools" not in factory.calls[0]
+    assert "agent_hint" not in factory.calls[0]
     assert len(factory.calls[0]["hooks"]) == 1
-    assert isinstance(factory.calls[0]["hooks"][0], ChatToolCallRecorder)
+    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
     assert factory.agent.messages == []
     assert usage.calls == [("user-1", "tasks", 1)]
     assert len(usage.llm_calls) == 1
@@ -85,7 +84,7 @@ async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
         usage_service=FakeUsageService(),
     )
 
-    result = await service.run(_command(stream=False, agent_hint="research"))
+    result = await service.run(_command(stream=False))
 
     assert result.reply == "assistant reply"
     assert (
@@ -152,7 +151,7 @@ async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
 
     event_stream = await service.stream(_command(stream=True))
     async for event in event_stream:
-        if event.kind is ChatStreamEventKind.DONE:
+        if event.kind is ChatStreamEventKind.TURN_COMPLETED:
             break
 
     assert memory_service.compression_checks == [False]
@@ -173,80 +172,29 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
         usage_service=FakeUsageService(),
     )
 
-    event_stream = await service.stream(_command(stream=True, agent_hint="research"))
+    event_stream = await service.stream(_command(stream=True))
     events = []
     async for event in event_stream:
         events.append(event)
-        if event.kind is ChatStreamEventKind.DONE:
+        if event.kind is ChatStreamEventKind.TURN_COMPLETED:
             break
 
     assert [event.kind for event in events] == [
-        ChatStreamEventKind.STATUS,
-        ChatStreamEventKind.STATUS,
-        ChatStreamEventKind.TOKEN,
-        ChatStreamEventKind.TOKEN,
-        ChatStreamEventKind.DONE,
+        ChatStreamEventKind.TURN_STARTED,
+        ChatStreamEventKind.ITEM_COMPLETED,
+        ChatStreamEventKind.ITEM_STARTED,
+        ChatStreamEventKind.ITEM_STARTED,
+        ChatStreamEventKind.ITEM_DELTA,
+        ChatStreamEventKind.ITEM_COMPLETED,
+        ChatStreamEventKind.TURN_COMPLETED,
     ]
-    assert events[0].tool == "research_agent"
-    assert events[1].tool == "web_search"
+    assert events[3].item.function.name == "web_search"
     assert "".join(
-        event.text for event in events if event.kind is ChatStreamEventKind.TOKEN) == "Hi"
-    assert history.calls[-1] == ("assistant", "session-1", "user-1", "Hi")
-
-
-def test_tool_call_recorder_persists_result_and_tool_message() -> None:
-    """Tool-call hooks should persist JSON result records and matching tool messages."""
-    history = FakeHistory()
-    recorder = ChatToolCallRecorder(
-        chat_history=history,
-        session_id="session-1",
-        user_id="user-1",
-    )
-    tool_use = {
-        "toolUseId": "tool-1",
-        "name": "web_search",
-        "input": {"query": "weather"},
-    }
-
-    recorder.record_start(tool_use)
-    recorder.record_finish(
-        tool_use,
-        {
-            "toolUseId": "tool-1",
-            "status": "success",
-            "content": [{"text": "{\"temperature\":\"22C\"}"}],
-        },
-        exception=None,
-    )
-
-    assert history.calls[-3:] == [
-        (
-            "tool-start",
-            "session-1",
-            "tool-1",
-            "web_search",
-            {"query": "weather"},
-        ),
-        (
-            "tool-message",
-            "session-1",
-            "user-1",
-            '{"toolUseId":"tool-1","status":"success","content":[{"text":"{\\"temperature\\":\\"22C\\"}"}]}',
-            {"tool_call_id": "tool-1", "tool_name": "web_search"},
-        ),
-        (
-            "tool-finish",
-            "session-1",
-            "tool-1",
-            "success",
-            {"toolUseId": "tool-1", "status": "success",
-                "content": [{"text": "{\"temperature\":\"22C\"}"}]},
-            None,
-            None,
-            42,
-        ),
-    ]
-    assert recorder.tool_call_ids == ("tool-1",)
+        event.delta["text"]
+        for event in events
+        if event.kind is ChatStreamEventKind.ITEM_DELTA
+    ) == "Hi"
+    assert ("assistant", "session-1", "user-1", "Hi") in history.calls
 
 
 @pytest.mark.asyncio
@@ -274,7 +222,8 @@ async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> Non
     ]
     assert memory_service.compression_checks == []
     assert memory_service.extract_calls == []
-    assert factory.calls[0]["hooks"] == []
+    assert len(factory.calls[0]["hooks"]) == 1
+    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
     assert factory.calls[0]["user_memory_prompt"] is None
 
 
@@ -309,7 +258,6 @@ async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
 def _command(
     *,
     stream: bool,
-    agent_hint: str = "",
     file_uuids: tuple[str, ...] = (),
     incognito: bool = False,
 ) -> ChatTurnCommand:
@@ -319,7 +267,6 @@ def _command(
         session_id="session-1",
         stream=stream,
         tenant_code="",
-        agent_hint=AgentHint(agent_hint) if agent_hint else None,
         file_uuids=file_uuids,
         display_caption=None,
         agent_message=None,

@@ -66,7 +66,6 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         session_id="session-1",
         stream=False,
         tenant_code="",
-        agent_hint=None,
         file_uuids=("file-1",),
         display_caption="Hello please analysis these files",
         agent_message="Creative Brief\n\n---\nPlease answer in markdown",

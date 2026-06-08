@@ -40,7 +40,10 @@ async def sse_frames(
             except StopAsyncIteration:
                 break
             yield encode_sse_event(event)
-            if event.kind is ChatStreamEventKind.DONE:
+            if event.kind in {
+                ChatStreamEventKind.TURN_COMPLETED,
+                ChatStreamEventKind.TURN_FAILED,
+            }:
                 break
             pending = asyncio.create_task(iterator.__anext__())
     finally:

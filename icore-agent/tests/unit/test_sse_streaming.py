@@ -5,16 +5,26 @@ from __future__ import annotations
 import pytest
 
 from icore_agent.application.chat import ChatStreamEvent, ChatStreamEventKind
+from icore_agent.domain.chat.session import AgentMessageItem
 from icore_agent.interfaces.http.v1.streaming import encode_sse_event, sse_frames
 
 
 def test_encode_sse_event_serializes_json_data_frame() -> None:
-    """Typed chat events should be encoded as JSON SSE data frames."""
-    event = ChatStreamEvent.token("你")
+    """Typed turn events should be encoded as JSON SSE data frames."""
+    event = ChatStreamEvent.item_delta(
+        session_id="session-1",
+        turn_id="turn-1",
+        item_id="item-1",
+        delta={"text": "你"},
+    )
     frame = encode_sse_event(event)
 
-    assert event.kind is ChatStreamEventKind.TOKEN
-    assert frame == 'data: {"type": "token", "text": "你"}\n\n'
+    assert event.kind is ChatStreamEventKind.ITEM_DELTA
+    assert frame == (
+        'data: {"type": "item_delta", "session_id": "session-1", '
+        '"turn_id": "turn-1", "item_id": "item-1", '
+        '"delta": {"text": "你"}}\n\n'
+    )
 
 
 @pytest.mark.asyncio
@@ -23,13 +33,24 @@ async def test_sse_frames_appends_done_sentinel() -> None:
     frames = [frame async for frame in sse_frames(_events())]
 
     assert frames == [
-        'data: {"type": "status", "step": 1, "tool": "chat", "input_preview": "启动 chat"}\n\n',
-        'data: {"type": "done"}\n\n',
+        'data: {"type": "item_started", "session_id": "session-1", "turn_id": "turn-1", "item_id": "item-1", "item": {"id": "item-1", "status": "in_progress", "created_at": "2026-06-08T00:00:00Z", "completed_at": null, "type": "agent_message", "text": ""}}\n\n',
+        'data: {"type": "turn_completed", "session_id": "session-1", "turn_id": "turn-1", "reply": "ok"}\n\n',
         "data: [DONE]\n\n",
     ]
 
 
 async def _events():
     """Yield a small deterministic event stream."""
-    yield ChatStreamEvent.status(step=1, tool="chat", input_preview="启动 chat")
-    yield ChatStreamEvent.done()
+    yield ChatStreamEvent.item_started(
+        session_id="session-1",
+        turn_id="turn-1",
+        item=AgentMessageItem(
+            id="item-1",
+            created_at="2026-06-08T00:00:00Z",
+        ),
+    )
+    yield ChatStreamEvent.turn_completed(
+        session_id="session-1",
+        turn_id="turn-1",
+        reply="ok",
+    )

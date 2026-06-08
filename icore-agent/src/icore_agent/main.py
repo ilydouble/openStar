@@ -37,8 +37,8 @@ log = get_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────
-# Fires after EVERY LLM call in the process: orchestrator turns, sub-agent turns,
-# rolling-summary compression, memU extraction — all are counted.
+# Fires after every LLM call in the process: agent turns, rolling-summary
+# compression, memory extraction, and other model-backed work are counted.
 
 def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
     event = build_litellm_usage_event(kwargs, completion_response)

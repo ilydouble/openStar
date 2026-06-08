@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from .models import ChatMessage, ChatSession, LlmToolCall
+from icore_agent.domain.chat.session import SessionItem
+from icore_agent.domain.chat.turn import Turn, TurnError, TurnStatus
+
+from .models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionItem,
+    ChatTurn,
+    LlmToolCall,
+)
 
 _HEADLINE_OPTS = "MaxFragments=1, MaxWords=20, MinWords=6, StartSel=<mark>, StopSel=</mark>"
 _SEARCH_LANG = "english"
@@ -198,6 +207,93 @@ class SqlAlchemyChatHistoryRepository:
             .order_by(ChatMessage.sequence.asc())
         )
         return list(result.scalars().all())
+
+    def create_turn(self, row: ChatSession, turn: Turn) -> ChatTurn:
+        """Persist one new execution turn for a session."""
+        existing = self.get_turn(row, turn.id)
+        if existing is not None:
+            return existing
+        chat_turn = ChatTurn(
+            session_id=row.id,
+            public_id=turn.id,
+            status=_enum_value(turn.status),
+            error=(
+                turn.error.model_dump(mode="json")
+                if turn.error is not None
+                else None
+            ),
+            started_at=turn.started_at,
+            completed_at=turn.completed_at,
+            duration_ms=turn.duration_ms,
+        )
+        self._session.add(chat_turn)
+        self._session.flush()
+        return chat_turn
+
+    def get_turn(self, row: ChatSession, turn_public_id: str) -> ChatTurn | None:
+        """Load one turn by public id within a session."""
+        result = self._session.execute(
+            select(ChatTurn).where(
+                ChatTurn.session_id == row.id,
+                ChatTurn.public_id == turn_public_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    def upsert_session_item(
+        self,
+        row: ChatSession,
+        turn: ChatTurn,
+        item: SessionItem,
+    ) -> ChatSessionItem:
+        """Insert or update one domain item for a turn."""
+        payload = item.model_dump(mode="json")
+        existing = self._session.execute(
+            select(ChatSessionItem).where(
+                ChatSessionItem.turn_id == turn.id,
+                ChatSessionItem.public_id == item.id,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.item_type = str(payload["type"])
+            existing.status = str(payload["status"])
+            existing.payload = payload
+            existing.started_at = _item_started_at(item)
+            existing.completed_at = _item_completed_at(item)
+            self._session.flush()
+            return existing
+
+        session_item = ChatSessionItem(
+            session_id=row.id,
+            turn_id=turn.id,
+            public_id=item.id,
+            item_type=str(payload["type"]),
+            status=str(payload["status"]),
+            sequence=self._next_turn_item_sequence(turn.id),
+            payload=payload,
+            started_at=_item_started_at(item),
+            completed_at=_item_completed_at(item),
+        )
+        self._session.add(session_item)
+        self._session.flush()
+        return session_item
+
+    def complete_turn(
+        self,
+        turn: ChatTurn,
+        *,
+        status: TurnStatus,
+        error: TurnError | None,
+        completed_at,
+        duration_ms: int | None,
+    ) -> ChatTurn:
+        """Persist the final state of one turn."""
+        turn.status = _enum_value(status)
+        turn.error = error.model_dump(mode="json") if error is not None else None
+        turn.completed_at = completed_at
+        turn.duration_ms = duration_ms
+        self._session.flush()
+        return turn
 
     def start_tool_call(
         self,
@@ -448,3 +544,28 @@ class SqlAlchemyChatHistoryRepository:
         )
         current = result.scalar_one_or_none()
         return int(current or 0) + 1
+
+    def _next_turn_item_sequence(self, turn_id: int) -> int:
+        """Return the next item sequence number for one turn."""
+        result = self._session.execute(
+            select(func.max(ChatSessionItem.sequence)).where(
+                ChatSessionItem.turn_id == turn_id
+            )
+        )
+        current = result.scalar_one_or_none()
+        return int(current or 0) + 1
+
+
+def _enum_value(value) -> str:
+    """Return a persisted string for enum-like values."""
+    return str(getattr(value, "value", value))
+
+
+def _item_started_at(item):
+    """Return the best started timestamp from an item payload."""
+    return getattr(item, "started_at", None) or getattr(item, "created_at", None)
+
+
+def _item_completed_at(item):
+    """Return the best completed timestamp from an item payload."""
+    return getattr(item, "completed_at", None)

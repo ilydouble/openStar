@@ -14,19 +14,6 @@ class ChatIntent(str, Enum):
     TASK = "task"
 
 
-class AgentHint(str, Enum):
-    """Explicit agent shortcuts accepted from the HTTP API."""
-
-    RESEARCH = "research"
-    CODE = "code"
-    KNOWLEDGE = "knowledge"
-    IMAGE = "image"
-    DATA = "data"
-    CHAT = "chat"
-
-
-VALID_AGENT_HINTS = {hint.value for hint in AgentHint}
-
 _CHAT_PATTERNS = re.compile(
     r"^("
     r"你好|您好|嗨|hi|hello|hey|哈喽"
@@ -72,35 +59,12 @@ class ChatRoutingDecision:
     """Resolved routing decision for one chat turn."""
 
     intent: ChatIntent
-    enable_tools: bool
-    agent_hint: AgentHint | None
 
 
-def resolve_routing(
-    message: str,
-    agent_hint: AgentHint | str | None,
-) -> ChatRoutingDecision:
-    """Apply an explicit agent hint or classify the message heuristically."""
-    hint = (agent_hint or "").strip().lower()
-    if hint in VALID_AGENT_HINTS:
-        resolved_hint = AgentHint(hint)
-        if resolved_hint is AgentHint.CHAT:
-            return ChatRoutingDecision(
-                intent=ChatIntent.CHAT,
-                enable_tools=False,
-                agent_hint=resolved_hint,
-            )
-        return ChatRoutingDecision(
-            intent=ChatIntent.TASK,
-            enable_tools=True,
-            agent_hint=resolved_hint,
-        )
+def resolve_routing(message: str) -> ChatRoutingDecision:
+    """Classify the message for turn metadata without controlling tools."""
     intent = classify_intent(message)
-    return ChatRoutingDecision(
-        intent=intent,
-        enable_tools=intent is ChatIntent.TASK,
-        agent_hint=None,
-    )
+    return ChatRoutingDecision(intent=intent)
 
 
 def classify_intent(message: str) -> ChatIntent:

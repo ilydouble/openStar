@@ -6,8 +6,6 @@ from dataclasses import dataclass
 
 from icore_agent.domain.user import AuthenticatedUser
 
-from .routing import AgentHint
-
 
 @dataclass(frozen=True, slots=True)
 class ChatTurnCommand:
@@ -17,7 +15,6 @@ class ChatTurnCommand:
     session_id: str
     stream: bool
     tenant_code: str
-    agent_hint: AgentHint | None
     file_uuids: tuple[str, ...]
     display_caption: str | None
     agent_message: str | None

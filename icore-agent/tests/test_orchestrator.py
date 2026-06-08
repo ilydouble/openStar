@@ -9,9 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from icore_agent.application.agent.sys_prompt import (
+    BuildSystemPromptOptions,
+    build_system_prompt,
+)
+from icore_agent.application.agent.tool import AgentTool, ToolDefinition
+from icore_agent.application.agent.tool.catalog import (
+    build_orchestrator_tool_definitions,
+)
 from icore_agent.application.chat.orchestrator import create_orchestrator
-from icore_agent.application.chat.prompts import build_orchestrator_system_prompt
-from icore_agent.application.chat.routing import AgentHint
 from icore_agent.main import app
 from .test_account_flow import ASGISyncTestClient
 
@@ -158,34 +164,60 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     assert model_kwargs["params"]["temperature"] == settings.agent_temperature
     assert "api_key" not in model_kwargs["params"]
     mock_agent_cls.assert_called_once()
-    # Verify all built-in chat tools are registered.
+    # Verify direct main-agent tools are registered.
     _, kwargs = mock_agent_cls.call_args
-    assert len(kwargs.get("tools", [])) == 6
+    tools = kwargs.get("tools", [])
+    assert len(tools) == 11
+    assert all(isinstance(tool, AgentTool) for tool in tools)
+    assert "web_search" in kwargs["system_prompt"]
 
 
-def test_orchestrator_prompt_builder_includes_chat_context():
-    """Application prompt policy should assemble all prepared chat context."""
-    prompt = build_orchestrator_system_prompt(
+def test_orchestrator_prompt_builder_uses_only_base_and_tools():
+    """System prompt should include only base policy and direct tool info."""
+    prompt = str(build_system_prompt(BuildSystemPromptOptions(
+        tools=build_orchestrator_tool_definitions(session_id="session-1"),
         summary="Earlier summary",
         attachments_text="Inline doc text",
-        image_attachments=[{"filename": "photo.png", "ref": "file-ref"}],
-        data_attachments=[
-            {
-                "filename": "data.csv",
-                "abs_path": "/tmp/data.csv",
-                "columns": [{"name": "amount", "dtype": "int64"}],
-                "row_count": 2,
-                "preview_md": "| amount |\n| --- |\n| 10 |",
-            }
-        ],
-        agent_hint=AgentHint.DATA,
-    )
+        user_memory_prompt="## About this user\n- tone: concise",
+    )))
 
-    assert "data_agent_tool" in prompt
-    assert "The user clicked the Data shortcut" in prompt
-    assert "Inline doc text" in prompt
-    assert "photo.png" in prompt
-    assert "file-ref" in prompt
-    assert "data.csv" in prompt
-    assert "amount(int64)" in prompt
-    assert "Earlier summary" in prompt
+    assert "You are iCore Agent" in prompt
+    assert "web_search" in prompt
+    assert "run_python_snippet" in prompt
+    assert "chroma_search" in prompt
+    assert "generate_image" in prompt
+    assert "data_agent_tool" not in prompt
+    assert "sub-agent" not in prompt
+    assert "The user clicked the Data shortcut" not in prompt
+    assert "Inline doc text" not in prompt
+    assert "Earlier summary" not in prompt
+    assert "## About this user" not in prompt
+
+
+def test_system_prompt_includes_only_tool_prompt_snippets():
+    """Only tools with prompt snippets should appear in the prompt tool list."""
+
+    def _execute(*_: object) -> str:
+        """Return a stable test result."""
+        return "ok"
+
+    prompt = str(build_system_prompt(BuildSystemPromptOptions(tools=[
+        ToolDefinition(
+            name="visible_tool",
+            label="Visible tool",
+            description="Visible test tool.",
+            parameters={"type": "object"},
+            execute=_execute,
+            prompt_snippet="Use visible tool when needed.",
+        ),
+        ToolDefinition(
+            name="hidden_tool",
+            label="Hidden tool",
+            description="Hidden test tool.",
+            parameters={"type": "object"},
+            execute=_execute,
+        ),
+    ])))
+
+    assert "visible_tool: Use visible tool when needed." in prompt
+    assert "hidden_tool" not in prompt

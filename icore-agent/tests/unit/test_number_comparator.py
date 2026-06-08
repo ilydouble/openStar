@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from icore_agent.application.chat.tools.number_comparator import number_comparator
+from icore_agent.application.agent.tool.catalog import number_comparator
 
 
 def test_number_comparator_reports_less_than() -> None:

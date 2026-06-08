@@ -55,15 +55,6 @@ _CATEGORY_DECAY_LAMBDA = {
     "personal": 0.023,
 }
 
-_HINT_CATEGORY_BOOST = {
-    "research": {"work_context", "goal"},
-    "data": {"constraint", "work_context"},
-    "knowledge": {"work_context", "constraint"},
-    "code": {"work_context", "preference"},
-    "image": {"personal", "work_context"},
-    "chat": {"preference", "personal"},
-}
-
 # Canonical keys for category="personal" facts.
 _PERSONAL_FACT_KEYS = frozenset({
     "name",
@@ -226,12 +217,11 @@ def turn_relevance_score(
     fact: UserMemoryFact,
     turn: TurnMemoryContext,
 ) -> float:
-    """Estimate turn relevance using token overlap and hint category boosts."""
+    """Estimate turn relevance using token overlap with turn context."""
     haystack = " ".join(
         part for part in (
             turn.message,
             turn.session_summary or "",
-            turn.agent_hint or "",
         )
         if part
     ).lower()
@@ -245,10 +235,7 @@ def turn_relevance_score(
     overlap = 0.0
     if tokens and fact_tokens:
         overlap = len(tokens & fact_tokens) / max(len(fact_tokens), 1)
-    hint = str(turn.agent_hint or "").strip().lower()
-    boost = 0.15 if hint and fact.category in _HINT_CATEGORY_BOOST.get(
-        hint, set()) else 0.0
-    return min(1.0, overlap + boost)
+    return min(1.0, overlap)
 
 
 def score_fact(

@@ -6,8 +6,6 @@ from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from icore_agent.application.chat import ChatTurnCommand, ChatTurnService
-from icore_agent.application.chat.routing import AgentHint
-from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_chat_turn_service, get_current_user
@@ -63,7 +61,6 @@ def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> ChatTurn
         session_id=req.session_id,
         stream=req.stream,
         tenant_code=req.tenant_code,
-        agent_hint=_parse_agent_hint(req.agent_hint),
         file_uuids=tuple(req.file_uuids),
         display_caption=(req.display_caption or "").strip() or None,
         agent_message=(req.agent_message or "").strip() or None,
@@ -71,14 +68,3 @@ def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> ChatTurn
         incognito=req.incognito,
         user=user,
     )
-
-
-def _parse_agent_hint(value: str) -> AgentHint | None:
-    """Convert an optional HTTP agent hint string into a typed enum."""
-    hint = (value or "").strip().lower()
-    if not hint:
-        return None
-    try:
-        return AgentHint(hint)
-    except ValueError:
-        return None

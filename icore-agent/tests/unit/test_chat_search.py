@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -13,9 +14,9 @@ from icore_agent.application.chat.services.history_service import ChatHistorySer
 from icore_agent.domain.files import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.persistence.sessions import repository as search_repo
+from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
 from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
 from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
-from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
 from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
 
 
@@ -233,11 +234,19 @@ class FakeChatTurnService:
     async def run(self, command):
         """Record one non-stream command and return a deterministic result."""
         self.commands.append(command)
-        return ChatTurnResult(session_id=command.session_id, reply=self.reply)
+        return ChatTurnResult(
+            session_id=command.session_id,
+            reply=self.reply,
+            turn_id="turn-1",
+        )
 
     async def _events(self):
         """Yield a minimal terminal stream."""
-        yield ChatStreamEvent.done()
+        yield ChatStreamEvent.turn_completed(
+            session_id="session-1",
+            turn_id="turn-1",
+            reply=self.reply,
+        )
 
 
 class FakeMemory:

@@ -64,7 +64,10 @@ class SequentialAgent:
     def run(self, task: str) -> SequentialResult:
         """Execute a task sequentially. Returns when done, failed, or max_steps reached."""
         messages: list[dict[str, Any]] = [
-            {"role": ChatCompletionRole.SYSTEM.value, "content": _SYSTEM_PROMPT},
+            {
+                "role": ChatCompletionRole.SYSTEM.value,
+                "content": _SYSTEM_PROMPT,
+            },
             {"role": ChatCompletionRole.USER.value, "content": f"Task: {task}"},
         ]
 

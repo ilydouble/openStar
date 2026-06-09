@@ -9,7 +9,8 @@ from icore_agent.application.agent.context import (
     dedupe_file_uuids,
     load_agent_context,
 )
-from icore_agent.application.agent.loop.agent_loop import AgentLoop, AgentRunner
+from icore_agent.application.agent.loop.agent_loop import AgentLoop
+from icore_agent.application.agent.loop.types import PreparedAgentRunner
 from icore_agent.application.agent.turn import (
     AgentTurnExecutor,
     AgentTurnRunnerFactory,
@@ -32,7 +33,7 @@ log = get_logger(__name__)
 
 CHAT_STREAM_WALL_BUDGET_SEC = 600
 
-OrchestratorFactory = Callable[..., AgentRunner]
+OrchestratorFactory = Callable[..., PreparedAgentRunner]
 
 
 class AgentTurnService:

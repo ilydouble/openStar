@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.application.agent.loop.agent_loop import AgentRunner
+from icore_agent.application.agent.loop.types import PreparedAgentRunner
 from icore_agent.application.usage.recording import (
     begin_turn_usage_capture,
     end_turn_usage_capture,
@@ -70,7 +70,7 @@ class TurnUsageRecorder:
 
     def invoke_with_usage(self, command: Any):
         """Return a runner invoker that records actual or estimated LLM usage."""
-        def _invoke(runner: AgentRunner, message: str) -> Any:
+        def _invoke(runner: PreparedAgentRunner, message: str) -> Any:
             capture_token = begin_turn_usage_capture()
             runtime_token = set_runtime_user(command.user)
             result = None

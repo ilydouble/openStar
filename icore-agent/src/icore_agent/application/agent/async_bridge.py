@@ -6,10 +6,11 @@ import asyncio
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from icore_agent.domain.agent.turn import TurnEvent
 
+from .loop.types import PreparedAgentRunner
 from .tool import (
     StrandsToolEventBridge,
     reset_parent_callback,
@@ -17,16 +18,8 @@ from .tool import (
 )
 
 
-class AgentRunnerLike(Protocol):
-    """Prepared Strands runner shape needed by the async bridge."""
-
-    def __call__(self, message: str) -> Any:
-        """Run one user message through the prepared agent."""
-        ...
-
-
 QueueItem = tuple[str, Any]
-AgentInvoker = Callable[[AgentRunnerLike, str], Any]
+AgentInvoker = Callable[[PreparedAgentRunner, str], Any]
 
 
 def put_threadsafe(
@@ -44,7 +37,7 @@ def start_agent_worker(
     *,
     loop: asyncio.AbstractEventLoop,
     queue: asyncio.Queue[QueueItem],
-    runner: AgentRunnerLike,
+    runner: PreparedAgentRunner,
     message: str,
     tool_bridge: StrandsToolEventBridge,
     emit_assistant_delta: Callable[[str], None],
@@ -81,7 +74,7 @@ def start_agent_worker(
 
 
 def patch_runner_callback(
-    runner: AgentRunnerLike,
+    runner: PreparedAgentRunner,
     callback_handler: Callable[..., None],
 ) -> AbstractContextManager[None]:
     """Patch test fakes that expose callback_handler after construction."""

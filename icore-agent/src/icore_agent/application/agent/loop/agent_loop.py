@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
 from icore_agent.domain.agent.session import AgentMessageItem, SessionItemStatus
 from icore_agent.domain.agent.turn import TurnEvent
@@ -20,18 +20,9 @@ from icore_agent.application.agent.async_bridge import (
     start_agent_worker,
 )
 from icore_agent.application.agent.tool import StrandsToolEventBridge
+from .types import PreparedAgentRunner
 
 log = get_logger(__name__)
-
-
-class AgentRunner(Protocol):
-    """Minimal prepared-agent surface used by the loop."""
-
-    messages: list[dict[str, Any]]
-
-    def __call__(self, message: str) -> Any:
-        """Run one user message through the prepared agent."""
-        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +32,7 @@ class AgentLoopRequest:
     session_id: str
     turn_id: str
     message: str
-    runner: AgentRunner
+    runner: PreparedAgentRunner
     history_messages: list[dict[str, Any]]
     tool_bridge: StrandsToolEventBridge
     invoke: AgentInvoker | None = None

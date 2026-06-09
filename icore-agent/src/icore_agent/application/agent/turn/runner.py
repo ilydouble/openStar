@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-from icore_agent.application.agent.loop.agent_loop import AgentLoopRequest, AgentRunner
+from icore_agent.application.agent.loop.agent_loop import AgentLoopRequest
+from icore_agent.application.agent.loop.types import PreparedAgentRunner
 from icore_agent.application.agent.tool import StrandsToolEventBridge
 
-OrchestratorFactory = Callable[..., AgentRunner]
+OrchestratorFactory = Callable[..., PreparedAgentRunner]
 
 
 class AgentTurnRunnerFactory:
@@ -24,7 +25,7 @@ class AgentTurnRunnerFactory:
         command: Any,
         context: Any,
         turn_id: str,
-        invoke: Callable[[AgentRunner, str], Any] | None,
+        invoke: Callable[[PreparedAgentRunner, str], Any] | None,
     ) -> AgentLoopRequest:
         """Build an AgentLoopRequest for one turn."""
         tool_bridge = StrandsToolEventBridge(
@@ -52,7 +53,7 @@ class AgentTurnRunnerFactory:
         command: Any,
         context: Any,
         tool_bridge: StrandsToolEventBridge,
-    ) -> AgentRunner:
+    ) -> PreparedAgentRunner:
         """Create one prepared Strands runner for AgentLoop."""
         orchestrator = self._orchestrator_factory(
             callback_handler=tool_bridge.on_callback,
@@ -65,4 +66,4 @@ class AgentTurnRunnerFactory:
             user_id=command.user_id,
             user_memory_prompt=context.user_memory_prompt,
         )
-        return cast(AgentRunner, orchestrator)
+        return cast(PreparedAgentRunner, orchestrator)

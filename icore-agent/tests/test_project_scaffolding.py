@@ -542,6 +542,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_context_dir / "attachments.py").is_file()
     assert (agent_context_dir / "history.py").is_file()
     assert (agent_context_dir / "memory.py").is_file()
+    assert (agent_dir / "loop" / "types.py").is_file()
     assert (agent_turn_dir / "__init__.py").is_file()
     assert (agent_turn_dir / "executor.py").is_file()
     assert (agent_turn_dir / "lifecycle.py").is_file()
@@ -584,6 +585,10 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "enable_tools" not in routing
     assert "class AgentSessionService" in session_service
     assert "AgentTurnExecutor" in turn_service
+    assert "PreparedAgentRunner" in agent_init
+    assert "AgentRunnerLike" not in (
+        agent_dir / "async_bridge.py"
+    ).read_text(encoding="utf-8")
     assert "AgentLoopRequest" not in turn_service
     assert "StrandsToolEventBridge" not in turn_service
     assert "begin_turn_usage_capture" not in turn_service

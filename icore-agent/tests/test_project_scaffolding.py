@@ -639,6 +639,8 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
     assert "orchestrator_tool_names" not in catalog_init
     assert "class ToolDefinition" in tool_definition
     assert "class AgentTool" in tool_definition
+    assert "strands.types._events" not in tool_definition
+    assert "ToolResultEvent" not in tool_definition
     assert "prompt_snippet" in catalog_init
     assert "research_agent_tool" not in catalog_init
     assert "data_agent_tool" not in catalog_init

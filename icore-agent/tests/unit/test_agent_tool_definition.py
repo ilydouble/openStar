@@ -54,9 +54,11 @@ async def test_agent_tool_exposes_spec_and_streams_success() -> None:
     assert calls[0][0] == "call-1"
     assert calls[0][1] == {"value": "ok"}
     assert calls[0][2].invocation_state["session_id"] == "session-1"
-    assert events[0]["type"] == "tool_result"
-    assert events[0]["tool_result"]["status"] == "success"
-    assert events[0]["tool_result"]["content"][0]["text"] == '{"echo": "ok"}'
+    assert events == [{
+        "toolUseId": "call-1",
+        "status": "success",
+        "content": [{"text": '{"echo": "ok"}'}],
+    }]
 
 
 @pytest.mark.asyncio
@@ -86,7 +88,8 @@ async def test_agent_tool_streams_error_result_on_exception() -> None:
     ):
         events.append(event)
 
-    assert events[0]["tool_result"]["toolUseId"] == "call-2"
-    assert events[0]["tool_result"]["status"] == "error"
-    assert events[0]["tool_result"]["content"][0]["text"] == "boom"
-    assert isinstance(events[0].exception, RuntimeError)
+    assert events == [{
+        "toolUseId": "call-2",
+        "status": "error",
+        "content": [{"text": "boom"}],
+    }]

@@ -8,7 +8,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from strands.types._events import ToolResultEvent
 from strands.types.tools import (
     AgentTool as StrandsAgentTool,
     ToolGenerator,
@@ -90,7 +89,7 @@ class AgentTool(StrandsAgentTool):
         invocation_state: dict[str, Any],
         **_: Any,
     ) -> ToolGenerator:
-        """Execute the tool once and yield a final Strands ToolResultEvent."""
+        """Execute the tool once and yield a final public Strands ToolResult."""
         tool_call_id = str(tool_use.get("toolUseId") or "")
         try:
             arguments = self._prepare_arguments(tool_use.get("input"))
@@ -101,9 +100,9 @@ class AgentTool(StrandsAgentTool):
             result = self.definition.execute(tool_call_id, arguments, context)
             if inspect.isawaitable(result):
                 result = await result
-            yield ToolResultEvent(_success_result(tool_call_id, result))
+            yield _success_result(tool_call_id, result)
         except Exception as exc:
-            yield ToolResultEvent(_error_result(tool_call_id, exc), exception=exc)
+            yield _error_result(tool_call_id, exc)
 
     def _prepare_arguments(self, raw_input: Any) -> PreparedArguments:
         """Normalize and optionally validate raw model-supplied arguments."""
@@ -139,7 +138,7 @@ def _success_result(tool_call_id: str, value: Any) -> ToolResult:
 
 
 def _error_result(tool_call_id: str, exc: Exception) -> ToolResult:
-    """Build an error ToolResult while preserving the original exception."""
+    """Build a public error ToolResult from an executor exception."""
     return {
         "toolUseId": tool_call_id,
         "status": "error",

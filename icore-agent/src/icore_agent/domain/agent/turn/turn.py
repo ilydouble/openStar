@@ -7,7 +7,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from icore_agent.domain.chat.session.session_item import SessionItem
+from icore_agent.domain.agent.session.session_item import (
+    AgentMessageItem,
+    SessionItem,
+)
 from icore_agent.domain.identifiers import uuid7
 
 from .turn_error import TurnError
@@ -19,7 +22,7 @@ def _new_id() -> str:
 
 
 class TurnStatus(StrEnum):
-    """Lifecycle status for one chat turn."""
+    """Lifecycle status for one agent turn."""
 
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -48,3 +51,10 @@ class Turn(BaseModel):
                 self.items[index] = session_item
                 return
         self.items.append(session_item)
+
+    def reply_text(self) -> str:
+        """Return the last assistant message text produced in this turn."""
+        for item in reversed(self.items):
+            if isinstance(item, AgentMessageItem):
+                return item.text
+        return ""

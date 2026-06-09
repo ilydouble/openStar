@@ -346,9 +346,9 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
 def test_can_fetch_session_state(mock_memory, client: TestClient):
     user_payload = _register_trial_direct(client)
     headers = {"Authorization": f"Bearer {user_payload['access_token']}"}
-    from icore_agent.application.chat import ChatHistoryService
+    from icore_agent.application.agent import AgentSessionService
 
-    ChatHistoryService().ensure_owned_session(
+    AgentSessionService().ensure_owned_session(
         "demo-session",
         user_payload["user"]["id"],
         title="Demo session",

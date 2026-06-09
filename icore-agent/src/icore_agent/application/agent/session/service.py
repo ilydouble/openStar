@@ -1,20 +1,20 @@
-"""Application service for durable chat session history."""
+"""Application service for durable agent session history."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.domain.chat import ChatCompletionRole
-from icore_agent.domain.chat.session import SessionItem
-from icore_agent.domain.chat.turn import Turn, TurnError, TurnStatus
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.session import SessionItem
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
 from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import sync_session_scope
 
 
-class ChatHistoryService:
-    """Coordinate PostgreSQL chat persistence and ownership checks."""
+class AgentSessionService:
+    """Coordinate PostgreSQL-backed agent session persistence and ownership."""
 
     def ensure_owned_session(
         self,

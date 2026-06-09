@@ -9,8 +9,12 @@ from uuid import uuid4
 import pytest
 from fastapi.responses import StreamingResponse
 
-from icore_agent.application.chat import ChatStreamEvent, ChatTurnResult
-from icore_agent.application.chat.services.history_service import ChatHistoryService
+from icore_agent.application.agent.session import AgentSessionService
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    SessionItemStatus,
+)
+from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnStatus
 from icore_agent.domain.files import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.persistence.sessions import repository as search_repo
@@ -22,7 +26,7 @@ from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatR
 
 def test_search_user_sessions_empty_query_returns_no_results() -> None:
     """Blank search text should short-circuit without hitting the database."""
-    service = ChatHistoryService()
+    service = AgentSessionService()
     payload = service.search_user_sessions("user-1", query="   ")
     assert payload == {
         "query": "",
@@ -35,7 +39,7 @@ def test_search_user_sessions_empty_query_returns_no_results() -> None:
 
 def test_search_user_sessions_clamps_pagination() -> None:
     """Search pagination bounds should mirror the list endpoint."""
-    service = ChatHistoryService()
+    service = AgentSessionService()
     payload = service.search_user_sessions(
         "missing-user",
         query="hello",
@@ -51,7 +55,7 @@ def test_search_user_sessions_clamps_pagination() -> None:
 
 def test_search_user_sessions_accepts_single_character_query() -> None:
     """Single-character queries should reach the repository without a minimum limit."""
-    service = ChatHistoryService()
+    service = AgentSessionService()
     payload = service.search_user_sessions("missing-user", query="a")
     assert payload["query"] == "a"
     assert payload["sessions"] == []
@@ -70,7 +74,7 @@ def test_session_search_sql_uses_english_fts_and_trigram_ranking() -> None:
 
 def test_chat_history_preserves_user_message_file_uuid_metadata() -> None:
     """File UUID references should persist with the user message metadata."""
-    service = ChatHistoryService()
+    service = AgentSessionService()
     session_id = f"session-{uuid4()}"
     user_id = f"user-{uuid4()}"
     file_uuid = str(uuid4())
@@ -142,7 +146,7 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
 @pytest.mark.asyncio
 async def test_chat_stream_starts_without_message_quota_service() -> None:
     """Chat streaming should not depend on message quota checks."""
-    service = FakeChatTurnService()
+    service = FakeAgentTurnService()
     request = ChatRequest(
         message="Hello",
         session_id="session-1",
@@ -153,7 +157,7 @@ async def test_chat_stream_starts_without_message_quota_service() -> None:
     response = await chat(
         request,
         user=_auth_user(),
-        chat_turn_service=service,
+        agent_turn_service=service,
     )
 
     assert isinstance(response, StreamingResponse)
@@ -170,7 +174,7 @@ async def test_chat_stream_starts_without_message_quota_service() -> None:
 @pytest.mark.asyncio
 async def test_chat_non_streaming_returns_service_result() -> None:
     """Non-streaming chat should translate the application result to HTTP schema."""
-    service = FakeChatTurnService(reply="plain reply")
+    service = FakeAgentTurnService(reply="plain reply")
     request = ChatRequest(
         message="Hello",
         session_id="session-2",
@@ -180,7 +184,7 @@ async def test_chat_non_streaming_returns_service_result() -> None:
     response = await chat(
         request,
         user=_auth_user(),
-        chat_turn_service=service,
+        agent_turn_service=service,
     )
 
     assert response == ChatResponse(
@@ -196,7 +200,7 @@ async def test_session_state_includes_tool_call_summaries_without_results(monkey
     response = await session_handlers.get_session_state(
         "session-3",
         user=_auth_user(),
-        chat_history=chat_history,
+        agent_session=chat_history,
         file_service=FakeFileService({}),
     )
 
@@ -218,7 +222,7 @@ async def test_session_state_includes_tool_call_summaries_without_results(monkey
     assert "result" not in type(assistant.tool_calls[0]).model_fields
 
 
-class FakeChatTurnService:
+class FakeAgentTurnService:
     """Application service fake for chat handler tests."""
 
     def __init__(self, reply: str = "ok") -> None:
@@ -234,15 +238,21 @@ class FakeChatTurnService:
     async def run(self, command):
         """Record one non-stream command and return a deterministic result."""
         self.commands.append(command)
-        return ChatTurnResult(
+        return Turn(
             session_id=command.session_id,
-            reply=self.reply,
-            turn_id="turn-1",
+            id="turn-1",
+            status=TurnStatus.COMPLETED,
+            items=[
+                AgentMessageItem(
+                    status=SessionItemStatus.COMPLETED,
+                    text=self.reply,
+                ),
+            ],
         )
 
     async def _events(self):
         """Yield a minimal terminal stream."""
-        yield ChatStreamEvent.turn_completed(
+        yield TurnEvent.turn_completed(
             session_id="session-1",
             turn_id="turn-1",
             reply=self.reply,

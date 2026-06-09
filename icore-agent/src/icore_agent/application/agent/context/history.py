@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.domain.chat import ChatCompletionRole
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
-from .ports import AgentHistoryMessage, ChatHistoryReader, ConversationMemory
+from .ports import AgentHistoryMessage, AgentSessionReader, ConversationMemory
 
 log = get_logger(__name__)
 
@@ -18,13 +18,13 @@ async def load_history_context(
     user_id: str,
     incognito: bool,
     conversation_memory: ConversationMemory,
-    chat_history: ChatHistoryReader,
+    agent_session: AgentSessionReader,
 ) -> tuple[str | None, list[AgentHistoryMessage]]:
     """Load cached history with a durable-history fallback when allowed."""
     summary, history = await conversation_memory.get_context(session_id)
     if not history and not incognito:
         try:
-            history = chat_history.load_messages(session_id, user_id)
+            history = agent_session.load_messages(session_id, user_id)
         except (PermissionError, LookupError):
             history = []
     return summary or None, history

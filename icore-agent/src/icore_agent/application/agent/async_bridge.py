@@ -8,7 +8,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Protocol, cast
 
-from icore_agent.domain.chat.turn import TurnEvent
+from icore_agent.domain.agent.turn import TurnEvent
 
 from .tool import (
     StrandsToolEventBridge,

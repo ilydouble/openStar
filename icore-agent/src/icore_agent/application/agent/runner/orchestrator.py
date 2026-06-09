@@ -1,4 +1,4 @@
-"""Strands Agent assembly for chat turns."""
+"""Strands Agent assembly for agent turns."""
 
 from typing import Any
 

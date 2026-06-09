@@ -28,7 +28,7 @@ async def test_load_agent_context_prefers_cached_history() -> None:
         user_message="Hello",
         incognito=False,
         file_service=FakeFileService({}),
-        chat_history=FakeHistory([
+        agent_session=FakeHistory([
             {"role": "user", "content": "Persisted question"},
         ]),
         conversation_memory=FakeMemory(
@@ -59,7 +59,7 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
         user_message="Hello",
         incognito=False,
         file_service=FakeFileService({}),
-        chat_history=history,
+        agent_session=history,
         conversation_memory=FakeMemory(summary=None, messages=[]),
         user_memory_service=None,
     )
@@ -86,7 +86,7 @@ async def test_load_agent_context_skips_history_fallback_and_memory_prompt_in_in
         user_message="Hello",
         incognito=True,
         file_service=FakeFileService({}),
-        chat_history=history,
+        agent_session=history,
         conversation_memory=FakeMemory(summary=None, messages=[]),
         user_memory_service=memory_service,
     )
@@ -119,7 +119,7 @@ async def test_load_agent_context_buckets_text_image_and_data_attachments(tmp_pa
         user_message="Use these files",
         incognito=False,
         file_service=file_service,
-        chat_history=FakeHistory([]),
+        agent_session=FakeHistory([]),
         conversation_memory=FakeMemory(summary=None, messages=[]),
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )
@@ -153,7 +153,7 @@ async def test_load_agent_context_returns_empty_context_when_cache_load_fails() 
         file_service=FakeFileService({
             "txt-1": _asset("txt-1", "notes.txt", "text/plain"),
         }),
-        chat_history=FakeHistory([{"role": "user", "content": "Persisted"}]),
+        agent_session=FakeHistory([{"role": "user", "content": "Persisted"}]),
         conversation_memory=FakeMemory(raise_on_get=True),
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )

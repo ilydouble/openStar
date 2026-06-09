@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
-from icore_agent.application.chat import ChatHistoryService
+from icore_agent.application.agent import AgentSessionService
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.memory.session_context import resolve_session_extract_context
@@ -15,7 +15,7 @@ from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import (
-    get_chat_history_service,
+    get_agent_session_service,
     get_current_user,
     get_file_asset_service,
     get_user_memory_service,
@@ -52,12 +52,12 @@ def _history_http_error(exc: Exception) -> HTTPException:
 
 async def list_sessions(
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> SessionListResponse:
     """List chat sessions owned by the current user from PostgreSQL."""
-    payload = chat_history.list_user_sessions(
+    payload = agent_session.list_user_sessions(
         user.public_id,
         limit=limit,
         offset=offset,
@@ -67,13 +67,13 @@ async def list_sessions(
 
 async def search_sessions(
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     q: str = Query(default="", max_length=500),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> SessionSearchResponse:
     """Search owned chat sessions by title and message content."""
-    payload = chat_history.search_user_sessions(
+    payload = agent_session.search_user_sessions(
         user.public_id,
         query=q,
         limit=limit,
@@ -86,12 +86,12 @@ async def clear_session(
     session_id: str,
     background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     user_memory_service: UserMemoryService = Depends(get_user_memory_service),
 ) -> dict:
     """Soft-delete a session immediately and extract memory from a saved snapshot."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
+        agent_session.assert_owned_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
@@ -99,11 +99,11 @@ async def clear_session(
         session_id,
         user_id=user.public_id,
         conversation_memory=memory,
-        chat_history=chat_history,
+        agent_session=agent_session,
     )
 
     try:
-        chat_history.soft_delete_session(session_id, user.public_id)
+        agent_session.soft_delete_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
     await memory.clear(session_id)
@@ -130,12 +130,12 @@ async def finalize_session(
     session_id: str,
     background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     user_memory_service: UserMemoryService = Depends(get_user_memory_service),
 ) -> dict:
     """Schedule durable user-memory extraction and return immediately."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
+        agent_session.assert_owned_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
@@ -143,7 +143,7 @@ async def finalize_session(
         _run_finalize_session_extract,
         user_id=user.public_id,
         session_id=session_id,
-        chat_history=chat_history,
+        agent_session=agent_session,
         user_memory_service=user_memory_service,
     )
     log.info(
@@ -158,7 +158,7 @@ async def _run_finalize_session_extract(
     *,
     user_id: str,
     session_id: str,
-    chat_history: ChatHistoryService,
+    agent_session: AgentSessionService,
     user_memory_service: UserMemoryService,
 ) -> None:
     """Resolve session context and extract durable memory after finalize returns."""
@@ -167,7 +167,7 @@ async def _run_finalize_session_extract(
             session_id,
             user_id=user_id,
             conversation_memory=memory,
-            chat_history=chat_history,
+            agent_session=agent_session,
         )
         await _run_session_end_extract_from_context(
             user_id=user_id,
@@ -230,13 +230,13 @@ async def _run_session_end_extract_from_context(
 async def get_session_state(
     session_id: str,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     file_service: FileAssetService = Depends(get_file_asset_service),
 ) -> SessionStateResponse:
     """Read recent messages and file UUID attachments for an owned session."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
-        persisted_messages = chat_history.load_messages(
+        agent_session.assert_owned_session(session_id, user.public_id)
+        persisted_messages = agent_session.load_messages(
             session_id,
             user.public_id,
             include_tool_calls=True,

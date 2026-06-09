@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from icore_agent.shared.time.utils import start_to_completed_duration_ms
 
-from icore_agent.domain.chat.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     UserInput,
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.chat.turn import (
+from icore_agent.domain.agent.turn import (
     Turn,
     TurnError,
     TurnEvent,
@@ -99,7 +99,8 @@ class TurnLifecycle:
     ) -> TurnCompletion:
         """Mark the turn completed and return final lifecycle metadata."""
         completed = completed_at or datetime.now(UTC)
-        duration_ms = start_to_completed_duration_ms(self.started_at, completed)
+        duration_ms = start_to_completed_duration_ms(
+            self.started_at, completed)
         self.turn.status = TurnStatus.COMPLETED
         self.turn.error = None
         self.turn.completed_at = completed
@@ -109,6 +110,7 @@ class TurnLifecycle:
                 session_id=self.turn.session_id,
                 turn_id=self.turn.id,
                 reply=self.reply,
+                turn=self.turn,
             ),
             status=TurnStatus.COMPLETED,
             error=None,
@@ -124,7 +126,8 @@ class TurnLifecycle:
     ) -> TurnCompletion:
         """Mark the turn failed and return final lifecycle metadata."""
         completed = completed_at or datetime.now(UTC)
-        duration_ms = start_to_completed_duration_ms(self.started_at, completed)
+        duration_ms = start_to_completed_duration_ms(
+            self.started_at, completed)
         self.turn.status = TurnStatus.FAILED
         self.turn.error = error
         self.turn.completed_at = completed
@@ -135,6 +138,7 @@ class TurnLifecycle:
                 turn_id=self.turn.id,
                 error=error,
                 reply=self.reply,
+                turn=self.turn,
             ),
             status=TurnStatus.FAILED,
             error=error,

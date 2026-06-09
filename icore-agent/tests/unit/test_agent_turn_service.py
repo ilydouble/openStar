@@ -1,4 +1,4 @@
-"""Tests for chat turn application services."""
+"""Tests for agent turn application services."""
 
 from __future__ import annotations
 
@@ -7,22 +7,23 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent.tool import StrandsToolEventBridge
-from icore_agent.application.chat import (
-    ChatStreamEventKind,
-    ChatTurnCommand,
-    ChatTurnService,
+from icore_agent.application.agent import (
+    AgentTurnCommand,
+    AgentTurnService,
+    AgentIntent,
+    classify_turn_intent,
 )
 from icore_agent.application.agent.context import dedupe_file_uuids
-from icore_agent.application.chat.routing import ChatIntent, resolve_routing
+from icore_agent.application.agent.tool import StrandsToolEventBridge
+from icore_agent.domain.agent.turn import Turn, TurnEventKind, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
-def test_resolve_routing_classifies_task_keywords() -> None:
-    """Routing should classify task-like messages for turn metadata."""
-    decision = resolve_routing("帮我搜索今天的 AI 新闻")
+def test_classify_turn_intent_classifies_task_keywords() -> None:
+    """Intent classification should tag task-like messages for turn metadata."""
+    intent = classify_turn_intent("帮我搜索今天的 AI 新闻")
 
-    assert decision.intent is ChatIntent.TASK
+    assert intent is AgentIntent.TASK
 
 
 def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
@@ -31,23 +32,26 @@ def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> None:
-    """Non-streaming chat turns should persist both sides and call the agent."""
+async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> None:
+    """Non-streaming agent turns should persist both sides and call the agent."""
     history = FakeHistory()
     memory = FakeMemory()
     factory = FakeOrchestratorFactory(reply="assistant reply")
     usage = FakeUsageService()
-    service = ChatTurnService(
-        chat_history=history,
+    service = AgentTurnService(
+        agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
         usage_service=usage,
     )
 
-    result = await service.run(_command(stream=False, file_uuids=("f1", "f1")))
+    turn = await service.run(_command(stream=False, file_uuids=("f1", "f1")))
 
-    assert result.reply == "assistant reply"
+    assert isinstance(turn, Turn)
+    assert turn.session_id == "session-1"
+    assert turn.status is TurnStatus.COMPLETED
+    assert turn.reply_text() == "assistant reply"
     assert history.calls == [
         ("ensure", "session-1", "user-1", "Hello"),
         ("user", "session-1", "user-1", "Hello", {"file_uuids": ["f1"]}),
@@ -70,11 +74,11 @@ async def test_chat_turn_run_persists_messages_and_invokes_orchestrator() -> Non
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
-    """Completed chat turns should attach observed tool calls to the assistant row."""
+async def test_agent_turn_run_links_recorded_tool_calls_to_assistant() -> None:
+    """Completed agent turns should attach observed tool calls to the assistant row."""
     history = FakeHistory()
-    service = ChatTurnService(
-        chat_history=history,
+    service = AgentTurnService(
+        agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=FakeOrchestratorFactory(
@@ -84,9 +88,9 @@ async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
         usage_service=FakeUsageService(),
     )
 
-    result = await service.run(_command(stream=False))
+    turn = await service.run(_command(stream=False))
 
-    assert result.reply == "assistant reply"
+    assert turn.reply_text() == "assistant reply"
     assert (
         "tool-link",
         "session-1",
@@ -96,11 +100,11 @@ async def test_chat_turn_run_links_recorded_tool_calls_to_assistant() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_skips_user_memory_without_compression() -> None:
+async def test_agent_turn_run_skips_user_memory_without_compression() -> None:
     """Normal turns should not trigger durable memory extraction."""
     memory_service = TrackingUserMemoryService()
-    service = ChatTurnService(
-        chat_history=FakeHistory(),
+    service = AgentTurnService(
+        agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
@@ -115,12 +119,12 @@ async def test_chat_turn_run_skips_user_memory_without_compression() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_schedules_user_memory_extract_on_compression() -> None:
+async def test_agent_turn_run_schedules_user_memory_extract_on_compression() -> None:
     """Redis compression during a turn should trigger durable memory extraction."""
     memory_service = TrackingUserMemoryService()
     conversation_memory = FakeMemory(compress_on_append=True)
-    service = ChatTurnService(
-        chat_history=FakeHistory(),
+    service = AgentTurnService(
+        agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
         orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
@@ -137,11 +141,11 @@ async def test_chat_turn_run_schedules_user_memory_extract_on_compression() -> N
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
+async def test_agent_turn_stream_skips_user_memory_without_compression() -> None:
     """Streaming turns should not extract durable memory unless compressed."""
     memory_service = TrackingUserMemoryService()
-    service = ChatTurnService(
-        chat_history=FakeHistory(),
+    service = AgentTurnService(
+        agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=FakeOrchestratorFactory(reply="", streaming=True),
@@ -151,7 +155,7 @@ async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
 
     event_stream = await service.stream(_command(stream=True))
     async for event in event_stream:
-        if event.kind is ChatStreamEventKind.TURN_COMPLETED:
+        if event.kind is TurnEventKind.TURN_COMPLETED:
             break
 
     assert memory_service.compression_checks == [False]
@@ -159,13 +163,13 @@ async def test_chat_turn_stream_skips_user_memory_without_compression() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
-    """Streaming chat turns should expose typed application events."""
+async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
+    """Streaming agent turns should expose typed application events."""
     history = FakeHistory()
     memory = FakeMemory()
     factory = FakeOrchestratorFactory(reply="", streaming=True)
-    service = ChatTurnService(
-        chat_history=history,
+    service = AgentTurnService(
+        agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
@@ -176,36 +180,36 @@ async def test_chat_turn_stream_emits_status_tokens_and_done() -> None:
     events = []
     async for event in event_stream:
         events.append(event)
-        if event.kind is ChatStreamEventKind.TURN_COMPLETED:
+        if event.kind is TurnEventKind.TURN_COMPLETED:
             break
 
     assert [event.kind for event in events] == [
-        ChatStreamEventKind.TURN_STARTED,
-        ChatStreamEventKind.ITEM_COMPLETED,
-        ChatStreamEventKind.ITEM_STARTED,
-        ChatStreamEventKind.ITEM_STARTED,
-        ChatStreamEventKind.ITEM_DELTA,
-        ChatStreamEventKind.ITEM_COMPLETED,
-        ChatStreamEventKind.TURN_COMPLETED,
+        TurnEventKind.TURN_STARTED,
+        TurnEventKind.ITEM_COMPLETED,
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_COMPLETED,
+        TurnEventKind.TURN_COMPLETED,
     ]
     assert events[3].item.function.name == "web_search"
     assert "".join(
         event.delta["text"]
         for event in events
-        if event.kind is ChatStreamEventKind.ITEM_DELTA
+        if event.kind is TurnEventKind.ITEM_DELTA
     ) == "Hi"
     assert ("assistant", "session-1", "user-1", "Hi") in history.calls
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> None:
+async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> None:
     """Incognito turns should skip PostgreSQL persistence and memory extraction."""
     history = FakeHistory()
     memory_service = TrackingUserMemoryService()
     conversation_memory = FakeMemory(compress_on_append=True)
     factory = FakeOrchestratorFactory(reply="assistant reply")
-    service = ChatTurnService(
-        chat_history=history,
+    service = AgentTurnService(
+        agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
         orchestrator_factory=factory,
@@ -228,7 +232,7 @@ async def test_chat_turn_run_incognito_skips_history_and_memory_extract() -> Non
 
 
 @pytest.mark.asyncio
-async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
+async def test_agent_turn_run_incognito_skips_memory_prompt_injection() -> None:
     """Incognito turns should not inject durable user memory into the prompt."""
     memory_service = TrackingUserMemoryService()
 
@@ -240,8 +244,8 @@ async def test_chat_turn_run_incognito_skips_memory_prompt_injection() -> None:
     # type: ignore[method-assign]
     memory_service.build_memory_prompt = _build_prompt
     factory = FakeOrchestratorFactory(reply="assistant reply")
-    service = ChatTurnService(
-        chat_history=FakeHistory(),
+    service = AgentTurnService(
+        agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=factory,
@@ -260,9 +264,9 @@ def _command(
     stream: bool,
     file_uuids: tuple[str, ...] = (),
     incognito: bool = False,
-) -> ChatTurnCommand:
-    """Build one chat command for tests."""
-    return ChatTurnCommand(
+) -> AgentTurnCommand:
+    """Build one agent command for tests."""
+    return AgentTurnCommand(
         message="Hello",
         session_id="session-1",
         stream=stream,
@@ -277,7 +281,7 @@ def _command(
 
 
 def _auth_user() -> AuthenticatedUser:
-    """Build the authenticated domain user used by chat command tests."""
+    """Build the authenticated domain user used by agent command tests."""
     return AuthenticatedUser(
         public_id="user-1",
         email="user@example.com",

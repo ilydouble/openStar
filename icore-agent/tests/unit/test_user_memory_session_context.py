@@ -25,8 +25,8 @@ class FakeConversationMemory:
         return self.summary, self.messages
 
 
-class FakeChatHistory:
-    """Minimal chat history fake for session context tests."""
+class FakeAgentSession:
+    """Minimal agent session fake for session context tests."""
 
     def __init__(self, messages: list[dict[str, str]] | None = None) -> None:
         """Create one fake persisted message list."""
@@ -47,7 +47,7 @@ async def test_resolve_session_extract_context_prefers_redis_snapshot() -> None:
             summary="Older turns summarized",
             messages=[{"role": "user", "content": "Latest question"}],
         ),
-        chat_history=FakeChatHistory([
+        agent_session=FakeAgentSession([
             {"role": "user", "content": "Persisted only"},
         ]),
     )
@@ -63,7 +63,7 @@ async def test_resolve_session_extract_context_falls_back_to_persisted_messages(
         "session-1",
         user_id="u1",
         conversation_memory=FakeConversationMemory(),
-        chat_history=FakeChatHistory([
+        agent_session=FakeAgentSession([
             {"role": "user", "content": "Persisted question", "metadata": {}},
             {"role": "assistant", "content": "Persisted answer"},
         ]),

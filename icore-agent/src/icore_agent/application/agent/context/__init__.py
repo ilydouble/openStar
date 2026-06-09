@@ -9,7 +9,7 @@ from .models import (
     AgentImageAttachment,
 )
 from .ports import (
-    ChatHistoryReader,
+    AgentSessionReader,
     ConversationMemory,
     FileContextReader,
     UserMemoryPromptBuilder,
@@ -20,7 +20,7 @@ __all__ = [
     "AgentDataAttachment",
     "AgentDataColumn",
     "AgentImageAttachment",
-    "ChatHistoryReader",
+    "AgentSessionReader",
     "ConversationMemory",
     "FileContextReader",
     "UserMemoryPromptBuilder",

@@ -7,8 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from icore_agent.domain.chat.session.session_item import SessionItem
+from icore_agent.domain.agent.session.session_item import SessionItem
 
+from .turn import Turn
 from .turn_error import TurnError
 
 
@@ -36,6 +37,7 @@ class TurnEvent(BaseModel):
     delta: dict[str, Any] | None = None
     error: TurnError | None = None
     reply: str | None = None
+    turn: Turn | None = None
 
     @classmethod
     def turn_started(cls, *, session_id: str, turn_id: str) -> TurnEvent:
@@ -105,6 +107,7 @@ class TurnEvent(BaseModel):
         session_id: str,
         turn_id: str,
         reply: str,
+        turn: Turn | None = None,
     ) -> TurnEvent:
         """Create a turn-completed event."""
         return cls(
@@ -112,6 +115,7 @@ class TurnEvent(BaseModel):
             session_id=session_id,
             turn_id=turn_id,
             reply=reply,
+            turn=turn,
         )
 
     @classmethod
@@ -122,6 +126,7 @@ class TurnEvent(BaseModel):
         turn_id: str,
         error: TurnError,
         reply: str | None = None,
+        turn: Turn | None = None,
     ) -> TurnEvent:
         """Create a turn-failed event."""
         return cls(
@@ -130,6 +135,7 @@ class TurnEvent(BaseModel):
             turn_id=turn_id,
             error=error,
             reply=reply,
+            turn=turn,
         )
 
     def to_payload(self) -> dict[str, Any]:

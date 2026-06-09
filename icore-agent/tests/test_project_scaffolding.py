@@ -497,7 +497,7 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
         "agent" / "handlers" / "chat.py"
     ).read_text(encoding="utf-8")
     command = (
-        package_dir / "application" / "chat" / "commands.py"
+        package_dir / "application" / "agent" / "commands.py"
     ).read_text(encoding="utf-8")
     dependencies = (
         package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
@@ -509,30 +509,32 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
     assert "serialize_user_profile(service.get_current_user" not in dependencies
 
 
-def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
-    """Make chat routing categories explicit and keep history service naming stable."""
+def test_agent_application_uses_explicit_turn_and_session_boundaries():
+    """Keep agent turn/session/runtime code under the agent application package."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
-    routing = (chat_dir / "routing.py").read_text(encoding="utf-8")
-    events = (chat_dir / "events.py").read_text(encoding="utf-8")
-    roles = (package_dir / "domain" / "chat" / "roles.py").read_text(
+    agent_dir = package_dir / "application" / "agent"
+    routing = (agent_dir / "turn" / "routing.py").read_text(encoding="utf-8")
+    roles = (package_dir / "domain" / "agent" / "roles.py").read_text(
         encoding="utf-8"
     )
-    services_dir = chat_dir / "services"
-    agent_context_dir = package_dir / "application" / "agent" / "context"
-    agent_turn_dir = package_dir / "application" / "agent" / "turn"
-    agent_tool_dir = package_dir / "application" / "agent" / "tool"
-    turn_service = (services_dir / "turn_service.py").read_text(
+    agent_context_dir = agent_dir / "context"
+    agent_turn_dir = agent_dir / "turn"
+    agent_session_dir = agent_dir / "session"
+    agent_runner_dir = agent_dir / "runner"
+    agent_tool_dir = agent_dir / "tool"
+    turn_service = (agent_turn_dir / "service.py").read_text(
+        encoding="utf-8"
+    )
+    session_service = (agent_session_dir / "service.py").read_text(
         encoding="utf-8"
     )
     agent_init = (
-        package_dir / "application" / "agent" / "__init__.py"
+        agent_dir / "__init__.py"
     ).read_text(encoding="utf-8")
-    chat_init = (chat_dir / "__init__.py").read_text(encoding="utf-8")
 
-    assert (services_dir / "__init__.py").is_file()
-    assert (services_dir / "history_service.py").is_file()
-    assert (services_dir / "turn_service.py").is_file()
+    chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
+    assert chat_sources == []
     assert (agent_context_dir / "__init__.py").is_file()
     assert (agent_context_dir / "loader.py").is_file()
     assert (agent_context_dir / "models.py").is_file()
@@ -547,6 +549,13 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
     assert (agent_turn_dir / "runner.py").is_file()
     assert (agent_turn_dir / "transcript.py").is_file()
     assert (agent_turn_dir / "usage.py").is_file()
+    assert (agent_turn_dir / "service.py").is_file()
+    assert (agent_turn_dir / "routing.py").is_file()
+    assert (agent_session_dir / "__init__.py").is_file()
+    assert (agent_session_dir / "service.py").is_file()
+    assert (agent_runner_dir / "__init__.py").is_file()
+    assert (agent_runner_dir / "orchestrator.py").is_file()
+    assert (agent_runner_dir / "model_factory.py").is_file()
     assert (agent_tool_dir / "__init__.py").is_file()
     assert (agent_tool_dir / "callback_context.py").is_file()
     assert (agent_tool_dir / "event_bridge.py").is_file()
@@ -557,33 +566,29 @@ def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
                 "agent" / "strands_bridge.py").exists()
     assert not (package_dir / "application" /
                 "agent" / "tool_payloads.py").exists()
-    assert not (chat_dir / "callback_ctx.py").exists()
-    assert not (chat_dir / "tool_calls.py").exists()
-    assert not (chat_dir / "context.py").exists()
-    assert not (chat_dir / "history_service.py").exists()
-    assert not (chat_dir / "turn_service.py").exists()
-    assert not (chat_dir / "service.py").exists()
     forbidden_import = "from " + "application.chat"
     for path in (
-        chat_dir / "__init__.py",
-        services_dir / "turn_service.py",
+        agent_dir / "__init__.py",
+        agent_turn_dir / "service.py",
         agent_context_dir / "__init__.py",
         agent_context_dir / "loader.py",
     ):
         assert forbidden_import not in path.read_text(encoding="utf-8")
-    assert "class ChatIntent(str, Enum)" in routing
-    assert "intent: ChatIntent" in routing
+    assert "class AgentIntent(str, Enum)" in routing
+    assert "def classify_turn_intent" in routing
+    assert not (agent_dir / "results.py").exists()
+    assert "AgentTurnResult" not in agent_init
+    assert not (package_dir / "domain" / "chat").exists()
     assert "class AgentHint" not in routing
     assert "agent_hint" not in routing
     assert "enable_tools" not in routing
-    assert "ChatStreamEventKind = TurnEventKind" in events
+    assert "class AgentSessionService" in session_service
     assert "AgentTurnExecutor" in turn_service
     assert "AgentLoopRequest" not in turn_service
     assert "StrandsToolEventBridge" not in turn_service
     assert "begin_turn_usage_capture" not in turn_service
     assert "_safe_persist_event" not in turn_service
     assert "from .tool import StrandsToolEventBridge" in agent_init
-    assert "ChatToolCallRecorder" not in chat_init
     assert "class ChatCompletionRole(str, Enum)" in roles
     assert 'TOOL = "tool"' in roles
 
@@ -610,7 +615,8 @@ def test_llm_tool_calls_migration_aligns_with_chat_history_ids():
 def test_number_comparator_is_registered_with_orchestrator_tools():
     """The orchestrator should expose the deterministic number comparison tool."""
     orchestrator = (
-        AGENT_ROOT / "src" / "icore_agent" / "application" / "chat" / "orchestrator.py"
+        AGENT_ROOT / "src" / "icore_agent" /
+        "application" / "agent" / "runner" / "orchestrator.py"
     ).read_text(encoding="utf-8")
     catalog_init = (
         AGENT_ROOT / "src" / "icore_agent" /
@@ -638,7 +644,9 @@ def test_chat_orchestration_lives_in_application_layer():
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
     agent_dir = package_dir / "application" / "agent"
-    orchestrator = (chat_dir / "orchestrator.py").read_text(encoding="utf-8")
+    orchestrator = (agent_dir / "runner" / "orchestrator.py").read_text(
+        encoding="utf-8"
+    )
     prompt_builder = (
         agent_dir / "sys_prompt" / "system_prompt_builder.py"
     ).read_text(encoding="utf-8")
@@ -649,11 +657,10 @@ def test_chat_orchestration_lives_in_application_layer():
 
     assert not (package_dir / "engine").exists()
     assert not (package_dir / "tools").exists()
-    assert not any((chat_dir / "agents").glob("*.py"))
-    assert not (chat_dir / "prompts.py").exists()
-    assert not any((chat_dir / "tools").glob("*.py"))
+    chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
+    assert chat_sources == []
     assert (catalog_dir / "web_search.py").is_file()
-    assert (chat_dir / "sequential" / "agent.py").is_file()
+    assert (agent_dir / "sequential" / "agent.py").is_file()
     assert "ModuleNotFoundError" not in orchestrator
     assert "_Fallback" not in orchestrator
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in orchestrator

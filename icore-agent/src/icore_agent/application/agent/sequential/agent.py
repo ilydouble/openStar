@@ -15,7 +15,7 @@ from typing import Any, cast
 
 from litellm import completion
 
-from icore_agent.domain.chat import ChatCompletionRole
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings

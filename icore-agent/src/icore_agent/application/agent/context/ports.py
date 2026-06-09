@@ -31,8 +31,8 @@ class ConversationMemory(Protocol):
         ...
 
 
-class ChatHistoryReader(Protocol):
-    """Durable chat history operations needed by agent context assembly."""
+class AgentSessionReader(Protocol):
+    """Durable agent session operations needed by context assembly."""
 
     def load_messages(
         self,

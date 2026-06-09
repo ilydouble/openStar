@@ -17,7 +17,7 @@ from icore_agent.application.agent.tool import AgentTool, ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.application.chat.orchestrator import create_orchestrator
+from icore_agent.application.agent.runner.orchestrator import create_orchestrator
 from icore_agent.main import app
 from .test_account_flow import ASGISyncTestClient
 
@@ -88,7 +88,7 @@ def test_chat_non_streaming(mock_memory, mock_create_orch, client):
 
 @patch("icore_agent.interfaces.http.v1.agent.handlers.sequential.SequentialAgent")
 def test_sequential_endpoint_success(mock_seq_cls, client):
-    from icore_agent.application.chat.sequential.agent import SequentialResult
+    from icore_agent.application.agent.sequential.agent import SequentialResult
     mock_instance = MagicMock()
     mock_instance.run.return_value = SequentialResult(
         status="complete", output="Files listed.", steps=2
@@ -108,8 +108,8 @@ def test_sequential_endpoint_success(mock_seq_cls, client):
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.soft_delete_session")
-@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.soft_delete_session")
+@patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.assert_owned_session")
 @patch(
     "icore_agent.interfaces.http.v1.agent.handlers.session._run_session_end_extract_from_context",
     new_callable=AsyncMock,
@@ -133,7 +133,7 @@ def test_clear_session(mock_memory, mock_resolve, mock_extract, _assert_owned, _
     mock_extract.assert_awaited_once()
 
 
-@patch("icore_agent.interfaces.http.v1.dependencies.chat_history_service.assert_owned_session")
+@patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.assert_owned_session")
 @patch(
     "icore_agent.interfaces.http.v1.agent.handlers.session._run_finalize_session_extract",
     new_callable=AsyncMock,
@@ -151,8 +151,8 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.application.chat.model_factory.LiteLLMModel")
-@patch("icore_agent.application.chat.orchestrator.Agent")
+@patch("icore_agent.application.agent.runner.model_factory.LiteLLMModel")
+@patch("icore_agent.application.agent.runner.orchestrator.Agent")
 def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
 

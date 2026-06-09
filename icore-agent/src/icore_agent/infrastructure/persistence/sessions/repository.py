@@ -9,8 +9,8 @@ from typing import Any
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.chat.session import SessionItem
-from icore_agent.domain.chat.turn import Turn, TurnError, TurnStatus
+from icore_agent.domain.agent.session import SessionItem
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
 
 from .models import (
     ChatMessage,
@@ -289,7 +289,8 @@ class SqlAlchemyChatHistoryRepository:
     ) -> ChatTurn:
         """Persist the final state of one turn."""
         turn.status = _enum_value(status)
-        turn.error = error.model_dump(mode="json") if error is not None else None
+        turn.error = error.model_dump(
+            mode="json") if error is not None else None
         turn.completed_at = completed_at
         turn.duration_ms = duration_ms
         self._session.flush()

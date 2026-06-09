@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from icore_agent.application.chat import ChatHistoryService, ChatTurnCommand, ChatTurnService
+from icore_agent.application.agent import AgentSessionService, AgentTurnCommand, AgentTurnService
 from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.agent.handlers.session import (
@@ -54,14 +54,14 @@ def test_session_attachment_refs_include_pdf_as_data_mode() -> None:
 async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
     """User captions should be stored alongside attachment UUID metadata."""
     history = _RecordingHistory()
-    service = ChatTurnService(
-        chat_history=history,
+    service = AgentTurnService(
+        agent_session=history,
         file_service=_FakeFileService({}),
         conversation_memory=_NoopMemory(),
         orchestrator_factory=_StaticOrchestratorFactory("ok"),
         usage_service=_NoopUsageService(),
     )
-    command = ChatTurnCommand(
+    command = AgentTurnCommand(
         message="Please answer based on the data file I uploaded.",
         session_id="session-1",
         stream=False,
@@ -85,7 +85,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
 
 def test_chat_history_preserves_display_caption_metadata() -> None:
     """Display captions should round-trip through chat history persistence."""
-    service = ChatHistoryService()
+    service = AgentSessionService()
     session_id = f"session-{uuid4()}"
     user_id = f"user-{uuid4()}"
     file_uuid = str(uuid4())

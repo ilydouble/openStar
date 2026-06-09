@@ -1,4 +1,4 @@
-"""Application commands for chat turn workflows."""
+"""Application commands for agent turn workflows."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from icore_agent.domain.user import AuthenticatedUser
 
 
 @dataclass(frozen=True, slots=True)
-class ChatTurnCommand:
-    """Command object for one authenticated chat turn."""
+class AgentTurnCommand:
+    """Command object for one authenticated agent turn."""
 
     message: str
     session_id: str

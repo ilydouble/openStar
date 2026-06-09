@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.chat import ChatCompletionRole
-from icore_agent.domain.chat.session import UserInput, UserInputType, UserMessageItem
-from icore_agent.domain.chat.turn import Turn, TurnStatus
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from icore_agent.domain.agent.turn import Turn, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.models import (
     ChatSessionItem,
     ChatTurn,
@@ -167,7 +167,8 @@ def test_repository_persists_turn_and_session_item() -> None:
             ],
         )
         repo.upsert_session_item(chat_session, persisted_turn, item)
-        completed_item = item.model_copy(update={"completed_at": item.created_at})
+        completed_item = item.model_copy(
+            update={"completed_at": item.created_at})
         repo.upsert_session_item(chat_session, persisted_turn, completed_item)
         repo.complete_turn(
             persisted_turn,

@@ -5,10 +5,10 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from icore_agent.application.chat import ChatTurnCommand, ChatTurnService
+from icore_agent.application.agent import AgentTurnCommand, AgentTurnService
 from icore_agent.domain.user import AuthenticatedUser
 
-from ...dependencies import get_chat_turn_service, get_current_user
+from ...dependencies import get_agent_turn_service, get_current_user
 from ...envelope import make_api_envelope
 from ...streaming import sse_response
 from ..schemas.chat import ChatRequest, ChatResponse
@@ -19,15 +19,15 @@ _UPGRADE_URL = "/pricing"
 async def chat(
     req: ChatRequest,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_turn_service: ChatTurnService = Depends(get_chat_turn_service),
+    agent_turn_service: AgentTurnService = Depends(get_agent_turn_service),
 ):
-    """Translate one HTTP chat request into an application chat command."""
+    """Translate one HTTP chat request into an application agent command."""
     command = _command_from_request(req, user)
     try:
         if req.stream:
-            events = await chat_turn_service.stream(command)
+            events = await agent_turn_service.stream(command)
             return sse_response(events, session_id=req.session_id)
-        result = await chat_turn_service.run(command)
+        turn = await agent_turn_service.run(command)
     except PermissionError as exc:
         msg = str(exc)
         # Task-quota errors carry the "task_quota_exceeded:" prefix.
@@ -51,12 +51,12 @@ async def chat(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return ChatResponse(session_id=result.session_id, reply=result.reply)
+    return ChatResponse(session_id=turn.session_id, reply=turn.reply_text())
 
 
-def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> ChatTurnCommand:
+def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> AgentTurnCommand:
     """Build an application command from validated HTTP request data."""
-    return ChatTurnCommand(
+    return AgentTurnCommand(
         message=req.message,
         session_id=req.session_id,
         stream=req.stream,

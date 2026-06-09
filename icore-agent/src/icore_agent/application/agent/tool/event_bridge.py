@@ -9,14 +9,14 @@ from typing import Any
 
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 
-from icore_agent.domain.chat.session import (
+from icore_agent.domain.agent.session import (
     ToolCallError,
     ToolCallItem,
     ToolCallResult,
     ToolCallStatus,
     ToolFunction,
 )
-from icore_agent.domain.chat.turn import TurnEvent
+from icore_agent.domain.agent.turn import TurnEvent
 
 from .payloads import (
     json_dumps,

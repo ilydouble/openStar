@@ -17,8 +17,8 @@ from icore_agent.application.agent.tool import (
     tool_call_id,
     tool_name,
 )
-from icore_agent.domain.chat.session import ToolCallItem, ToolCallStatus
-from icore_agent.domain.chat.turn import TurnEventKind
+from icore_agent.domain.agent.session import ToolCallItem, ToolCallStatus
+from icore_agent.domain.agent.turn import TurnEventKind
 
 
 def test_tool_payload_helpers_normalize_strands_payloads() -> None:

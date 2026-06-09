@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 
 from icore_agent.application.agent.loop.agent_loop import AgentLoop, AgentLoopError
-from icore_agent.domain.chat.turn import TurnError, TurnEvent
+from icore_agent.domain.agent.turn import TurnError, TurnEvent
 
 from .lifecycle import TurnLifecycle
 from .persistence import TurnPersistence
@@ -40,7 +40,6 @@ class AgentTurnExecutor:
         self,
         *,
         command,
-        route,
         context,
     ) -> AsyncIterator[TurnEvent]:
         """Run a prepared command through one agent turn lifecycle."""
@@ -55,7 +54,6 @@ class AgentTurnExecutor:
         projection = self._tool_projection_factory()
         request = self._runner_factory.build_loop_request(
             command=command,
-            route=route,
             context=context,
             turn_id=lifecycle.turn.id,
             invoke=self._usage.invoke_with_usage(command),

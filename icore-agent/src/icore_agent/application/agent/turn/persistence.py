@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from icore_agent.domain.chat.session import SessionItem
-from icore_agent.domain.chat.turn import Turn, TurnError, TurnEvent, TurnStatus
+from icore_agent.domain.agent.session import SessionItem
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
@@ -15,16 +15,16 @@ log = get_logger(__name__)
 class TurnPersistence:
     """Persist turn and session-item state without owning execution flow."""
 
-    def __init__(self, chat_history: Any) -> None:
-        """Create a persistence adapter over durable chat history."""
-        self._chat_history = chat_history
+    def __init__(self, agent_session: Any) -> None:
+        """Create a persistence adapter over durable agent session storage."""
+        self._agent_session = agent_session
 
     def create(self, command: Any, turn: Turn) -> None:
         """Persist a turn start without failing an otherwise runnable request."""
         if command.incognito:
             return
         try:
-            self._chat_history.create_turn(
+            self._agent_session.create_turn(
                 command.session_id,
                 command.user_id,
                 turn,
@@ -47,7 +47,7 @@ class TurnPersistence:
         if command.incognito:
             return
         try:
-            self._chat_history.upsert_session_item(
+            self._agent_session.upsert_session_item(
                 command.session_id,
                 command.user_id,
                 turn_id=turn_id,
@@ -76,7 +76,7 @@ class TurnPersistence:
         if command.incognito:
             return
         try:
-            self._chat_history.complete_turn(
+            self._agent_session.complete_turn(
                 command.session_id,
                 command.user_id,
                 turn_id=turn_id,

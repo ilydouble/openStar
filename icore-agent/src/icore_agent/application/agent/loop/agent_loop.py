@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from icore_agent.domain.chat.session import AgentMessageItem, SessionItemStatus
-from icore_agent.domain.chat.turn import TurnEvent
+from icore_agent.domain.agent.session import AgentMessageItem, SessionItemStatus
+from icore_agent.domain.agent.turn import TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.application.agent.async_bridge import (

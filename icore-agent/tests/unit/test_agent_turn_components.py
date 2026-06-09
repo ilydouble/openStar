@@ -15,8 +15,8 @@ from icore_agent.application.agent.turn import (
     TurnUsageRecorder,
 )
 from icore_agent.application.agent.tool import TurnToolProjection
-from icore_agent.application.chat import ChatTurnCommand
-from icore_agent.domain.chat.session import (
+from icore_agent.application.agent import AgentTurnCommand
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
     ToolCallItem,
@@ -24,7 +24,7 @@ from icore_agent.domain.chat.session import (
     ToolCallStatus,
     ToolFunction,
 )
-from icore_agent.domain.chat.turn import TurnError, TurnEvent, TurnStatus
+from icore_agent.domain.agent.turn import TurnError, TurnEvent, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -66,6 +66,8 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
     assert final.status is TurnStatus.COMPLETED
     assert final.duration_ms == 1250
     assert final.event.reply == "Hello back"
+    assert final.event.turn is lifecycle.turn
+    assert final.event.turn.reply_text() == "Hello back"
 
 
 def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
@@ -173,7 +175,7 @@ async def test_turn_transcript_recorder_appends_memory_and_extracts_on_compressi
     memory = CompressingMemory()
     user_memory = RecordingUserMemory()
     recorder = TurnTranscriptRecorder(
-        chat_history=history,
+        agent_session=history,
         conversation_memory=memory,
         user_memory_service=user_memory,
     )
@@ -243,7 +245,6 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
     context = StubContext()
     request = runner_factory.build_loop_request(
         command=command,
-        route=StubRoute(),
         context=context,
         turn_id="turn-1",
         invoke=lambda runner, message: runner(message),
@@ -467,10 +468,6 @@ class StubContext:
     has_attachments = True
 
 
-class StubRoute:
-    """Minimal routed turn test double."""
-
-
 class StubSettings:
     """Settings fake with a stable model id."""
 
@@ -507,9 +504,9 @@ def _command(
     *,
     stream: bool,
     incognito: bool = False,
-) -> ChatTurnCommand:
+) -> AgentTurnCommand:
     """Build one chat command for agent-turn collaborator tests."""
-    return ChatTurnCommand(
+    return AgentTurnCommand(
         message="Hello",
         session_id="session-1",
         stream=stream,

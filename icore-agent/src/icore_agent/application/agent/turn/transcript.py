@@ -4,24 +4,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.domain.chat import ChatCompletionRole
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 
 
 class TurnTranscriptRecorder:
-    """Record compatibility chat messages and durable memory extraction."""
+    """Record completed turn transcript and durable memory extraction."""
 
     def __init__(
         self,
         *,
-        chat_history: Any,
+        agent_session: Any,
         conversation_memory: Any,
         user_memory_service: Any | None = None,
     ) -> None:
         """Create a transcript recorder for completed turn side effects."""
-        self._chat_history = chat_history
+        self._agent_session = agent_session
         self._conversation_memory = conversation_memory
         self._user_memory_service = user_memory_service
 
@@ -89,7 +89,7 @@ class TurnTranscriptRecorder:
         if command.incognito:
             return None
         try:
-            return self._chat_history.save_assistant_message(
+            return self._agent_session.save_assistant_message(
                 command.session_id,
                 command.user_id,
                 reply,

@@ -9,7 +9,7 @@ from .history import load_history_context, to_strands_messages
 from .memory import build_user_memory_prompt
 from .models import AgentContext
 from .ports import (
-    ChatHistoryReader,
+    AgentSessionReader,
     ConversationMemory,
     FileContextReader,
     UserMemoryPromptBuilder,
@@ -26,7 +26,7 @@ async def load_agent_context(
     user_message: str = "",
     incognito: bool = False,
     file_service: FileContextReader,
-    chat_history: ChatHistoryReader,
+    agent_session: AgentSessionReader,
     conversation_memory: ConversationMemory,
     user_memory_service: UserMemoryPromptBuilder | None = None,
 ) -> AgentContext:
@@ -37,7 +37,7 @@ async def load_agent_context(
             user_id=user_id,
             incognito=incognito,
             conversation_memory=conversation_memory,
-            chat_history=chat_history,
+            agent_session=agent_session,
         )
     except Exception as exc:
         log.warning("load_context_fallback",

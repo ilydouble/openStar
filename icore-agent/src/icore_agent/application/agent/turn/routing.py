@@ -1,14 +1,13 @@
-"""Routing policy for chat turns."""
+"""Intent classification policy for agent turns."""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from enum import Enum
 
 
-class ChatIntent(str, Enum):
-    """High-level intent classes for chat routing."""
+class AgentIntent(str, Enum):
+    """High-level intent classes recorded as turn metadata."""
 
     CHAT = "chat"
     TASK = "task"
@@ -54,28 +53,15 @@ _CHAT_LIKE_PATTERNS = re.compile(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class ChatRoutingDecision:
-    """Resolved routing decision for one chat turn."""
-
-    intent: ChatIntent
-
-
-def resolve_routing(message: str) -> ChatRoutingDecision:
-    """Classify the message for turn metadata without controlling tools."""
-    intent = classify_intent(message)
-    return ChatRoutingDecision(intent=intent)
-
-
-def classify_intent(message: str) -> ChatIntent:
+def classify_turn_intent(message: str) -> AgentIntent:
     """Classify a user message as conversational chat or task execution."""
     stripped = message.strip()
     if _CHAT_PATTERNS.fullmatch(stripped):
-        return ChatIntent.CHAT
+        return AgentIntent.CHAT
     if _TASK_KEYWORDS.search(stripped):
-        return ChatIntent.TASK
+        return AgentIntent.TASK
     if len(stripped) <= 6:
-        return ChatIntent.CHAT
+        return AgentIntent.CHAT
     if _CHAT_LIKE_PATTERNS.search(stripped):
-        return ChatIntent.CHAT
-    return ChatIntent.CHAT
+        return AgentIntent.CHAT
+    return AgentIntent.CHAT

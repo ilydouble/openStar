@@ -22,7 +22,6 @@ class AgentTurnRunnerFactory:
         self,
         *,
         command: Any,
-        route: Any,
         context: Any,
         turn_id: str,
         invoke: Callable[[AgentRunner, str], Any] | None,
@@ -34,7 +33,6 @@ class AgentTurnRunnerFactory:
         )
         runner = self.build_runner(
             command=command,
-            route=route,
             context=context,
             tool_bridge=tool_bridge,
         )
@@ -52,7 +50,6 @@ class AgentTurnRunnerFactory:
         self,
         *,
         command: Any,
-        route: Any,
         context: Any,
         tool_bridge: StrandsToolEventBridge,
     ) -> AgentRunner:

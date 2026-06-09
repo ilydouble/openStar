@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Protocol
 
 from icore_agent.domain.files import FileAsset
@@ -62,24 +61,6 @@ class FileContextReader(Protocol):
         file_uuid: str,
     ) -> str:
         """Create a browser GET URL for an owned completed file asset."""
-        ...
-
-    def read_file_bytes(
-        self,
-        *,
-        uploader_public_id: str,
-        file_uuid: str,
-    ) -> bytes:
-        """Read the full object bytes for a completed file asset."""
-        ...
-
-    def materialize_temp_file(
-        self,
-        *,
-        uploader_public_id: str,
-        file_uuid: str,
-    ) -> tuple[FileAsset, Path]:
-        """Copy an owned object to a temporary local file and return its path."""
         ...
 
 

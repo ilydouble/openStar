@@ -60,7 +60,10 @@ class AgentTurnService:
         self._executor = AgentTurnExecutor(
             agent_loop=agent_loop or AgentLoop(
                 wall_budget_sec=wall_budget_sec),
-            runner_factory=AgentTurnRunnerFactory(orchestrator_factory),
+            runner_factory=AgentTurnRunnerFactory(
+                orchestrator_factory,
+                file_service=file_service,
+            ),
             persistence=TurnPersistence(agent_session),
             transcript=TurnTranscriptRecorder(
                 agent_session=agent_session,

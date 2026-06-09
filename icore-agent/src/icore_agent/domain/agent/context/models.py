@@ -24,42 +24,17 @@ class AgentImageAttachment:
 
 
 @dataclass(frozen=True, slots=True)
-class AgentDataColumn:
-    """Column preview metadata for one uploaded data file."""
-
-    name: str
-    dtype: str
-
-    def to_orchestrator_payload(self) -> dict[str, str]:
-        """Return the dict shape consumed by the engine orchestrator."""
-        return {"name": self.name, "dtype": self.dtype}
-
-
-@dataclass(frozen=True, slots=True)
-class AgentDataAttachment:
-    """Structured data attachment reference passed into agent context."""
+class AgentFileAttachment:
+    """Non-image file attachment reference passed into agent context."""
 
     filename: str
     file_uuid: str
-    abs_path: str
-    columns: tuple[AgentDataColumn, ...] = ()
-    row_count: int | None = None
-    preview_md: str = ""
-    preview_error: str = ""
 
-    def to_orchestrator_payload(self) -> dict[str, Any]:
-        """Return the dict shape consumed by the engine orchestrator."""
+    def to_agent_payload(self) -> dict[str, Any]:
+        """Return the compact dict shape sent to the agent turn boundary."""
         return {
             "filename": self.filename,
             "file_uuid": self.file_uuid,
-            "abs_path": self.abs_path,
-            "columns": [
-                column.to_orchestrator_payload()
-                for column in self.columns
-            ],
-            "row_count": self.row_count,
-            "preview_md": self.preview_md,
-            "preview_error": self.preview_error,
         }
 
 
@@ -69,10 +44,9 @@ class AgentContext:
 
     summary: str | None
     strands_history: list[dict[str, Any]]
-    attachments_text: str | None
     has_rag: bool
     image_attachments: list[AgentImageAttachment]
-    data_attachments: list[AgentDataAttachment]
+    file_attachments: list[AgentFileAttachment]
     user_memory_prompt: str | None = None
 
     @classmethod
@@ -81,10 +55,9 @@ class AgentContext:
         return cls(
             summary=None,
             strands_history=[],
-            attachments_text=None,
             has_rag=False,
             image_attachments=[],
-            data_attachments=[],
+            file_attachments=[],
             user_memory_prompt=None,
         )
 
@@ -94,7 +67,7 @@ class AgentContext:
         return bool(
             self.has_rag
             or self.image_attachments
-            or self.data_attachments
+            or self.file_attachments
         )
 
     @property
@@ -106,9 +79,9 @@ class AgentContext:
         ]
 
     @property
-    def data_attachment_payloads(self) -> list[dict[str, Any]]:
-        """Return data attachments in the engine orchestrator dict shape."""
+    def file_attachment_payloads(self) -> list[dict[str, Any]]:
+        """Return non-image file attachments in the compact agent dict shape."""
         return [
-            attachment.to_orchestrator_payload()
-            for attachment in self.data_attachments
+            attachment.to_agent_payload()
+            for attachment in self.file_attachments
         ]

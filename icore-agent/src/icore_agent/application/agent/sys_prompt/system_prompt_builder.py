@@ -23,7 +23,6 @@ class BuildSystemPromptOptions:
     prompt_source: PromptSource | str = PromptSource.ORCHESTRATOR
     tools: Sequence[ToolDefinition] = ()
     summary: str | None = None
-    attachments_text: str | None = None
     user_memory_prompt: str | None = None
 
 

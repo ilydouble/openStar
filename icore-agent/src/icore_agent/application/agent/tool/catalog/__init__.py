@@ -22,10 +22,16 @@ from .http_client import http_request
 from .image_tools import generate_image as _generate_image
 from .image_tools import understand_image
 from .number_comparator import number_comparator
+from .uploaded_files import read_uploaded_file
 from .web_search import web_search
 
 
-def build_orchestrator_tool_definitions(*, session_id: str) -> list[ToolDefinition]:
+def build_orchestrator_tool_definitions(
+    *,
+    session_id: str,
+    user_id: str = "",
+    file_service: Any | None = None,
+) -> list[ToolDefinition]:
     """Return structured tool definitions mounted on the main agent."""
     return [
         _definition(
@@ -119,6 +125,23 @@ def build_orchestrator_tool_definitions(*, session_id: str) -> list[ToolDefiniti
             prompt_snippet="Write or update workspace files by relative path.",
         ),
         _definition(
+            name="read_uploaded_file",
+            label="Read uploaded file",
+            description=(
+                "Read a user-uploaded non-image file by attachment UUID and "
+                "return model-readable text."
+            ),
+            parameters=_READ_UPLOADED_FILE_SCHEMA,
+            execute=_scoped_uploaded_file_executor(
+                user_id=user_id,
+                file_service=file_service,
+            ),
+            prompt_snippet=(
+                "Read an uploaded file_attachment by UUID when the user asks "
+                "about its contents."
+            ),
+        ),
+        _definition(
             name="chroma_search",
             label="Knowledge search",
             description=(
@@ -153,12 +176,19 @@ def build_orchestrator_tool_definitions(*, session_id: str) -> list[ToolDefiniti
     ]
 
 
-def build_orchestrator_tools(*, session_id: str) -> list[AgentTool]:
+def build_orchestrator_tools(
+    *,
+    session_id: str,
+    user_id: str = "",
+    file_service: Any | None = None,
+) -> list[AgentTool]:
     """Return Strands-compatible tools for the main orchestrator agent."""
     return [
         make_agent_tool(definition)
         for definition in build_orchestrator_tool_definitions(
             session_id=session_id,
+            user_id=user_id,
+            file_service=file_service,
         )
     ]
 
@@ -238,6 +268,29 @@ def _scoped_generate_image_executor(session_id: str) -> ToolExecutor:
             prompt=str(params.get("prompt") or ""),
             size=str(params.get("size") or "1024x1024"),
             session_id=session_id,
+        )
+
+    return _execute
+
+
+def _scoped_uploaded_file_executor(
+    *,
+    user_id: str,
+    file_service: Any | None,
+) -> ToolExecutor:
+    """Bind uploaded-file reads to the current authenticated user."""
+
+    def _execute(
+        _tool_call_id: str,
+        params: dict[str, Any],
+        _context: ToolExecutionContext,
+    ) -> str:
+        """Read one uploaded file by UUID from the current user's assets."""
+        return read_uploaded_file(
+            file_service=file_service,
+            user_id=user_id,
+            file_uuid=str(params.get("file_uuid") or ""),
+            encoding=str(params.get("encoding") or "utf-8"),
         )
 
     return _execute
@@ -357,6 +410,19 @@ _WRITE_FILE_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+_READ_UPLOADED_FILE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "file_uuid": {
+            "type": "string",
+            "description": "UUID from the file_attachment metadata.",
+        },
+        "encoding": {"type": "string", "default": "utf-8"},
+    },
+    "required": ["file_uuid"],
+    "additionalProperties": False,
+}
+
 _CHROMA_SEARCH_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -419,6 +485,7 @@ __all__ = [
     "list_inbox",
     "number_comparator",
     "read_file",
+    "read_uploaded_file",
     "run_python_snippet",
     "search_emails",
     "send_email",

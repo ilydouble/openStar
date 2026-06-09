@@ -15,6 +15,7 @@ from icore_agent.application.agent import (
 )
 from icore_agent.application.agent.context import dedupe_file_uuids
 from icore_agent.application.agent.tool import StrandsToolEventBridge
+from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.agent.turn import Turn, TurnEventKind, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
@@ -67,7 +68,10 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
     assert len(factory.calls[0]["hooks"]) == 1
     assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
     assert factory.agent.messages == []
-    assert usage.calls == [("user-1", "tasks", 1)]
+    assert usage.calls == [
+        ("user-1", "attachments", 1),
+        ("user-1", "tasks", 1),
+    ]
     assert len(usage.llm_calls) == 1
     assert usage.llm_calls[0]["user_id"] == "user-1"
     assert usage.llm_calls[0]["total_tokens"] > 0
@@ -459,7 +463,32 @@ class FakeHistory:
 
 
 class FakeFileService:
-    """Unused file service fake for chat turn tests."""
+    """File service fake for chat turn tests."""
+
+    def __init__(self) -> None:
+        """Create a fake with one default non-image attachment."""
+        self.assets = {
+            "f1": FileAsset(
+                file_uuid="f1",
+                original_filename="notes.txt",
+                uploader_public_id="user-1",
+                uploaded_at=None,
+                deleted_at=None,
+                storage_bucket="icore-files",
+                object_key="files/user-1/f1",
+                storage_etag="etag",
+                content_type="text/plain",
+                checksum_sha256="a" * 64,
+            )
+        }
+
+    def get_owned_asset(self, *, uploader_public_id: str, file_uuid: str) -> FileAsset:
+        """Return a configured owned asset."""
+        return self.assets[file_uuid]
+
+    def create_download_url(self, *, uploader_public_id: str, file_uuid: str) -> str:
+        """Return a deterministic image download URL."""
+        return f"https://files.example/{file_uuid}"
 
 
 class TrackingUserMemoryService:

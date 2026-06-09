@@ -31,26 +31,22 @@ Orchestrator = Any
 def create_orchestrator(
     callback_handler=None,
     summary: str | None = None,
-    attachments_text: str | None = None,
-    image_attachments: list[dict] | None = None,
-    data_attachments: list[dict] | None = None,
     session_id: str = "",
     hooks: list[Any] | None = None,
     user_id: str = "",
     user_memory_prompt: str | None = None,
+    file_service: Any | None = None,
 ) -> Orchestrator:
     """Factory — create a fresh orchestrator Agent via LiteLLM (no AWS needed).
 
     Args:
         callback_handler:  可选的 Strands 流式回调，用于 SSE 流式输出。
         summary:           Redis 滚动摘要；不进入 system prompt。
-        attachments_text:  内联文档文本；不进入 system prompt。
-        image_attachments: 会话内的图片附件引用列表；不进入 system prompt。
-        data_attachments:  会话内的结构化数据文件列表；不进入 system prompt。
         session_id:        注入到 scoped tools 的会话 ID。
         hooks:             Strands lifecycle hooks for application-level observers.
         user_id:           当前用户 public id，写入 LiteLLM metadata 以便 usage 回调记账。
         user_memory_prompt: 用户长期记忆片段；不进入 system prompt。
+        file_service:      当前用户上传文件读取工具使用的文件服务。
     """
     selected_model = settings.effective_model_id()
     model = create_litellm_model(
@@ -68,6 +64,8 @@ def create_orchestrator(
 
     tool_definitions = build_orchestrator_tool_definitions(
         session_id=session_id,
+        user_id=user_id,
+        file_service=file_service,
     )
     system_prompt = str(build_system_prompt(BuildSystemPromptOptions(
         tools=tool_definitions,

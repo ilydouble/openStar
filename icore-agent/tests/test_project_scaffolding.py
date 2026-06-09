@@ -519,6 +519,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
         encoding="utf-8"
     )
     agent_context_dir = agent_dir / "context"
+    agent_domain_context_dir = package_dir / "domain" / "agent" / "context"
     agent_turn_dir = agent_dir / "turn"
     agent_session_dir = agent_dir / "session"
     agent_runner_dir = agent_dir / "runner"
@@ -537,7 +538,9 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert chat_sources == []
     assert (agent_context_dir / "__init__.py").is_file()
     assert (agent_context_dir / "loader.py").is_file()
-    assert (agent_context_dir / "models.py").is_file()
+    assert not (agent_context_dir / "models.py").exists()
+    assert (agent_domain_context_dir / "__init__.py").is_file()
+    assert (agent_domain_context_dir / "models.py").is_file()
     assert (agent_context_dir / "ports.py").is_file()
     assert (agent_context_dir / "attachments.py").is_file()
     assert (agent_context_dir / "history.py").is_file()

@@ -2,10 +2,9 @@
 
 from .attachments import dedupe_file_uuids
 from .loader import load_agent_context
-from .models import (
+from icore_agent.domain.agent.context.models import (
     AgentContext,
-    AgentDataAttachment,
-    AgentDataColumn,
+    AgentFileAttachment,
     AgentImageAttachment,
 )
 from .ports import (
@@ -17,8 +16,7 @@ from .ports import (
 
 __all__ = [
     "AgentContext",
-    "AgentDataAttachment",
-    "AgentDataColumn",
+    "AgentFileAttachment",
     "AgentImageAttachment",
     "AgentSessionReader",
     "ConversationMemory",

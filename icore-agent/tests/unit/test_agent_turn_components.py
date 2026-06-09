@@ -252,11 +252,16 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
-    assert request.message == "Hello"
+    assert request.message.startswith("Hello\n\nAttached files for this turn:")
+    assert 'file_attachment filename="notes.txt" uuid="file-1"' in request.message
+    assert "read_uploaded_file" in request.message
     assert request.runner is factory.runner
     assert request.history_messages == [{"role": "user", "content": "old"}]
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
+    assert "attachments_text" not in factory.calls[0]
+    assert "data_attachments" not in factory.calls[0]
+    assert factory.calls[0]["file_service"] is None
     assert len(factory.calls[0]["hooks"]) == 1
 
 
@@ -458,11 +463,13 @@ class StubContext:
     """Minimal agent context test double."""
 
     summary = "summary"
-    attachments_text = "text"
     image_attachment_payloads = [{"file_uuid": "image-1"}]
-    data_attachment_payloads = [{"file_uuid": "data-1"}]
+    file_attachment_payloads = [
+        {"filename": "notes.txt", "file_uuid": "file-1"},
+        {"filename": "data.csv", "file_uuid": "file-2"},
+    ]
     image_attachments = [object()]
-    data_attachments = [object()]
+    file_attachments = [object(), object()]
     user_memory_prompt = "remember"
     strands_history = [{"role": "user", "content": "old"}]
     has_attachments = True

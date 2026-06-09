@@ -167,7 +167,7 @@ def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     # Verify direct main-agent tools are registered.
     _, kwargs = mock_agent_cls.call_args
     tools = kwargs.get("tools", [])
-    assert len(tools) == 11
+    assert len(tools) == 12
     assert all(isinstance(tool, AgentTool) for tool in tools)
     assert "web_search" in kwargs["system_prompt"]
 
@@ -177,13 +177,13 @@ def test_orchestrator_prompt_builder_uses_only_base_and_tools():
     prompt = str(build_system_prompt(BuildSystemPromptOptions(
         tools=build_orchestrator_tool_definitions(session_id="session-1"),
         summary="Earlier summary",
-        attachments_text="Inline doc text",
         user_memory_prompt="## About this user\n- tone: concise",
     )))
 
     assert "You are iCore Agent" in prompt
     assert "web_search" in prompt
     assert "run_python_snippet" in prompt
+    assert "read_uploaded_file" in prompt
     assert "chroma_search" in prompt
     assert "generate_image" in prompt
     assert "data_agent_tool" not in prompt

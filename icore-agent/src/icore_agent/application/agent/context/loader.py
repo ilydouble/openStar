@@ -7,7 +7,7 @@ from icore_agent.shared.logging.app_logger import get_logger
 from .attachments import load_attachment_context
 from .history import load_history_context, to_strands_messages
 from .memory import build_user_memory_prompt
-from .models import AgentContext
+from icore_agent.domain.agent.context.models import AgentContext
 from .ports import (
     AgentSessionReader,
     ConversationMemory,
@@ -44,7 +44,7 @@ async def load_agent_context(
                     session_id=session_id, error=str(exc))
         return AgentContext.empty()
 
-    inline_text, image_refs, data_refs = load_attachment_context(
+    image_refs, file_refs = load_attachment_context(
         file_uuids=file_uuids,
         user_id=user_id,
         file_service=file_service,
@@ -59,9 +59,8 @@ async def load_agent_context(
     return AgentContext(
         summary=summary,
         strands_history=to_strands_messages(history),
-        attachments_text=inline_text or None,
         has_rag=False,
         image_attachments=image_refs,
-        data_attachments=data_refs,
+        file_attachments=file_refs,
         user_memory_prompt=user_memory_prompt,
     )

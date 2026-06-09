@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -97,24 +96,19 @@ async def test_load_agent_context_skips_history_fallback_and_memory_prompt_in_in
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_buckets_text_image_and_data_attachments(tmp_path: Path) -> None:
-    """File UUIDs should resolve into text, image, and structured data context."""
-    csv_path = tmp_path / "data.csv"
-    csv_path.write_text("name,value\nalpha,1\nbeta,2\n", encoding="utf-8")
+async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
+    """File UUIDs should resolve into metadata-only attachment refs."""
     assets = {
         "txt-1": _asset("txt-1", "notes.txt", "text/plain"),
         "img-1": _asset("img-1", "chart.png", "image/png"),
         "csv-1": _asset("csv-1", "data.csv", "text/csv"),
+        "pdf-1": _asset("pdf-1", "paper.pdf", "application/pdf"),
     }
-    file_service = FakeFileService(
-        assets,
-        bytes_by_uuid={"txt-1": b"plain notes"},
-        temp_files={"csv-1": csv_path},
-    )
+    file_service = FakeFileService(assets)
 
     context = await agent_context.load_agent_context(
         session_id="session-1",
-        file_uuids=("txt-1", "img-1", "csv-1", "txt-1"),
+        file_uuids=("txt-1", "img-1", "csv-1", "pdf-1", "txt-1"),
         user_id="user-1",
         user_message="Use these files",
         incognito=False,
@@ -124,7 +118,6 @@ async def test_load_agent_context_buckets_text_image_and_data_attachments(tmp_pa
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )
 
-    assert "### notes.txt (txt-1)\n\nplain notes" == context.attachments_text
     assert context.image_attachment_payloads == [
         {
             "filename": "chart.png",
@@ -132,13 +125,14 @@ async def test_load_agent_context_buckets_text_image_and_data_attachments(tmp_pa
             "file_uuid": "img-1",
         }
     ]
-    assert context.data_attachment_payloads[0]["filename"] == "data.csv"
-    assert context.data_attachment_payloads[0]["row_count"] == 2
-    assert [
-        column["name"]
-        for column in context.data_attachment_payloads[0]["columns"]
-    ] == ["name", "value"]
+    assert context.file_attachment_payloads == [
+        {"filename": "notes.txt", "file_uuid": "txt-1"},
+        {"filename": "data.csv", "file_uuid": "csv-1"},
+        {"filename": "paper.pdf", "file_uuid": "pdf-1"},
+    ]
     assert context.user_memory_prompt == "memory prompt"
+    assert file_service.read_calls == []
+    assert file_service.materialize_calls == []
 
 
 @pytest.mark.asyncio
@@ -214,14 +208,11 @@ class FakeFileService:
     def __init__(
         self,
         assets: dict[str, FileAsset],
-        *,
-        bytes_by_uuid: dict[str, bytes] | None = None,
-        temp_files: dict[str, Path] | None = None,
     ) -> None:
-        """Create the fake with owned assets and optional file contents."""
+        """Create the fake with owned assets."""
         self.assets = assets
-        self.bytes_by_uuid = bytes_by_uuid or {}
-        self.temp_files = temp_files or {}
+        self.read_calls: list[tuple[str, str]] = []
+        self.materialize_calls: list[tuple[str, str]] = []
 
     def get_owned_asset(self, *, uploader_public_id: str, file_uuid: str) -> FileAsset:
         """Return an owned file asset."""
@@ -232,12 +223,14 @@ class FakeFileService:
         return f"https://files.example/{file_uuid}"
 
     def read_file_bytes(self, *, uploader_public_id: str, file_uuid: str) -> bytes:
-        """Return configured file bytes."""
-        return self.bytes_by_uuid[file_uuid]
+        """Fail if context loading tries to read file bytes."""
+        self.read_calls.append((uploader_public_id, file_uuid))
+        raise AssertionError("context must not read uploaded file bytes")
 
-    def materialize_temp_file(self, *, uploader_public_id: str, file_uuid: str) -> tuple[FileAsset, Path]:
-        """Return a configured local temporary file path."""
-        return self.assets[file_uuid], self.temp_files[file_uuid]
+    def materialize_temp_file(self, *, uploader_public_id: str, file_uuid: str):
+        """Fail if context loading tries to materialize uploaded files."""
+        self.materialize_calls.append((uploader_public_id, file_uuid))
+        raise AssertionError("context must not materialize uploaded files")
 
 
 def _asset(file_uuid: str, filename: str, content_type: str) -> FileAsset:

@@ -46,10 +46,8 @@ class TurnUsageRecorder:
         try:
             attachment_count = (
                 len(context.image_attachments)
-                + len(context.data_attachments)
+                + len(context.file_attachments)
             )
-            if context.attachments_text:
-                attachment_count += 1
             if attachment_count:
                 self._usage_service.consume_quota(
                     command.user_id,

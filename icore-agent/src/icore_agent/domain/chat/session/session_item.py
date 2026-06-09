@@ -9,16 +9,12 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.time.utils import utc_now
 
 
 def _new_id() -> str:
     """Return a stable public domain id."""
     return str(uuid7())
-
-
-def utc_now() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
-    return datetime.now(UTC)
 
 
 class SessionItemType(StrEnum):

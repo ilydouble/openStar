@@ -69,13 +69,18 @@ async def run_worker(
         settings.topic,
         bootstrap_servers=list(settings.brokers),
         group_id=settings.group_id,
+        auto_offset_reset="earliest",
         enable_auto_commit=False,
     )
     await consumer.start()
     try:
         async for message in consumer:
-            if _handle_message(repository, message.value):
-                await consumer.commit()
+            await _handle_consumer_message(
+                consumer,
+                message,
+                repository,
+                settings.poll_timeout_ms,
+            )
     finally:
         await consumer.stop()
 
@@ -96,6 +101,23 @@ def _handle_message(repository: PostgresPaymentEventRepository, value: bytes) ->
         return True
     log.error("payment event rejected reason=%s", result.reason)
     return False
+
+
+async def _handle_consumer_message(
+    consumer: Any,
+    message: Any,
+    repository: PostgresPaymentEventRepository,
+    poll_timeout_ms: int,
+) -> None:
+    """Handle one Kafka message and advance only when that message is durable."""
+    from aiokafka import TopicPartition
+
+    topic_partition = TopicPartition(message.topic, message.partition)
+    if _handle_message(repository, message.value):
+        await consumer.commit({topic_partition: message.offset + 1})
+        return
+    consumer.seek(topic_partition, message.offset)
+    await asyncio.sleep(max(poll_timeout_ms, 1) / 1000)
 
 
 def main() -> None:

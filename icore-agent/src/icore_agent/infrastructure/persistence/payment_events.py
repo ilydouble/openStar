@@ -67,6 +67,8 @@ class PostgresPaymentEventRepository:
                 user = users.get_by_public_id(user_id)
                 if user is None:
                     return PaymentEventApplyResult("rejected", f"user not found: {user_id}")
+                if plan == Plan.BYOK and not _byok_credentials_configured(user.byok):
+                    return PaymentEventApplyResult("deferred", "byok credentials required")
 
                 old_plan = user.plan
                 users.save(
@@ -115,3 +117,8 @@ def _required_string(payload: dict[str, Any], key: str) -> str:
     if not value:
         raise ValueError(f"payment event missing {key}")
     return value
+
+
+def _byok_credentials_configured(byok: dict[str, Any]) -> bool:
+    """Return whether BYOK has been explicitly enabled with a user API key."""
+    return bool(byok.get("enabled")) and bool(str(byok.get("api_key") or "").strip())

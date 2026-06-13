@@ -85,3 +85,29 @@ def test_payment_compose_and_env_are_loaded_by_compose_script() -> None:
     assert "payment-service/Dockerfile.migrate" in compose
     assert "POSTGRES_ADMIN_USER" in env_example
     assert "PAYMENT_DATABASE_URL" in env_example
+    assert "PAYMENT_RECONCILIATION_POLL_INTERVAL" in env_example
+    assert "PAYMENT_RECONCILIATION_BATCH_SIZE" in env_example
+    assert "PAYMENT_RECONCILIATION_QUERY_TIMEOUT" in env_example
+
+
+def test_python_payment_event_consumer_scaffold_is_wired() -> None:
+    """Verify Python has a dedicated payment success-event consumer service."""
+    backend_compose = read_text(
+        PROJECT_ROOT / "infrastructure/docker/compose/backend.yml"
+    )
+    pyproject = read_text(PROJECT_ROOT / "pyproject.toml")
+    migration = read_text(
+        PROJECT_ROOT
+        / "alembic/versions/0012_create_processed_payment_events.py"
+    )
+
+    assert '"aiokafka' in pyproject
+    assert "payment-events-consumer:" in backend_compose
+    assert "python -m icore_agent.workers.payment_events" in backend_compose
+    assert "PAYMENT_EVENTS_KAFKA_BROKERS" in backend_compose
+    assert "PAYMENT_EVENTS_KAFKA_TOPIC" in backend_compose
+    assert "PAYMENT_EVENTS_GROUP_ID" in backend_compose
+    assert "payment-service:" not in backend_compose.split(
+        "payment-events-consumer:", 1)[1]
+    assert "processed_payment_events" in migration
+    assert "event_id" in migration

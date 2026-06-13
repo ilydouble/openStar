@@ -445,8 +445,8 @@ def test_http_interface_layer_is_split_by_business_domain():
             "handlers": {"documents.py"},
         },
         "payment": {
-            "schemas": {"checkout.py", "order.py", "upgrade.py"},
-            "handlers": {"checkout.py", "order.py", "upgrade.py", "webhook.py"},
+            "schemas": {"checkout.py", "order.py"},
+            "handlers": {"checkout.py", "order.py", "webhook.py"},
         },
     }
     for domain, expected in expected_domains.items():
@@ -458,6 +458,23 @@ def test_http_interface_layer_is_split_by_business_domain():
             assert (layer_dir / "__init__.py").is_file()
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
     assert (v1_dir / "users" / "serializers.py").is_file()
+
+
+def test_python_payment_router_does_not_expose_direct_plan_upgrade():
+    """Verify paid plans cannot be activated through a public backend route."""
+    router = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "interfaces"
+        / "http"
+        / "v1"
+        / "payment"
+        / "router.py"
+    ).read_text(encoding="utf-8")
+
+    assert "upgrade-plan" not in router
+    assert "upgrade_plan" not in router
 
 
 def test_agent_chat_handler_stays_http_adapter_only():

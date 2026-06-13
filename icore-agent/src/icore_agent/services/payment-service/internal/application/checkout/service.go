@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +22,7 @@ type Repository interface {
 	MarkProviderPending(context.Context, string, payment.ProviderTransactionRecord) (payment.Order, error)
 	FindByOrderNoForUser(context.Context, string, string) (payment.Order, error)
 	MarkClosed(context.Context, string, string, time.Time) (payment.Order, error)
+	MarkExpiredByProvider(context.Context, string, time.Time) (payment.Order, error)
 }
 
 // Provider creates and closes provider-side payment orders.
@@ -44,7 +43,7 @@ type ServiceConfig struct {
 	OrderTTL   time.Duration
 	Now        func() time.Time
 	NewOrderID func() string
-	NewOrderNo func(time.Time) string
+	NewOrderNo func(time.Time) (string, error)
 }
 
 // Service owns payment checkout use cases.
@@ -59,7 +58,7 @@ type Service struct {
 	orderTTL   time.Duration
 	now        func() time.Time
 	newOrderID func() string
-	newOrderNo func(time.Time) string
+	newOrderNo func(time.Time) (string, error)
 }
 
 // CreateNativePrepayInput is the trusted application request for WeChat Native prepay.
@@ -201,6 +200,9 @@ func (service *Service) CreateNativePrepay(ctx context.Context, input CreateNati
 		if existing.Status == payment.StatusCreated {
 			return service.createProviderPrepay(ctx, existing, item, input)
 		}
+		if existing.Status == payment.StatusPending && existingPrepayExpired(existing, service.now().UTC()) {
+			return service.expireExistingPrepay(ctx, existing, input)
+		}
 		if existing.ReusableForPrepay() {
 			return nativePrepayResultFromOrder(existing), nil
 		}
@@ -211,9 +213,13 @@ func (service *Service) CreateNativePrepay(ctx context.Context, input CreateNati
 	}
 
 	now := service.now().UTC()
+	orderNo, err := service.newOrderNo(now)
+	if err != nil {
+		return NativePrepayResult{}, err
+	}
 	order := payment.Order{
 		ID:              service.newOrderID(),
-		OrderNo:         service.newOrderNo(now),
+		OrderNo:         orderNo,
 		UserPublicID:    input.UserID,
 		PlanCode:        input.PlanCode,
 		BillingPeriod:   input.BillingPeriod,
@@ -230,6 +236,19 @@ func (service *Service) CreateNativePrepay(ctx context.Context, input CreateNati
 		return NativePrepayResult{}, err
 	}
 	return service.createProviderPrepay(ctx, order, item, input)
+}
+
+func (service *Service) expireExistingPrepay(ctx context.Context, order payment.Order, input CreateNativePrepayInput) (NativePrepayResult, error) {
+	if service.provider != nil {
+		if err := service.provider.CloseOrder(ctx, order.OrderNo); err != nil {
+			service.logProviderError(ctx, "payment provider close expired order failed", traceIDForPrepay(input), paymentlog.OperationCloseOrder, order, input, err)
+			return NativePrepayResult{}, fmt.Errorf("wechat close expired order: %w", err)
+		}
+	}
+	if _, err := service.repository.MarkExpiredByProvider(ctx, order.OrderNo, service.now().UTC()); err != nil {
+		return NativePrepayResult{}, err
+	}
+	return NativePrepayResult{}, payment.ErrPaymentOrderExpired
 }
 
 func (service *Service) createProviderPrepay(ctx context.Context, order payment.Order, item catalog.Item, input CreateNativePrepayInput) (NativePrepayResult, error) {
@@ -413,13 +432,18 @@ func paymentResultFromTransaction(transaction *payment.ProviderTransactionRecord
 	}
 }
 
-// defaultOrderNo creates a compact merchant order number for provider requests.
-func defaultOrderNo(now time.Time) string {
-	random := rand.New(rand.NewSource(now.UnixNano()))
-	suffix := strconv.FormatInt(random.Int63(), 36)
-	value := "wx" + now.UTC().Format("20060102150405") + suffix
-	if len(value) > 32 {
-		return value[:32]
+func existingPrepayExpired(order payment.Order, now time.Time) bool {
+	if order.ProviderTransaction == nil || order.ProviderTransaction.ExpiresAt == nil {
+		return false
 	}
-	return value
+	return !order.ProviderTransaction.ExpiresAt.After(now)
+}
+
+// defaultOrderNo creates a compact UUIDv7 merchant order number for provider requests.
+func defaultOrderNo(_ time.Time) (string, error) {
+	value, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("generate payment order number: %w", err)
+	}
+	return strings.ReplaceAll(value.String(), "-", ""), nil
 }

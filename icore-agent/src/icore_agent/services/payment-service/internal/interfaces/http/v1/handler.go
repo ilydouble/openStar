@@ -176,6 +176,8 @@ func writeApplicationError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "idempotency_conflict", "payment idempotency conflict")
 	case errors.Is(err, payment.ErrInvalidOrderState):
 		writeError(w, http.StatusConflict, "invalid_order_state", "invalid payment order state")
+	case errors.Is(err, payment.ErrPaymentOrderExpired):
+		writeError(w, http.StatusConflict, "payment_order_expired", "payment order expired; create a new client_request_id")
 	default:
 		writeError(w, http.StatusBadGateway, "payment_provider_error", "payment provider error")
 	}

@@ -110,6 +110,9 @@ func TestLoadParsesKafkaAndOutboxTimeouts(t *testing.T) {
 	}`))
 	t.Setenv("PAYMENT_KAFKA_CHECK_TIMEOUT", "4s")
 	t.Setenv("PAYMENT_OUTBOX_PUBLISH_TIMEOUT", "7s")
+	t.Setenv("PAYMENT_RECONCILIATION_POLL_INTERVAL", "11s")
+	t.Setenv("PAYMENT_RECONCILIATION_BATCH_SIZE", "9")
+	t.Setenv("PAYMENT_RECONCILIATION_QUERY_TIMEOUT", "13s")
 
 	cfg, err := Load()
 	if err != nil {
@@ -121,6 +124,15 @@ func TestLoadParsesKafkaAndOutboxTimeouts(t *testing.T) {
 	}
 	if cfg.OutboxPublishTimeout != 7*time.Second {
 		t.Fatalf("OutboxPublishTimeout = %s, want 7s", cfg.OutboxPublishTimeout)
+	}
+	if cfg.ReconcilePollInterval != 11*time.Second {
+		t.Fatalf("ReconcilePollInterval = %s, want 11s", cfg.ReconcilePollInterval)
+	}
+	if cfg.ReconcileBatchSize != 9 {
+		t.Fatalf("ReconcileBatchSize = %d, want 9", cfg.ReconcileBatchSize)
+	}
+	if cfg.ReconcileQueryTimeout != 13*time.Second {
+		t.Fatalf("ReconcileQueryTimeout = %s, want 13s", cfg.ReconcileQueryTimeout)
 	}
 }
 

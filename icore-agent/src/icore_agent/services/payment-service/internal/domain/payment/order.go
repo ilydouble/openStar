@@ -33,6 +33,8 @@ var (
 	ErrIdempotencyConflict = errors.New("payment idempotency conflict")
 	// ErrInvalidOrderState indicates that the requested state transition is not allowed.
 	ErrInvalidOrderState = errors.New("invalid payment order state")
+	// ErrPaymentOrderExpired indicates that the client must create a new payment order.
+	ErrPaymentOrderExpired = errors.New("payment order expired")
 	// ErrProviderMismatch indicates that a verified provider message does not match the local order.
 	ErrProviderMismatch = errors.New("provider payment details do not match local order")
 )

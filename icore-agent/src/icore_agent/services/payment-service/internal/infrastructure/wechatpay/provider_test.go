@@ -7,11 +7,13 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"icore-payment-service/internal/application/paymentlog"
 	"icore-payment-service/internal/domain/payment"
 
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
+	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -80,5 +82,40 @@ func TestProviderErrorFromAPIErrorKeepsSafeWechatPayFields(t *testing.T) {
 	}
 	if strings.Contains(string(payload), "must-not-be-copied") || strings.Contains(string(payload), "Wechatpay-Signature") {
 		t.Fatalf("metadata payload copied signature: %s", string(payload))
+	}
+}
+
+func TestProviderTransactionFromWechatPayTransactionMapsQueryResult(t *testing.T) {
+	successTime := "2026-06-13T12:00:00+08:00"
+	transaction := &payments.Transaction{
+		Appid:         core.String("wx-app"),
+		Mchid:         core.String("mch-1"),
+		OutTradeNo:    core.String("wx202606130001"),
+		TransactionId: core.String("4200000000202606130000000001"),
+		TradeState:    core.String("SUCCESS"),
+		SuccessTime:   core.String(successTime),
+		Amount: &payments.TransactionAmount{
+			Total:    core.Int64(19900),
+			Currency: core.String("CNY"),
+		},
+	}
+
+	result := providerTransactionFromWechatPayTransaction("mch-1", transaction)
+
+	if result.AppID != "wx-app" || result.MchID != "mch-1" {
+		t.Fatalf("app/merchant = %#v", result)
+	}
+	if result.Provider != payment.ProviderWeChatPay || result.PaymentMethod != payment.PaymentMethodNative {
+		t.Fatalf("provider identity = %#v", result)
+	}
+	if result.MerchantOrderNo != "wx202606130001" || result.ProviderTransactionID != "4200000000202606130000000001" {
+		t.Fatalf("order identity = %#v", result)
+	}
+	if result.ProviderTradeState != "SUCCESS" || result.AmountCents != 19900 || result.Currency != "CNY" {
+		t.Fatalf("transaction fields = %#v", result)
+	}
+	wantSuccessTime := time.Date(2026, 6, 13, 4, 0, 0, 0, time.UTC)
+	if result.SuccessTime == nil || !result.SuccessTime.Equal(wantSuccessTime) {
+		t.Fatalf("success time = %v, want %v", result.SuccessTime, wantSuccessTime)
 	}
 }

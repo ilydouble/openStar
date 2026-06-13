@@ -62,3 +62,29 @@ services:
       timeout: 10s
       start_period: 20s
       retries: 5
+
+  payment-events-consumer:
+    image: icore-agent:dev
+    container_name: icore-payment-events-consumer
+    restart: unless-stopped
+    command: python -m icore_agent.workers.payment_events
+    env_file:
+      - ../../../dotenv/.env.database
+    environment:
+      PAYMENT_EVENTS_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
+      PAYMENT_EVENTS_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      PAYMENT_EVENTS_GROUP_ID: ${PAYMENT_EVENTS_GROUP_ID:-icore-agent-payment-events}
+      PAYMENT_EVENTS_POLL_TIMEOUT_MS: ${PAYMENT_EVENTS_POLL_TIMEOUT_MS:-1000}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,kafka,icore-agent,icore-postgres,icore-kafka
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,kafka,icore-agent,icore-postgres,icore-kafka
+    volumes:
+      - ../../../src:/app/src:ro
+    depends_on:
+      icore-agent:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    networks:
+      - icore-net

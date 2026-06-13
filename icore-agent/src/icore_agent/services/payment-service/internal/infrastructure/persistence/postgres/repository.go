@@ -172,6 +172,33 @@ func (repo *Repository) FindByOrderNoForUser(ctx context.Context, orderNo string
 	return scanOrderWithProviderTransaction(row)
 }
 
+// ClaimPendingReconciliationOrders returns unpaid orders that need provider state reconciliation.
+func (repo *Repository) ClaimPendingReconciliationOrders(ctx context.Context, limit int, _ time.Time) ([]payment.Order, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := repo.db.QueryContext(ctx, orderWithLatestProviderTransactionQuery+`
+WHERE o.status = 'pending'
+  AND pt.id IS NOT NULL
+  AND pt.status = 'pending'
+ORDER BY COALESCE(pt.expires_at, o.created_at), o.created_at
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := []payment.Order{}
+	for rows.Next() {
+		order, err := scanOrderWithProviderTransaction(rows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
 // CreateOrder inserts a new local payment order.
 func (repo *Repository) CreateOrder(ctx context.Context, order payment.Order) error {
 	_, err := repo.db.ExecContext(ctx, `
@@ -250,6 +277,51 @@ RETURNING `+orderBaseColumns,
 		return payment.Order{}, err
 	}
 	providerTransaction, err := closeProviderTransaction(ctx, tx, order.ID, closedAt)
+	if err != nil {
+		return payment.Order{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return payment.Order{}, err
+	}
+	order.ProviderTransaction = providerTransaction
+	return order, nil
+}
+
+// MarkClosedByProvider marks an unpaid order and its latest provider transaction as closed.
+func (repo *Repository) MarkClosedByProvider(ctx context.Context, orderNo string, closedAt time.Time) (payment.Order, error) {
+	return repo.markTerminalByProvider(ctx, orderNo, payment.StatusClosed, closedAt)
+}
+
+// MarkExpiredByProvider marks an unpaid order and its latest provider transaction as expired.
+func (repo *Repository) MarkExpiredByProvider(ctx context.Context, orderNo string, expiredAt time.Time) (payment.Order, error) {
+	return repo.markTerminalByProvider(ctx, orderNo, payment.StatusExpired, expiredAt)
+}
+
+func (repo *Repository) markTerminalByProvider(ctx context.Context, orderNo string, status payment.Status, closedAt time.Time) (payment.Order, error) {
+	tx, err := repo.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return payment.Order{}, err
+	}
+	defer rollbackUnlessCommitted(tx)
+
+	row := tx.QueryRowContext(ctx, `
+UPDATE payment_orders o
+SET status = $2,
+    closed_at = $3,
+    version = version + 1,
+    updated_at = now()
+WHERE o.order_no = $1
+  AND o.status <> 'paid'
+RETURNING `+orderBaseColumns,
+		orderNo,
+		string(status),
+		closedAt,
+	)
+	order, err := scanOrderBase(row)
+	if err != nil {
+		return payment.Order{}, err
+	}
+	providerTransaction, err := setLatestProviderTransactionStatus(ctx, tx, order.ID, status, closedAt)
 	if err != nil {
 		return payment.Order{}, err
 	}
@@ -576,9 +648,13 @@ RETURNING `+providerTransactionColumns,
 }
 
 func closeProviderTransaction(ctx context.Context, tx *sql.Tx, orderID string, closedAt time.Time) (*payment.ProviderTransactionRecord, error) {
+	return setLatestProviderTransactionStatus(ctx, tx, orderID, payment.StatusClosed, closedAt)
+}
+
+func setLatestProviderTransactionStatus(ctx context.Context, tx *sql.Tx, orderID string, status payment.Status, closedAt time.Time) (*payment.ProviderTransactionRecord, error) {
 	row := tx.QueryRowContext(ctx, `
 UPDATE payment_provider_transactions pt
-SET status = 'closed',
+SET status = $3,
     closed_at = $2,
     updated_at = now()
 WHERE pt.id = (
@@ -591,6 +667,7 @@ WHERE pt.id = (
 RETURNING `+providerTransactionColumns,
 		orderID,
 		closedAt,
+		string(status),
 	)
 	transaction, err := scanProviderTransaction(row)
 	if errors.Is(err, payment.ErrOrderNotFound) {

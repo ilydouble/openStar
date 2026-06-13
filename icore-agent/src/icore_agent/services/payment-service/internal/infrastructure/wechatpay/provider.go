@@ -129,6 +129,18 @@ func (provider *NativeProvider) CloseOrder(ctx context.Context, outTradeNo strin
 	return nil
 }
 
+// QueryOrderByOutTradeNo queries WeChat Pay by merchant order number.
+func (provider *NativeProvider) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (payment.ProviderTransaction, error) {
+	transaction, _, err := provider.native.QueryOrderByOutTradeNo(ctx, native.QueryOrderByOutTradeNoRequest{
+		OutTradeNo: core.String(outTradeNo),
+		Mchid:      core.String(provider.mchID),
+	})
+	if err != nil {
+		return payment.ProviderTransaction{}, newProviderError("native.query_order_by_out_trade_no", err)
+	}
+	return providerTransactionFromWechatPayTransaction(provider.mchID, transaction), nil
+}
+
 // ParseNotification verifies and decrypts a WeChat Pay notification request.
 func (provider *NativeProvider) ParseNotification(ctx context.Context, request *http.Request) (payment.ProviderNotification, error) {
 	transaction := new(payments.Transaction)
@@ -137,23 +149,34 @@ func (provider *NativeProvider) ParseNotification(ctx context.Context, request *
 		return payment.ProviderNotification{}, newProviderError("native.notification", err)
 	}
 	return payment.ProviderNotification{
-		EventID:   notifyRequest.ID,
-		EventType: notifyRequest.EventType,
-		Transaction: payment.ProviderTransaction{
-			AppID:                 stringValue(transaction.Appid),
-			MchID:                 stringValue(transaction.Mchid),
-			Provider:              payment.ProviderWeChatPay,
-			PaymentMethod:         payment.PaymentMethodNative,
-			MerchantID:            provider.mchID,
-			MerchantOrderNo:       stringValue(transaction.OutTradeNo),
-			ProviderTransactionID: stringValue(transaction.TransactionId),
-			ProviderTradeState:    stringValue(transaction.TradeState),
-			Currency:              transactionCurrency(transaction),
-			AmountCents:           transactionAmount(transaction),
-			SuccessTime:           parseWechatPayTime(transaction.SuccessTime),
-		},
-		RawPayload: []byte(notifyRequest.Resource.Plaintext),
+		EventID:     notifyRequest.ID,
+		EventType:   notifyRequest.EventType,
+		Transaction: providerTransactionFromWechatPayTransaction(provider.mchID, transaction),
+		RawPayload:  []byte(notifyRequest.Resource.Plaintext),
 	}, nil
+}
+
+func providerTransactionFromWechatPayTransaction(mchID string, transaction *payments.Transaction) payment.ProviderTransaction {
+	if transaction == nil {
+		return payment.ProviderTransaction{
+			Provider:      payment.ProviderWeChatPay,
+			PaymentMethod: payment.PaymentMethodNative,
+			MerchantID:    mchID,
+		}
+	}
+	return payment.ProviderTransaction{
+		AppID:                 stringValue(transaction.Appid),
+		MchID:                 stringValue(transaction.Mchid),
+		Provider:              payment.ProviderWeChatPay,
+		PaymentMethod:         payment.PaymentMethodNative,
+		MerchantID:            mchID,
+		MerchantOrderNo:       stringValue(transaction.OutTradeNo),
+		ProviderTransactionID: stringValue(transaction.TransactionId),
+		ProviderTradeState:    stringValue(transaction.TradeState),
+		Currency:              transactionCurrency(transaction),
+		AmountCents:           transactionAmount(transaction),
+		SuccessTime:           parseWechatPayTime(transaction.SuccessTime),
+	}
 }
 
 // newProviderError converts WeChat Pay SDK errors into provider-neutral payment errors.

@@ -83,6 +83,22 @@ func (repo *memoryOrderRepository) MarkClosed(_ context.Context, orderNo string,
 	return repo.orderWithPayment(orderNo), nil
 }
 
+func (repo *memoryOrderRepository) MarkExpiredByProvider(_ context.Context, orderNo string, expiredAt time.Time) (payment.Order, error) {
+	order, ok := repo.orders[orderNo]
+	if !ok {
+		return payment.Order{}, payment.ErrOrderNotFound
+	}
+	order.Status = payment.StatusExpired
+	order.ClosedAt = &expiredAt
+	repo.orders[orderNo] = order
+	if transaction := repo.providerTransactionForOrder(order.ID); transaction != nil {
+		transaction.Status = payment.StatusExpired
+		transaction.ClosedAt = &expiredAt
+		repo.providerTransactions[order.ID] = *transaction
+	}
+	return repo.orderWithPayment(orderNo), nil
+}
+
 func (repo *memoryOrderRepository) orderWithPayment(orderNo string) payment.Order {
 	order := repo.orders[orderNo]
 	order.ProviderTransaction = repo.providerTransactionForOrder(order.ID)
@@ -101,6 +117,7 @@ type fakeProvider struct {
 	codeURL   string
 	prepayErr error
 	closeErr  error
+	closed    []string
 	calls     []ProviderPrepayRequest
 }
 
@@ -112,7 +129,8 @@ func (provider *fakeProvider) PrepayNative(_ context.Context, request ProviderPr
 	return ProviderPrepayResult{CodeURL: provider.codeURL}, nil
 }
 
-func (provider *fakeProvider) CloseOrder(_ context.Context, _ string) error {
+func (provider *fakeProvider) CloseOrder(_ context.Context, orderNo string) error {
+	provider.closed = append(provider.closed, orderNo)
 	return provider.closeErr
 }
 
@@ -156,8 +174,8 @@ func TestCreateNativePrepayCreatesPendingOrderFromCatalog(t *testing.T) {
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOrderNo: func(time.Time) string {
-			return "wx202606041200000000000001"
+		NewOrderNo: func(time.Time) (string, error) {
+			return "wx202606041200000000000001", nil
 		},
 	})
 
@@ -207,8 +225,8 @@ func TestCreateNativePrepayReturnsExistingPendingOrderForSameIdempotencyKey(t *t
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOrderNo: func(time.Time) string {
-			return "wx202606041200000000000001"
+		NewOrderNo: func(time.Time) (string, error) {
+			return "wx202606041200000000000001", nil
 		},
 	})
 
@@ -236,6 +254,72 @@ func TestCreateNativePrepayReturnsExistingPendingOrderForSameIdempotencyKey(t *t
 	}
 	if len(provider.calls) != 1 {
 		t.Fatalf("provider calls = %d, want 1", len(provider.calls))
+	}
+}
+
+func TestCreateNativePrepayRejectsExpiredPendingOrderForSameIdempotencyKey(t *testing.T) {
+	now := time.Date(2026, 6, 4, 12, 30, 0, 0, time.UTC)
+	expiredAt := now.Add(-time.Minute)
+	repo := newMemoryOrderRepository()
+	key := payment.IdempotencyKey("user-1", "pro", "monthly", "req-1")
+	repo.orders["wx202606041200000000000001"] = payment.Order{
+		ID:              "11111111-1111-1111-1111-111111111111",
+		OrderNo:         "wx202606041200000000000001",
+		UserPublicID:    "user-1",
+		PlanCode:        "pro",
+		BillingPeriod:   "monthly",
+		AmountCents:     19900,
+		Currency:        "CNY",
+		Status:          payment.StatusPending,
+		ClientRequestID: "req-1",
+		IdempotencyKey:  key,
+		CreatedAt:       now.Add(-time.Hour),
+		UpdatedAt:       now.Add(-time.Hour),
+	}
+	repo.idempotencies[key] = "wx202606041200000000000001"
+	repo.providerTransactions["11111111-1111-1111-1111-111111111111"] = payment.ProviderTransactionRecord{
+		ID:              "22222222-2222-2222-2222-222222222222",
+		OrderID:         "11111111-1111-1111-1111-111111111111",
+		Provider:        payment.ProviderWeChatPay,
+		PaymentMethod:   payment.PaymentMethodNative,
+		MerchantID:      "mch-1",
+		MerchantOrderNo: "wx202606041200000000000001",
+		Status:          payment.StatusPending,
+		PaymentPayload:  map[string]any{"code_url": "weixin://expired"},
+		ExpiresAt:       &expiredAt,
+		CreatedAt:       now.Add(-time.Hour),
+		UpdatedAt:       now.Add(-time.Hour),
+	}
+	provider := &fakeProvider{codeURL: "weixin://new-code-url"}
+	service := NewService(ServiceConfig{
+		Catalog:    testCatalog(t),
+		Repository: repo,
+		Provider:   provider,
+		AppID:      "wx-app",
+		MchID:      "mch-1",
+		NotifyURL:  "https://pay.example.com/webhooks/wechatpay/native",
+		OrderTTL:   30 * time.Minute,
+		Now:        func() time.Time { return now },
+	})
+
+	_, err := service.CreateNativePrepay(context.Background(), CreateNativePrepayInput{
+		UserID:          "user-1",
+		PlanCode:        "pro",
+		BillingPeriod:   "monthly",
+		ClientRequestID: "req-1",
+	})
+
+	if !errors.Is(err, payment.ErrPaymentOrderExpired) {
+		t.Fatalf("CreateNativePrepay error = %v, want ErrPaymentOrderExpired", err)
+	}
+	if len(provider.calls) != 0 {
+		t.Fatalf("provider prepay calls = %d, want 0", len(provider.calls))
+	}
+	if len(provider.closed) != 1 || provider.closed[0] != "wx202606041200000000000001" {
+		t.Fatalf("provider closed = %#v", provider.closed)
+	}
+	if got := repo.orders["wx202606041200000000000001"].Status; got != payment.StatusExpired {
+		t.Fatalf("order status = %s, want expired", got)
 	}
 }
 
@@ -291,6 +375,26 @@ func TestCreateNativePrepayRetriesProviderForExistingCreatedOrder(t *testing.T) 
 	}
 }
 
+func TestDefaultOrderNoUsesCollisionResistantUUID7Value(t *testing.T) {
+	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+
+	first, err := defaultOrderNo(now)
+	if err != nil {
+		t.Fatalf("defaultOrderNo first returned error: %v", err)
+	}
+	second, err := defaultOrderNo(now)
+	if err != nil {
+		t.Fatalf("defaultOrderNo second returned error: %v", err)
+	}
+
+	if first == second {
+		t.Fatalf("defaultOrderNo generated duplicate values for same timestamp: %q", first)
+	}
+	if len(first) != 32 || len(second) != 32 {
+		t.Fatalf("order numbers = %q/%q, want 32 characters", first, second)
+	}
+}
+
 func TestCreateNativePrepayLogsProviderErrorWithWrappedMetadata(t *testing.T) {
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
 	repo := newMemoryOrderRepository()
@@ -315,8 +419,8 @@ func TestCreateNativePrepayLogsProviderErrorWithWrappedMetadata(t *testing.T) {
 		OrderTTL:   30 * time.Minute,
 		Now:        func() time.Time { return now },
 		NewOrderID: func() string { return "11111111-1111-1111-1111-111111111111" },
-		NewOrderNo: func(time.Time) string {
-			return "wx202606041200000000000001"
+		NewOrderNo: func(time.Time) (string, error) {
+			return "wx202606041200000000000001", nil
 		},
 	})
 

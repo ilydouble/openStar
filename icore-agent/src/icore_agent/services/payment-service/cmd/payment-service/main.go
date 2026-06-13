@@ -10,6 +10,7 @@ import (
 
 	"icore-payment-service/internal/application/checkout"
 	"icore-payment-service/internal/application/notification"
+	"icore-payment-service/internal/application/reconciliation"
 	"icore-payment-service/internal/config"
 	outboxkafka "icore-payment-service/internal/infrastructure/kafka"
 	postgresrepo "icore-payment-service/internal/infrastructure/persistence/postgres"
@@ -75,6 +76,16 @@ func main() {
 		Repository: repository,
 		Logger:     appLogger,
 	})
+	reconciliationService := reconciliation.NewService(reconciliation.Config{
+		Repository:   repository,
+		Provider:     wechatProvider,
+		Logger:       log.Default(),
+		AppID:        cfg.WeChatPay.AppID,
+		MchID:        cfg.WeChatPay.MchID,
+		BatchSize:    cfg.ReconcileBatchSize,
+		PollInterval: cfg.ReconcilePollInterval,
+		QueryTimeout: cfg.ReconcileQueryTimeout,
+	})
 
 	kafkaProducer := sharedkafka.NewKafkaPublisher(sharedkafka.Config{
 		Brokers: cfg.KafkaBrokers,
@@ -93,6 +104,7 @@ func main() {
 		Logger:         log.Default(),
 	})
 	go outboxPublisher.Run(ctx, cfg.OutboxPollInterval)
+	go reconciliationService.Run(ctx)
 
 	router := httpv1.NewRouter(httpv1.HandlerConfig{
 		Checkout:     checkoutService,

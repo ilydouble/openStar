@@ -38,6 +38,9 @@ type Config struct {
 	OutboxPollInterval    time.Duration
 	OutboxBatchSize       int
 	OutboxPublishTimeout  time.Duration
+	ReconcilePollInterval time.Duration
+	ReconcileBatchSize    int
+	ReconcileQueryTimeout time.Duration
 }
 
 // Load reads process environment and validates payment-owned configuration.
@@ -99,6 +102,9 @@ func Load() (Config, error) {
 			"PAYMENT_OUTBOX_PUBLISH_TIMEOUT",
 			10*time.Second,
 		),
+		ReconcilePollInterval: envconfig.Duration("PAYMENT_RECONCILIATION_POLL_INTERVAL", 30*time.Second),
+		ReconcileBatchSize:    envconfig.Int("PAYMENT_RECONCILIATION_BATCH_SIZE", 50),
+		ReconcileQueryTimeout: envconfig.Duration("PAYMENT_RECONCILIATION_QUERY_TIMEOUT", 10*time.Second),
 	}, nil
 }
 

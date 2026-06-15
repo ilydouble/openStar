@@ -189,6 +189,11 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
             input_preview: String(parsed.input_preview ?? ''),
             step: Number(parsed.step ?? 0),
           }
+        } else if (type === 'file_changed') {
+          yield {
+            kind: 'file_changed',
+            change: parsed.change ?? {},
+          }
         } else if (type === 'error') {
           throw new Error(String(parsed.message ?? 'unknown error'))
         } else if (type === 'done') {
@@ -580,4 +585,87 @@ export async function transcribeSpeech(audioBlob, opts = {}) {
   const payload = await readJsonResponse(resp)
   const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
   return text
+}
+
+// ---------------------------------------------------------------------------
+// Pi Agent file-change actions — Undo and Save All
+// ---------------------------------------------------------------------------
+
+/**
+ * Undo a single Pi Agent file change by reverting its git commit.
+ * @param {string} piSessionId  The pi-source-service session ID
+ * @param {string} changeId     The PendingChange.changeId to revert
+ * @returns {Promise<{ ok: boolean, undoCommit: string }>}
+ */
+export async function piUndoChange(piSessionId, changeId) {
+  const resp = await fetch(
+    `${PI_WORKSPACE_BASE}/sessions/${encodeURIComponent(piSessionId)}/changes/${encodeURIComponent(changeId)}/undo`,
+    {
+      method: 'POST',
+      headers: mergeAgentAuthHeaders({}, 'pi-undo'),
+    },
+  )
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * Mark all pending Pi Agent file changes as permanently saved.
+ * After this call the frontend should hide Undo buttons for all prior changes.
+ * @param {string} piSessionId  The pi-source-service session ID
+ * @returns {Promise<{ ok: boolean, savedChanges: number }>}
+ */
+export async function piSaveAllChanges(piSessionId) {
+  const resp = await fetch(
+    `${PI_WORKSPACE_BASE}/sessions/${encodeURIComponent(piSessionId)}/save-all`,
+    {
+      method: 'POST',
+      headers: mergeAgentAuthHeaders({}, 'pi-save-all'),
+    },
+  )
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
+ * List all pending file changes for a Pi session.
+ * Returns { changes: PendingChange[] } — empty array when session not found.
+ * @param {string} piSessionId
+ */
+export async function listPiChanges(piSessionId) {
+  const resp = await fetch(
+    `${PI_WORKSPACE_BASE}/sessions/${encodeURIComponent(piSessionId)}/changes`,
+    { headers: mergeAgentAuthHeaders({}, 'pi-list-changes') },
+  )
+  if (!resp.ok) return { changes: [] }
+  try {
+    const env = await resp.json()
+    // Handle both raw { changes } and envelope-wrapped { data: { changes } }
+    return env?.data ?? env
+  } catch {
+    return { changes: [] }
+  }
+}
+
+/**
+ * Download the Pi session workspace as a ZIP archive.
+ * Triggers a browser file-save dialog by creating a temporary <a> element.
+ * @param {string} piSessionId  The pi-source-service session ID
+ * @param {string} [filename]   Optional filename override (default: pi-workspace.zip)
+ */
+export async function downloadPiWorkspace(piSessionId, filename = 'pi-workspace.zip') {
+  const resp = await fetch(
+    `${PI_WORKSPACE_BASE}/sessions/${encodeURIComponent(piSessionId)}/download`,
+    { headers: mergeAgentAuthHeaders({}, 'pi-download') },
+  )
+  if (!resp.ok) await readAgentError(resp)
+  const blob = await resp.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }

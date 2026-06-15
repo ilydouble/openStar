@@ -90,6 +90,16 @@ COPY --from=build-coding-agent /pkg/coding-agent/node_modules ./node_modules
 COPY pi-source-service/tsconfig.json ./
 COPY pi-source-service/src ./src
 
+# Install git — required by pi-source-service for per-file change tracking
+# (ensureGitRepo / gitCommit helpers used by the sandboxed write/edit tools).
+# Identity is passed inline per-command (-c flag) so no global config needed.
+RUN apk add --no-cache git \
+ # Allow git to operate on directories owned by any user (workspace files are
+ # extracted by the icore-agent backend container, which may run as a different
+ # UID). This is safe inside the container — the sandbox boundary is enforced
+ # by makeContainmentGuard, not git ownership checks.
+ && git config --system safe.directory '*'
+
 # Sandbox workspace directory for agent tools
 RUN mkdir -p /workspace
 

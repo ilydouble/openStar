@@ -136,10 +136,10 @@
                     :key="msg.id"
                     :ref="(el) => setVirtualRowRef(el, msg, index)"
                     class="pb-6"
-                    :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
+                    :class="msg.role === 'user' ? 'flex flex-col items-end gap-1' : 'flex justify-start'"
                   >
+                <template v-if="msg.role === 'user'">
                 <div
-                  v-if="msg.role === 'user'"
                   :class="[
                     'rounded-2xl rounded-tr-sm text-sm leading-relaxed ring-1 transition-colors duration-300',
                     userBubbleUsesAttachLayout(msg)
@@ -260,6 +260,24 @@
                     {{ msg.content }}
                   </template>
                 </div>
+                  <div v-if="msg.content" class="flex items-center justify-end">
+                    <button
+                      type="button"
+                      class="flex items-center justify-center rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+                      :title="copiedMsgId === msg.id ? t('chat.copied') : t('chat.copyMessage')"
+                      :aria-label="copiedMsgId === msg.id ? t('chat.copied') : t('chat.copyMessage')"
+                      @click="copyMessage(msg)"
+                    >
+                      <svg v-if="copiedMsgId !== msg.id" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                      <svg v-else class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </button>
+                  </div>
+                </template>
                 <div v-else class="flex max-w-[min(92%,calc(100vw-2.5rem))] gap-2 min-[390px]:max-w-[80%] sm:gap-3">
                   <div
                     class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
@@ -325,6 +343,75 @@
                         <span>{{ copiedMsgId === msg.id ? t('chat.copied') : t('chat.copy') }}</span>
                       </button>
                     </div>
+
+                    <!-- Pi Agent file-change cards: Undo / Save All -->
+                    <div
+                      v-if="msg.fileChanges && msg.fileChanges.length"
+                      class="mt-2 space-y-1.5"
+                    >
+                      <div
+                        v-for="change in msg.fileChanges"
+                        :key="change.changeId"
+                        class="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs"
+                        :class="change.undone
+                          ? 'border-zinc-200/60 bg-zinc-50/60 text-zinc-400 dark:border-white/[0.05] dark:bg-zinc-900/30 dark:text-zinc-600'
+                          : 'border-indigo-200/80 bg-indigo-50/70 text-zinc-700 ring-1 ring-indigo-200/40 dark:border-indigo-500/20 dark:bg-indigo-950/30 dark:text-zinc-300 dark:ring-indigo-500/10'"
+                      >
+                        <!-- file icon -->
+                        <svg class="h-3.5 w-3.5 shrink-0" :class="change.undone ? 'text-zinc-400' : 'text-indigo-500'" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <!-- path + action label -->
+                        <span class="min-w-0 flex-1 truncate font-mono">{{ change.path }}</span>
+                        <span
+                          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                          :class="change.undone
+                            ? 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'
+                            : change.savedAt > 0
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              : change.tool === 'write'
+                                ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'"
+                        >
+                          {{ change.undone ? t('home.pi.changeUndone') : change.savedAt > 0 ? t('home.pi.changeSaved') : change.tool === 'write' ? t('home.pi.changeToolWrite') : t('home.pi.changeToolEdit') }}
+                        </span>
+                        <!-- Undo button — hidden once saved or already undone -->
+                        <button
+                          v-if="!change.undone && change.savedAt === 0"
+                          type="button"
+                          class="shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-medium text-zinc-500 transition-colors hover:bg-white hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+                          @click="handlePiUndo(msg, change)"
+                        >{{ t('home.pi.undoBtn') }}</button>
+                      </div>
+
+                      <!-- Save All + Download buttons row -->
+                      <div class="flex gap-1.5">
+                        <!-- Save All — shown only when there are unsaved+non-undone changes -->
+                        <button
+                          v-if="msg.fileChanges.some(c => !c.undone && c.savedAt === 0)"
+                          type="button"
+                          class="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-300/60 bg-emerald-50/80 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100/80 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                          @click="handlePiSaveAll(msg)"
+                        >
+                          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                          </svg>
+                          {{ t('home.pi.saveAll') }}
+                        </button>
+                        <!-- Download workspace ZIP — always shown when there are any changes -->
+                        <button
+                          type="button"
+                          class="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-300/60 bg-zinc-50/80 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100/80 dark:border-zinc-600/30 dark:bg-zinc-800/40 dark:text-zinc-400 dark:hover:bg-zinc-700/40"
+                          :title="t('home.pi.downloadTitle')"
+                          @click="handlePiDownload()"
+                        >
+                          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                          </svg>
+                          {{ t('home.pi.download') }}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                   </div>
@@ -365,7 +452,7 @@
 
           <div
             v-else-if="isHomeRoute"
-            class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
+            class="flex min-h-0 flex-1 flex-col items-center justify-[safe_center] overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
           >
             <div class="flex w-full max-w-5xl flex-col items-center text-center">
               <div class="flex flex-col items-center gap-4 animate-home-hero-in">
@@ -386,7 +473,7 @@
                 </p>
               </div>
 
-              <div class="mt-6 w-full max-w-3xl">
+              <div class="mt-6 w-full max-w-4xl">
                 <SearchBar
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
@@ -511,7 +598,7 @@
                 </div>
               </div>
 
-              <div class="mt-7 grid w-full max-w-4xl gap-3 text-left sm:grid-cols-2">
+              <div class="mt-7 grid w-full max-w-4xl gap-3 text-left sm:grid-cols-2 xl:grid-cols-3">
                 <div
                   v-for="item in homeShortcutItems"
                   :key="item.id"
@@ -692,6 +779,7 @@
               @clear-mode="clearShortcut"
               @select-mode="setComposerMode"
               @toggle-incognito="toggleIncognitoMode"
+              @composer-resize="handleComposerResize"
             />
 
             <!-- Pi mode: pick / upload the sandboxed project Pi should analyze -->
@@ -771,6 +859,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { getBrowserStorage, readStoredString, writeStoredString, removeStoredKey } from '../stores/browserStorage.js'
 import {
   chatStream,
   clearSession,
@@ -786,6 +875,10 @@ import {
   uploadPiProjectFolder,
   listPiWorkspaces,
   deletePiWorkspace,
+  piUndoChange,
+  piSaveAllChanges,
+  downloadPiWorkspace,
+  listPiChanges,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
@@ -1208,8 +1301,18 @@ function toggleIncognitoMode() {
 
 watch(
   () => route.name,
-  (name) => {
-    if (name === 'workspace') resetConversationState()
+  (name, oldName) => {
+    // Guard against killing an in-flight SSE stream: `ensureChatRoute()`
+    // (called right when a message is sent) replaces the route from
+    // 'workspace' to 'workspace-session', and other internal navigations
+    // can transiently report 'workspace' too. Resetting on every such blip
+    // used to abort the user's own just-started stream ~instantly, with no
+    // visible error (AbortError is swallowed silently below). Only treat
+    // this as a genuine "go to a fresh workspace" navigation when the name
+    // actually changed AND there's no active stream to protect.
+    if (name === 'workspace' && name !== oldName && !streamAbortController.value) {
+      resetConversationState()
+    }
   },
 )
 
@@ -1268,7 +1371,19 @@ const scenarioTemplates = computed(() => {
   }))
 })
 
-const activeShortcutId = ref('')
+// Per-session localStorage helpers — key format: icore:pi-mode:{sessionId}
+// and icore:pi-ws:{sessionId}. This lets each session independently remember
+// which Pi mode and workspace were active so a page refresh restores state.
+const _piStorage = getBrowserStorage()
+function _piModeKey(sid) { return `icore:pi-mode:${sid}` }
+function _piWsKey(sid)   { return `icore:pi-ws:${sid}` }
+
+const activeShortcutId = ref(
+  readStoredString(_piStorage, _piModeKey(sessionId.value), ''),
+)
+watch(activeShortcutId, (val) => {
+  writeStoredString(_piStorage, _piModeKey(sessionId.value), val)
+})
 
 // --- Pi mode: uploaded-project workspace selection -------------------------
 // Lets the user upload a whole project folder and have Pi analyze it inside
@@ -1278,7 +1393,13 @@ const activeShortcutId = ref('')
 // extract/point Pi at; it is cleared whenever the user leaves Pi mode.
 const piWorkspaces = ref([])
 const piWorkspacesLoading = ref(false)
-const activePiWorkspaceId = ref('')
+const activePiWorkspaceId = ref(
+  readStoredString(_piStorage, _piWsKey(sessionId.value), ''),
+)
+watch(activePiWorkspaceId, (val) => {
+  if (val) writeStoredString(_piStorage, _piWsKey(sessionId.value), val)
+  else removeStoredKey(_piStorage, _piWsKey(sessionId.value))
+})
 const piWorkspacePickerOpen = ref(false)
 const piProjectInputEl = ref(null)
 const piUploadState = ref(null) // { stage, error? } | null
@@ -1435,7 +1556,9 @@ watch(
     streamingMsg.value = null
     attachmentList.value = []
     uploadError.value = ''
-    activeShortcutId.value = ''
+    // Restore Pi mode/workspace for the new session from localStorage (or reset)
+    activeShortcutId.value = readStoredString(_piStorage, _piModeKey(resolved), '')
+    activePiWorkspaceId.value = readStoredString(_piStorage, _piWsKey(resolved), '')
     await loadPlanSummary()
     await hydrateCurrentSession()
   },
@@ -1472,6 +1595,26 @@ function applyChatScrollBottom() {
   if (!el) return
   el.scrollTop = el.scrollHeight
   syncVirtualContainer(el)
+}
+
+/** Whether the chat scroll container is already at (or very near) its bottom edge. */
+function isChatScrollNearBottom(thresholdPx = 120) {
+  const el = scrollEl.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx
+}
+
+/**
+ * The composer grows taller as the user types multi-line messages. Its
+ * wrapper sits at the bottom of the same flex column as the message list, so
+ * a taller composer shrinks the list's visible height — without re-syncing
+ * scroll position, the latest message ends up sliding behind the composer.
+ * Re-pin to the bottom only when the user was already reading the latest
+ * messages, so scrolling through history isn't interrupted.
+ */
+function handleComposerResize() {
+  if (!isChatScrollNearBottom()) return
+  requestAnimationFrame(() => applyChatScrollBottom())
 }
 
 /** Keep the virtual list window aligned with the chat scroll container. */
@@ -1621,6 +1764,29 @@ async function hydrateCurrentSession() {
       subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
+    // Restore Pi file changes: if this session had Pi mode active, fetch any
+    // pending changes from pi-source-service and attach them to the last
+    // assistant message so Undo / Save All / Download buttons reappear.
+    const restoredWsId = activePiWorkspaceId.value
+      || readStoredString(_piStorage, _piWsKey(sessionId.value), '')
+    if (restoredWsId) {
+      try {
+        const { changes } = await listPiChanges(sessionId.value)
+        if (changes?.length) {
+          // Find the last assistant message and attach all changes to it
+          const lastAssistIdx = [...messages.value].reverse().findIndex((m) => m.role === 'assistant')
+          if (lastAssistIdx !== -1) {
+            const realIdx = messages.value.length - 1 - lastAssistIdx
+            messages.value[realIdx] = {
+              ...messages.value[realIdx],
+              fileChanges: changes.map((c) => ({ ...c, undone: false })),
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — changes just won't show after refresh
+      }
+    }
     if (messages.value.length > 0) {
       await scrollBottom()
     }
@@ -1674,6 +1840,9 @@ async function sendUserMessage(msg, agentHint = '', {
     streaming: true,
     steps: [],
     stepsCollapsed: false,
+    // Pi Agent file changes: list of PendingChange records received during this
+    // turn. Each entry gets its own Undo card; all together feed Save All.
+    fileChanges: [],
   }
   messages.value.push(assistant)
   const replyIndex = messages.value.length - 1
@@ -1717,6 +1886,14 @@ async function sendUserMessage(msg, agentHint = '', {
               tool: evt.tool,
               input_preview: evt.input_preview,
             },
+          ],
+        })
+      } else if (evt.kind === 'file_changed') {
+        const cur = messages.value[replyIndex]
+        commitAssistant({
+          fileChanges: [
+            ...(cur.fileChanges || []),
+            { ...evt.change, undone: false },
           ],
         })
       }
@@ -1763,6 +1940,62 @@ async function sendUserMessage(msg, agentHint = '', {
       sessionSubtitle: text.slice(0, 80),
     })
     await scrollBottom()
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pi Agent file-change actions — Undo and Save All
+// ---------------------------------------------------------------------------
+
+async function handlePiUndo(msg, change) {
+  if (!change || change.undone || change.savedAt > 0) return
+  try {
+    await piUndoChange(sessionId.value, change.changeId)
+    // Mark as undone in the message so the UI updates immediately
+    const msgIdx = messages.value.findIndex((m) => m.id === msg.id)
+    if (msgIdx !== -1) {
+      const updated = {
+        ...messages.value[msgIdx],
+        fileChanges: messages.value[msgIdx].fileChanges.map((c) =>
+          c.changeId === change.changeId ? { ...c, undone: true } : c,
+        ),
+      }
+      messages.value[msgIdx] = updated
+    }
+  } catch (e) {
+    console.error('Pi undo failed', e)
+  }
+}
+
+async function handlePiSaveAll(msg) {
+  if (!msg.fileChanges?.length) return
+  const unsaved = msg.fileChanges.filter((c) => !c.undone && c.savedAt === 0)
+  if (!unsaved.length) return
+  try {
+    await piSaveAllChanges(sessionId.value)
+    // Mark all pending changes for this message as saved
+    const now = Date.now()
+    const msgIdx = messages.value.findIndex((m) => m.id === msg.id)
+    if (msgIdx !== -1) {
+      const updated = {
+        ...messages.value[msgIdx],
+        fileChanges: messages.value[msgIdx].fileChanges.map((c) =>
+          c.savedAt === 0 && !c.undone ? { ...c, savedAt: now } : c,
+        ),
+      }
+      messages.value[msgIdx] = updated
+    }
+  } catch (e) {
+    console.error('Pi save-all failed', e)
+  }
+}
+
+async function handlePiDownload() {
+  if (!sessionId.value) return
+  try {
+    await downloadPiWorkspace(sessionId.value)
+  } catch (e) {
+    console.error('Pi download failed', e)
   }
 }
 

@@ -14,6 +14,10 @@ class ChatStreamEventKind(str, Enum):
     STATUS = "status"
     ERROR = "error"
     DONE = "done"
+    # Emitted when Pi Agent writes or edits a file inside the project sandbox.
+    # Carries the full PendingChange record so the frontend can show an
+    # Undo / Save All card with the affected path and change ID.
+    FILE_CHANGED = "file_changed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +38,9 @@ class ChatStreamEvent:
     tool: str = ""
     input_preview: str = ""
     step: int | None = None
+    # Populated for FILE_CHANGED events: the full PendingChange dict from
+    # pi-source-service (changeId, path, commitHash, tool, bytes, changedAt, savedAt).
+    file_change: dict[str, Any] | None = None
 
     @classmethod
     def token(cls, text: str) -> "ChatStreamEvent":
@@ -66,6 +73,11 @@ class ChatStreamEvent:
         """Create a terminal done event."""
         return cls(kind=ChatStreamEventKind.DONE)
 
+    @classmethod
+    def file_changed(cls, change: dict[str, Any]) -> "ChatStreamEvent":
+        """Create a file-changed event carrying the Pi Agent PendingChange record."""
+        return cls(kind=ChatStreamEventKind.FILE_CHANGED, file_change=change)
+
     def to_payload(self) -> dict[str, Any]:
         """Return the JSON payload exposed by the HTTP streaming adapter."""
         payload: dict[str, Any] = {"type": self.kind.value}
@@ -77,4 +89,6 @@ class ChatStreamEvent:
             payload["input_preview"] = self.input_preview
         elif self.kind is ChatStreamEventKind.ERROR:
             payload["message"] = self.message
+        elif self.kind is ChatStreamEventKind.FILE_CHANGED:
+            payload["change"] = self.file_change or {}
         return payload

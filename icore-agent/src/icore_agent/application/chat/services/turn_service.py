@@ -351,6 +351,12 @@ class ChatTurnService:
                         )),
                         loop,
                     )
+            file_change = kwargs.get("file_change")
+            if file_change and isinstance(file_change, dict):
+                asyncio.run_coroutine_threadsafe(
+                    queue.put(("file_changed", file_change)),
+                    loop,
+                )
             token = kwargs.get("data")
             if token and isinstance(token, str):
                 asyncio.run_coroutine_threadsafe(
@@ -404,6 +410,9 @@ class ChatTurnService:
                 text = payload if isinstance(payload, str) else str(payload)
                 full_reply.append(text)
                 yield ChatStreamEvent.token(text)
+            elif kind == "file_changed":
+                change_data = payload if isinstance(payload, dict) else {}
+                yield ChatStreamEvent.file_changed(change_data)
             elif kind == "status":
                 step_idx += 1
                 status_payload = payload if isinstance(payload, dict) else {}

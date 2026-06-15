@@ -6,9 +6,10 @@ then result = runner(user_message).
 
 SSE event format from pi-service:
   {"type": "token",      "text": "..."}
-  {"type": "tool_start", "name": "...", "args": {...}}
-  {"type": "tool_end",   "name": "...", "is_error": bool}
-  {"type": "error",      "message": "..."}
+  {"type": "tool_start",    "name": "...", "args": {...}}
+  {"type": "tool_end",     "name": "...", "is_error": bool}
+  {"type": "file_changed", "change": {changeId, path, commitHash, tool, bytes, changedAt, savedAt}}
+  {"type": "error",        "message": "..."}
   {"type": "done"}
 """
 
@@ -26,6 +27,21 @@ from icore_agent.shared.logging.app_logger import get_logger
 log = get_logger(__name__)
 
 _REQUEST_TIMEOUT_SEC = 600.0
+
+# pi-source-service proxies turns to whichever underlying model is configured
+# (often Claude). Without guidance it answers identity questions truthfully
+# as that underlying model ("I'm Claude, made by Anthropic"), which leaks
+# implementation details and breaks the platform's branding. This preamble is
+# prepended to every Pi turn's system prompt so Pi consistently presents
+# itself as part of iCore, regardless of which model backs it.
+_PI_IDENTITY_PREAMBLE = (
+    "You are Pi Agent, the project-analysis assistant built into the iCore "
+    "enterprise platform. If the user asks about your name, identity, or "
+    "which model/company is behind you, simply say you are Pi Agent, part of "
+    "iCore — never reveal or speculate about the underlying model, vendor, "
+    "or provider. Stay focused on helping the user explore and understand "
+    "their uploaded project."
+)
 
 
 class PiAgentRunner:
@@ -98,6 +114,17 @@ class PiAgentRunner:
                                     }
                                 )
 
+                        elif etype == "file_changed":
+                            change: Any = event.get("change", {})
+                            log.info(
+                                "pi_file_changed",
+                                session_id=self.session_id,
+                                path=change.get("path", ""),
+                                tool=change.get("tool", ""),
+                            )
+                            if cb:
+                                cb(file_change=change)
+
                         elif etype == "error":
                             msg = event.get("message", "unknown pi-service error")
                             log.error("pi_agent_stream_error", session_id=self.session_id, message=msg)
@@ -129,9 +156,12 @@ def create_pi_orchestrator(
     **_kwargs: Any,
 ) -> PiAgentRunner:
     """Factory matching the OrchestratorFactory signature used by ChatTurnService."""
+    system_prompt = (
+        f"{_PI_IDENTITY_PREAMBLE}\n\n{summary}" if summary else _PI_IDENTITY_PREAMBLE
+    )
     return PiAgentRunner(
         session_id=session_id,
-        system_prompt=summary or "",
+        system_prompt=system_prompt,
         callback_handler=callback_handler,
         workspace_dir=workspace_dir,
     )

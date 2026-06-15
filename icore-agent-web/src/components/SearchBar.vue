@@ -1,5 +1,5 @@
 <template>
-  <div class="relative z-0 mx-auto w-full max-w-3xl">
+  <div class="relative z-30 mx-auto w-full max-w-3xl">
     <div
       v-if="voiceError"
       role="alert"
@@ -130,7 +130,7 @@
       </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
-          <div ref="plusRootRef" class="relative z-10">
+          <div ref="plusRootRef" class="relative z-20">
             <button
               type="button"
               aria-haspopup="menu"
@@ -167,10 +167,13 @@
             >
               <div
                 v-show="plusMenuOpen"
-                class="absolute bottom-full left-0 z-[100] mb-2 max-h-[min(24rem,calc(100dvh-6rem))] min-w-[15rem]
-                       max-w-[min(18.5rem,calc(100vw-2rem))] origin-bottom-left overflow-y-auto overflow-x-hidden
-                       rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl shadow-zinc-900/15
-                       backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/95 dark:shadow-black/50"
+                :class="[
+                  'absolute left-0 z-[100] max-h-[min(24rem,calc(100dvh-6rem))] min-w-[15rem]',
+                  'max-w-[min(18.5rem,calc(100vw-2rem))] overflow-y-auto overflow-x-hidden',
+                  'rounded-xl border border-zinc-200/90 bg-white py-1 shadow-xl shadow-zinc-900/15',
+                  'dark:border-white/10 dark:bg-zinc-900 dark:shadow-black/50',
+                  plusMenuOpensUpward ? 'bottom-full mb-2 origin-bottom-left' : 'top-full mt-2 origin-top-left',
+                ]"
                 role="menu"
               >
                 <template v-if="modePickerOpen && modeMenuItemsList.length">
@@ -391,7 +394,7 @@ const props = defineProps({
   /** 无痕模式：不写入历史、不注入记忆 */
   incognito: { type: Boolean, default: false },
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito'])
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito', 'composer-resize'])
 
 const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
@@ -706,6 +709,13 @@ const fileInputEl = ref(null)
 const plusMenuOpen = ref(false)
 const modePickerOpen = ref(false)
 const plusRootRef = ref(null)
+// Whether the "+" menu panel should open upward (above the trigger) or
+// downward (below it). Decided right before opening, based on the actual
+// viewport space around the trigger button — prevents the panel from
+// overflowing above the viewport top (which used to clip the first item,
+// "Select mode", out of view whenever the trigger sat close to the top,
+// e.g. after scrolling the home page content).
+const plusMenuOpensUpward = ref(true)
 const isDragging = ref(false)
 
 const MAX_PENDING_IMAGES = 5
@@ -929,6 +939,19 @@ function togglePlusMenu() {
     closePlusMenu()
   } else {
     modePickerOpen.value = false
+    // Pick the open direction from the trigger's current viewport position:
+    // prefer opening upward (matches the original design) but fall back to
+    // downward when there isn't enough room above to fit the panel without
+    // it overflowing past the viewport's top edge.
+    const anchor = plusRootRef.value?.getBoundingClientRect()
+    if (anchor) {
+      const estimatedMenuHeight = 270
+      const spaceAbove = anchor.top
+      const spaceBelow = window.innerHeight - anchor.bottom
+      plusMenuOpensUpward.value = spaceAbove >= estimatedMenuHeight || spaceAbove >= spaceBelow
+    } else {
+      plusMenuOpensUpward.value = true
+    }
     plusMenuOpen.value = true
   }
 }
@@ -997,10 +1020,17 @@ onUnmounted(() => {
 function autoGrow() {
   const el = area.value
   if (!el) return
+  const previousHeight = el.style.height
   el.style.overflow = 'hidden'
   el.style.height = 'auto'
   void el.offsetHeight
   el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`
+  // Let the parent know the composer's footprint changed (e.g. growing to a
+  // multi-line textarea) so it can keep the latest message visible above it
+  // instead of letting the taller composer slide over and cover it.
+  if (el.style.height !== previousHeight) {
+    emit('composer-resize')
+  }
 }
 
 function handleSubmit() {

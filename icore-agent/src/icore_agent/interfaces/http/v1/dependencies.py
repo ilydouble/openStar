@@ -6,7 +6,8 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
-from icore_agent.application.chat import ChatHistoryService, ChatTurnService
+from icore_agent.application.agent import AgentSessionService, AgentTurnService
+from icore_agent.application.agent.runner import create_orchestrator
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.pi_workspaces import PiWorkspaceService
 from icore_agent.application.knowledge import KnowledgeService
@@ -15,7 +16,6 @@ from icore_agent.application.usage import UsageService
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.application.chat.orchestrator import create_orchestrator
 from icore_agent.infrastructure.control_plane import (
     ControlPlaneLeadRepository,
     ControlPlaneVerificationRepository,
@@ -75,7 +75,7 @@ billing_service = BillingService(
     billing_repository,
     settings.icore_base_url or "http://localhost:11000",
 )
-chat_history_service = ChatHistoryService()
+agent_session_service = AgentSessionService()
 knowledge_service = KnowledgeService(
     add_documents=add_documents,
     list_documents=list_documents,
@@ -143,20 +143,20 @@ def get_pi_workspace_service() -> PiWorkspaceService:
     return pi_workspace_service
 
 
-def get_chat_history_service() -> ChatHistoryService:
-    """Return the singleton chat history service used by agent handlers."""
-    return chat_history_service
+def get_agent_session_service() -> AgentSessionService:
+    """Return the singleton agent session service used by agent handlers."""
+    return agent_session_service
 
 
-def get_chat_turn_service() -> ChatTurnService:
-    """Return an application service for one HTTP chat turn.
+def get_agent_turn_service() -> AgentTurnService:
+    """Return an application service for one HTTP agent turn.
 
-    usage_service is injected so that every chat turn enforces token quota
+    usage_service is injected so that every agent turn enforces token quota
     before invoking the LLM.  The LiteLLM success callback in main.py then
     records actual usage and decrements the quota counter after the reply.
     """
-    return ChatTurnService(
-        chat_history=chat_history_service,
+    return AgentTurnService(
+        agent_session=agent_session_service,
         file_service=file_asset_service,
         conversation_memory=memory,
         orchestrator_factory=create_orchestrator,

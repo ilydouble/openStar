@@ -150,7 +150,11 @@ func (pipeline *Pipeline) identityHeaderStage(gatewayContext *GatewayContext) bo
 // proxyStage forwards the request to the selected upstream and records its status.
 func (pipeline *Pipeline) proxyStage(gatewayContext *GatewayContext) bool {
 	if pipeline.deps.Proxy != nil {
-		pipeline.deps.Proxy.ServeHTTP(gatewayContext.Recorder, gatewayContext.Request)
+		pipeline.deps.Proxy.ServeHTTP(
+			gatewayContext.Recorder,
+			gatewayContext.Request,
+			gatewayContext.Route.UpstreamAddr,
+		)
 	}
 	if gatewayContext.Route.UpstreamService != "" {
 		status := gatewayContext.Recorder.Status()

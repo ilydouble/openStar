@@ -7,8 +7,14 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.chat import ChatCompletionRole
-from icore_agent.infrastructure.persistence.sessions.models import LlmToolCall
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from icore_agent.domain.agent.turn import Turn, TurnStatus
+from icore_agent.infrastructure.persistence.sessions.models import (
+    ChatSessionItem,
+    ChatTurn,
+    LlmToolCall,
+)
 from icore_agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
@@ -136,3 +142,50 @@ def test_repository_lists_tool_call_summaries_by_assistant_message() -> None:
             }
         ]
     }
+
+
+def test_repository_persists_turn_and_session_item() -> None:
+    """Turn state should persist separately from model transcript messages."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repo = SqlAlchemyChatHistoryRepository(session)
+        chat_session = repo.create_session(
+            "session-public-id",
+            "user-public-id",
+            title="Use a tool",
+        )
+        turn = Turn(session_id="session-public-id")
+        persisted_turn = repo.create_turn(chat_session, turn)
+        item = UserMessageItem(
+            content=[
+                UserInput(
+                    type=UserInputType.TEXT,
+                    text="Hello",
+                )
+            ],
+        )
+        repo.upsert_session_item(chat_session, persisted_turn, item)
+        completed_item = item.model_copy(
+            update={"completed_at": item.created_at})
+        repo.upsert_session_item(chat_session, persisted_turn, completed_item)
+        repo.complete_turn(
+            persisted_turn,
+            status=TurnStatus.COMPLETED,
+            error=None,
+            completed_at=datetime.now(UTC),
+            duration_ms=10,
+        )
+        session.commit()
+
+        stored_turn = session.execute(select(ChatTurn)).scalar_one()
+        stored_item = session.execute(select(ChatSessionItem)).scalar_one()
+
+    assert stored_turn.public_id == turn.id
+    assert stored_turn.status == "completed"
+    assert stored_turn.duration_ms == 10
+    assert stored_item.public_id == item.id
+    assert stored_item.sequence == 1
+    assert stored_item.item_type == "user_message"
+    assert stored_item.payload["content"][0]["text"] == "Hello"

@@ -8,25 +8,25 @@ from collections.abc import AsyncIterator
 
 from fastapi.responses import StreamingResponse
 
-from icore_agent.application.chat import ChatStreamEvent, ChatStreamEventKind
+from icore_agent.domain.agent.turn import TurnEvent, TurnEventKind
 
 SSE_HEARTBEAT_SEC = 15
 
 
-def encode_sse_event(event: ChatStreamEvent) -> str:
+def encode_sse_event(event: TurnEvent) -> str:
     """Encode one application stream event as an SSE data frame."""
     payload = event.to_payload()
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 async def sse_frames(
-    events: AsyncIterator[ChatStreamEvent],
+    events: AsyncIterator[TurnEvent],
     *,
     heartbeat_sec: int = SSE_HEARTBEAT_SEC,
 ) -> AsyncIterator[str]:
     """Convert application events into SSE frames with transport heartbeats."""
     iterator = events.__aiter__()
-    pending: asyncio.Task[ChatStreamEvent] | None = asyncio.create_task(
+    pending: asyncio.Task[TurnEvent] | None = asyncio.create_task(
         iterator.__anext__()
     )
     try:
@@ -40,7 +40,10 @@ async def sse_frames(
             except StopAsyncIteration:
                 break
             yield encode_sse_event(event)
-            if event.kind is ChatStreamEventKind.DONE:
+            if event.kind in {
+                TurnEventKind.TURN_COMPLETED,
+                TurnEventKind.TURN_FAILED,
+            }:
                 break
             pending = asyncio.create_task(iterator.__anext__())
     finally:
@@ -50,7 +53,7 @@ async def sse_frames(
 
 
 def sse_response(
-    events: AsyncIterator[ChatStreamEvent],
+    events: AsyncIterator[TurnEvent],
     *,
     session_id: str,
 ) -> StreamingResponse:

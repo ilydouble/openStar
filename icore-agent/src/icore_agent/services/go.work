@@ -4,5 +4,6 @@ use (
 	./gateway
 	./lib-go
 	./logging-service
+	./payment-service
 	./storage-service
 )

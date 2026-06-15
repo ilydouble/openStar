@@ -160,14 +160,14 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
         "/api/v1/account/login",
         json={"email": email, "verification_code": code},
     )
-    assert login.status_code == 200, login.text
+    assert login.status_code == 200, login.TEXT
     body = _api_data(login)
     token = body["access_token"]
     assert token
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200, me.text
+    assert me.status_code == 200, me.TEXT
     assert _api_data(me)["email"] == email
 
 
@@ -346,9 +346,9 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
 def test_can_fetch_session_state(mock_memory, client: TestClient):
     user_payload = _register_trial_direct(client)
     headers = {"Authorization": f"Bearer {user_payload['access_token']}"}
-    from icore_agent.application.chat import ChatHistoryService
+    from icore_agent.application.agent import AgentSessionService
 
-    ChatHistoryService().ensure_owned_session(
+    AgentSessionService().ensure_owned_session(
         "demo-session",
         user_payload["user"]["id"],
         title="Demo session",

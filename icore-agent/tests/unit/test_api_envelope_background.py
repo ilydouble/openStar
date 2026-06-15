@@ -36,8 +36,8 @@ async def test_finalize_session_schedules_background_extract() -> None:
     from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
 
     user = MagicMock(public_id="user-1")
-    chat_history = MagicMock()
-    chat_history.assert_owned_session = MagicMock()
+    agent_session = MagicMock()
+    agent_session.assert_owned_session = MagicMock()
     user_memory_service = MagicMock()
     background_tasks = MagicMock()
 
@@ -45,17 +45,17 @@ async def test_finalize_session_schedules_background_extract() -> None:
         "session-1",
         background_tasks,
         user=user,
-        chat_history=chat_history,
+        agent_session=agent_session,
         user_memory_service=user_memory_service,
     )
 
-    chat_history.assert_owned_session.assert_called_once_with(
+    agent_session.assert_owned_session.assert_called_once_with(
         "session-1", "user-1")
     background_tasks.add_task.assert_called_once_with(
         session_handlers._run_finalize_session_extract,
         user_id="user-1",
         session_id="session-1",
-        chat_history=chat_history,
+        agent_session=agent_session,
         user_memory_service=user_memory_service,
     )
     user_memory_service.extract_on_session_end.assert_not_called()
@@ -68,9 +68,9 @@ async def test_clear_session_schedules_background_extract() -> None:
     from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
 
     user = MagicMock(public_id="user-1")
-    chat_history = MagicMock()
-    chat_history.assert_owned_session = MagicMock()
-    chat_history.soft_delete_session = MagicMock()
+    agent_session = MagicMock()
+    agent_session.assert_owned_session = MagicMock()
+    agent_session.soft_delete_session = MagicMock()
     user_memory_service = MagicMock()
     background_tasks = MagicMock()
     session_handlers.memory = MagicMock()
@@ -83,14 +83,14 @@ async def test_clear_session_schedules_background_extract() -> None:
         "session-1",
         background_tasks,
         user=user,
-        chat_history=chat_history,
+        agent_session=agent_session,
         user_memory_service=user_memory_service,
     )
 
-    chat_history.assert_owned_session.assert_called_once_with(
+    agent_session.assert_owned_session.assert_called_once_with(
         "session-1", "user-1")
     session_handlers.resolve_session_extract_context.assert_awaited_once()
-    chat_history.soft_delete_session.assert_called_once_with(
+    agent_session.soft_delete_session.assert_called_once_with(
         "session-1", "user-1")
     session_handlers.memory.clear.assert_awaited_once_with("session-1")
     background_tasks.add_task.assert_called_once_with(

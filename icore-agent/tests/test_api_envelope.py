@@ -97,7 +97,8 @@ async def test_v1_json_error_is_wrapped_in_api_envelope() -> None:
     assert payload["code"] == 400
     assert payload["message"] == "bad input"
     assert payload["data"] is None
-    assert payload["error_code"] == "Bad Request"
+    assert "error_reason" not in payload
+    assert "error" + "_code" not in payload
     assert payload["timestamp"]
 
 

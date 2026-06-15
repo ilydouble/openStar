@@ -12,8 +12,8 @@ func NewRouter(handler *Handler) *sharedhttp.Router {
 		AllowEmptyToken: true,
 	})
 
-	router.GET("/health", handler.HandleHealth)
-	router.POST("/v1/log-events", auth, handler.HandleLogEvent)
-	router.POST("/v1/log-events/batch", auth, handler.HandleLogEventBatch)
+	router.Get("/health", handler.HandleHealth)
+	router.With(auth).Post("/v1/log-events", handler.HandleLogEvent)
+	router.With(auth).Post("/v1/log-events/batch", handler.HandleLogEventBatch)
 	return router
 }

@@ -49,7 +49,6 @@ class TurnMemoryContext:
 
     message: str
     session_summary: str | None = None
-    agent_hint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

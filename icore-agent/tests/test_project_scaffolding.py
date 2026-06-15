@@ -196,6 +196,9 @@ def test_object_and_logging_infra_have_init_services():
     assert "kafka-init:" in kafka
     assert "--if-not-exists" in kafka
     assert 'topic "$$LOGGING_KAFKA_TOPIC"' in kafka
+    assert "PAYMENT_KAFKA_TOPIC" in kafka
+    assert "PAYMENT_KAFKA_PARTITIONS" in kafka
+    assert 'topic "$$PAYMENT_KAFKA_TOPIC"' in kafka
 
 
 def test_go_microservice_dockerfiles_use_buildkit_caches():
@@ -442,8 +445,8 @@ def test_http_interface_layer_is_split_by_business_domain():
             "handlers": {"documents.py"},
         },
         "payment": {
-            "schemas": {"checkout.py", "order.py", "upgrade.py"},
-            "handlers": {"checkout.py", "order.py", "upgrade.py", "webhook.py"},
+            "schemas": {"checkout.py", "order.py"},
+            "handlers": {"checkout.py", "order.py", "webhook.py"},
         },
     }
     for domain, expected in expected_domains.items():
@@ -455,6 +458,23 @@ def test_http_interface_layer_is_split_by_business_domain():
             assert (layer_dir / "__init__.py").is_file()
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
     assert (v1_dir / "users" / "serializers.py").is_file()
+
+
+def test_python_payment_router_does_not_expose_direct_plan_upgrade():
+    """Verify paid plans cannot be activated through a public backend route."""
+    router = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "interfaces"
+        / "http"
+        / "v1"
+        / "payment"
+        / "router.py"
+    ).read_text(encoding="utf-8")
+
+    assert "upgrade-plan" not in router
+    assert "upgrade_plan" not in router
 
 
 def test_agent_chat_handler_stays_http_adapter_only():
@@ -494,7 +514,7 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
         "agent" / "handlers" / "chat.py"
     ).read_text(encoding="utf-8")
     command = (
-        package_dir / "application" / "chat" / "commands.py"
+        package_dir / "application" / "agent" / "commands.py"
     ).read_text(encoding="utf-8")
     dependencies = (
         package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
@@ -506,34 +526,94 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
     assert "serialize_user_profile(service.get_current_user" not in dependencies
 
 
-def test_agent_chat_application_uses_explicit_enums_and_history_service_name():
-    """Make chat routing categories explicit and keep history service naming stable."""
+def test_agent_application_uses_explicit_turn_and_session_boundaries():
+    """Keep agent turn/session/runtime code under the agent application package."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
-    routing = (chat_dir / "routing.py").read_text(encoding="utf-8")
-    events = (chat_dir / "events.py").read_text(encoding="utf-8")
-    roles = (package_dir / "domain" / "chat" / "roles.py").read_text(
+    agent_dir = package_dir / "application" / "agent"
+    routing = (agent_dir / "turn" / "routing.py").read_text(encoding="utf-8")
+    roles = (package_dir / "domain" / "agent" / "roles.py").read_text(
         encoding="utf-8"
     )
-    services_dir = chat_dir / "services"
+    agent_context_dir = agent_dir / "context"
+    agent_domain_context_dir = package_dir / "domain" / "agent" / "context"
+    agent_turn_dir = agent_dir / "turn"
+    agent_session_dir = agent_dir / "session"
+    agent_runner_dir = agent_dir / "runner"
+    agent_tool_dir = agent_dir / "tool"
+    turn_service = (agent_turn_dir / "service.py").read_text(
+        encoding="utf-8"
+    )
+    session_service = (agent_session_dir / "service.py").read_text(
+        encoding="utf-8"
+    )
+    agent_init = (
+        agent_dir / "__init__.py"
+    ).read_text(encoding="utf-8")
 
-    assert (services_dir / "__init__.py").is_file()
-    assert (services_dir / "history_service.py").is_file()
-    assert (services_dir / "turn_service.py").is_file()
-    assert not (chat_dir / "history_service.py").exists()
-    assert not (chat_dir / "turn_service.py").exists()
-    assert not (chat_dir / "service.py").exists()
+    chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
+    assert chat_sources == []
+    assert (agent_context_dir / "__init__.py").is_file()
+    assert (agent_context_dir / "loader.py").is_file()
+    assert not (agent_context_dir / "models.py").exists()
+    assert (agent_domain_context_dir / "__init__.py").is_file()
+    assert (agent_domain_context_dir / "models.py").is_file()
+    assert (agent_context_dir / "ports.py").is_file()
+    assert (agent_context_dir / "attachments.py").is_file()
+    assert (agent_context_dir / "history.py").is_file()
+    assert (agent_context_dir / "memory.py").is_file()
+    assert (agent_dir / "loop" / "types.py").is_file()
+    assert (agent_turn_dir / "__init__.py").is_file()
+    assert (agent_turn_dir / "executor.py").is_file()
+    assert (agent_turn_dir / "lifecycle.py").is_file()
+    assert (agent_turn_dir / "persistence.py").is_file()
+    assert (agent_turn_dir / "runner.py").is_file()
+    assert (agent_turn_dir / "transcript.py").is_file()
+    assert (agent_turn_dir / "usage.py").is_file()
+    assert (agent_turn_dir / "service.py").is_file()
+    assert (agent_turn_dir / "routing.py").is_file()
+    assert (agent_session_dir / "__init__.py").is_file()
+    assert (agent_session_dir / "service.py").is_file()
+    assert (agent_runner_dir / "__init__.py").is_file()
+    assert (agent_runner_dir / "orchestrator.py").is_file()
+    assert (agent_runner_dir / "model_factory.py").is_file()
+    assert (agent_tool_dir / "__init__.py").is_file()
+    assert (agent_tool_dir / "callback_context.py").is_file()
+    assert (agent_tool_dir / "event_bridge.py").is_file()
+    assert (agent_tool_dir / "payloads.py").is_file()
+    assert (agent_tool_dir / "projection.py").is_file()
+    assert not (agent_turn_dir / "tool_projection.py").exists()
+    assert not (package_dir / "application" /
+                "agent" / "strands_bridge.py").exists()
+    assert not (package_dir / "application" /
+                "agent" / "tool_payloads.py").exists()
     forbidden_import = "from " + "application.chat"
     for path in (
-        chat_dir / "__init__.py",
-        chat_dir / "context.py",
-        services_dir / "turn_service.py",
+        agent_dir / "__init__.py",
+        agent_turn_dir / "service.py",
+        agent_context_dir / "__init__.py",
+        agent_context_dir / "loader.py",
     ):
         assert forbidden_import not in path.read_text(encoding="utf-8")
-    assert "class ChatIntent(str, Enum)" in routing
-    assert "class AgentHint(str, Enum)" in routing
-    assert "intent: ChatIntent" in routing
-    assert "class ChatStreamEventKind(str, Enum)" in events
+    assert "class AgentIntent(str, Enum)" in routing
+    assert "def classify_turn_intent" in routing
+    assert not (agent_dir / "results.py").exists()
+    assert "AgentTurnResult" not in agent_init
+    assert not (package_dir / "domain" / "chat").exists()
+    assert "class AgentHint" not in routing
+    assert "agent_hint" not in routing
+    assert "enable_tools" not in routing
+    assert "class AgentSessionService" in session_service
+    assert "AgentTurnExecutor" in turn_service
+    assert "PreparedAgentRunner" in agent_init
+    assert "AgentRunnerLike" not in (
+        agent_dir / "async_bridge.py"
+    ).read_text(encoding="utf-8")
+    assert "AgentLoopRequest" not in turn_service
+    assert "StrandsToolEventBridge" not in turn_service
+    assert "begin_turn_usage_capture" not in turn_service
+    assert "_safe_persist_event" not in turn_service
+    assert "from .tool import StrandsToolEventBridge" in agent_init
     assert "class ChatCompletionRole(str, Enum)" in roles
     assert 'TOOL = "tool"' in roles
 
@@ -560,36 +640,64 @@ def test_llm_tool_calls_migration_aligns_with_chat_history_ids():
 def test_number_comparator_is_registered_with_orchestrator_tools():
     """The orchestrator should expose the deterministic number comparison tool."""
     orchestrator = (
-        AGENT_ROOT / "src" / "icore_agent" / "application" / "chat" / "orchestrator.py"
-    ).read_text(encoding="utf-8")
-    tools_init = (
         AGENT_ROOT / "src" / "icore_agent" /
-        "application" / "chat" / "tools" / "__init__.py"
+        "application" / "agent" / "runner" / "orchestrator.py"
+    ).read_text(encoding="utf-8")
+    catalog_init = (
+        AGENT_ROOT / "src" / "icore_agent" /
+        "application" / "agent" / "tool" / "catalog" / "__init__.py"
+    ).read_text(encoding="utf-8")
+    tool_definition = (
+        AGENT_ROOT / "src" / "icore_agent" /
+        "application" / "agent" / "tool" / "tool_definition.py"
     ).read_text(encoding="utf-8")
 
-    assert "from .tools.number_comparator import number_comparator" in orchestrator
-    assert "number_comparator," in orchestrator
-    assert '"number_comparator"' in tools_init
+    assert "build_orchestrator_tool_definitions" in orchestrator
+    assert "make_agent_tool" in orchestrator
+    assert "build_orchestrator_tools" in catalog_init
+    assert "number_comparator" in catalog_init
+    assert "orchestrator_tool_names" not in catalog_init
+    assert "class ToolDefinition" in tool_definition
+    assert "class AgentTool" in tool_definition
+    assert "strands.types._events" not in tool_definition
+    assert "ToolResultEvent" not in tool_definition
+    assert "prompt_snippet" in catalog_init
+    assert "research_agent_tool" not in catalog_init
+    assert "data_agent_tool" not in catalog_init
 
 
 def test_chat_orchestration_lives_in_application_layer():
-    """Keep chat agent runtime and tools under the chat application boundary."""
+    """Keep chat runtime thin while agent owns prompts and tool catalog."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
-    orchestrator = (chat_dir / "orchestrator.py").read_text(encoding="utf-8")
-    prompts = (chat_dir / "prompts.py").read_text(encoding="utf-8")
+    agent_dir = package_dir / "application" / "agent"
+    orchestrator = (agent_dir / "runner" / "orchestrator.py").read_text(
+        encoding="utf-8"
+    )
+    prompt_builder = (
+        agent_dir / "sys_prompt" / "system_prompt_builder.py"
+    ).read_text(encoding="utf-8")
+    prompt_sources = (
+        agent_dir / "sys_prompt" / "prompt_source" / "system_prompt.py"
+    ).read_text(encoding="utf-8")
+    catalog_dir = agent_dir / "tool" / "catalog"
 
     assert not (package_dir / "engine").exists()
     assert not (package_dir / "tools").exists()
-    assert (chat_dir / "agents" / "research.py").is_file()
-    assert (chat_dir / "tools" / "web_search.py").is_file()
-    assert (chat_dir / "sequential" / "agent.py").is_file()
+    chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
+    assert chat_sources == []
+    assert (catalog_dir / "web_search.py").is_file()
+    assert (agent_dir / "sequential" / "agent.py").is_file()
     assert "ModuleNotFoundError" not in orchestrator
     assert "_Fallback" not in orchestrator
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in orchestrator
-    assert "build_orchestrator_system_prompt" in orchestrator
-    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in prompts
-    assert "def build_orchestrator_system_prompt" in prompts
+    assert "sub-agent" not in orchestrator
+    assert "build_system_prompt" in orchestrator
+    assert "class BuildSystemPromptOptions" in prompt_builder
+    assert "build_runtime_context_prompt" not in prompt_builder
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in prompt_sources
+    assert "RESEARCH_SYSTEM_PROMPT" not in prompt_sources
+    assert "SEQUENTIAL_SYSTEM_PROMPT" not in prompt_sources
 
 
 def test_agent_session_schema_uses_explicit_payload_models():

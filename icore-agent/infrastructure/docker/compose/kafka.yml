@@ -40,6 +40,8 @@ services:
     environment:
       LOGGING_KAFKA_TOPIC: ${LOGGING_KAFKA_TOPIC:-logging.events.v1}
       LOGGING_KAFKA_PARTITIONS: ${LOGGING_KAFKA_PARTITIONS:-${KAFKA_NUM_PARTITIONS:-3}}
+      PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      PAYMENT_KAFKA_PARTITIONS: ${PAYMENT_KAFKA_PARTITIONS:-${KAFKA_NUM_PARTITIONS:-3}}
       KAFKA_REPLICATION_FACTOR: ${KAFKA_REPLICATION_FACTOR:-1}
     command:
       - /bin/sh
@@ -56,5 +58,16 @@ services:
           --bootstrap-server kafka:9092 \
           --describe \
           --topic "$$LOGGING_KAFKA_TOPIC"
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --create \
+          --if-not-exists \
+          --topic "$$PAYMENT_KAFKA_TOPIC" \
+          --partitions "$$PAYMENT_KAFKA_PARTITIONS" \
+          --replication-factor "$$KAFKA_REPLICATION_FACTOR"
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:9092 \
+          --describe \
+          --topic "$$PAYMENT_KAFKA_TOPIC"
     networks:
       - icore-net

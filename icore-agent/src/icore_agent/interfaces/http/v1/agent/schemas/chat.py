@@ -10,7 +10,6 @@ class ChatRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     stream: bool = True
     tenant_code: str = ""
-    agent_hint: str = ""
     file_uuids: list[str] = Field(default_factory=list)
     display_caption: str | None = Field(default=None, max_length=32_000)
     agent_message: str | None = Field(default=None, max_length=32_000)

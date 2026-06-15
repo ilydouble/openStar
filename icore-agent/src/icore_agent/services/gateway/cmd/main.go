@@ -85,13 +85,21 @@ func main() {
 			cfg.RateLimitKeyPrefix,
 			time.Now,
 		),
-		ServiceLimiter: ratelimitinfra.NewRedisLimiter(
+		ServiceLimiter: ratelimitinfra.NewServiceRedisLimiter(
 			redisClient,
-			ratelimitinfra.TokenBucketProfile{
-				Scope:         rate_limit.RateLimitScopeService,
-				RatePerSecond: cfg.ServiceRateLimitProfile("icore-agent").RatePerSecond,
-				Burst:         cfg.ServiceRateLimitProfile("icore-agent").Burst,
+			map[string]ratelimitinfra.TokenBucketProfile{
+				"icore-agent": {
+					Scope:         rate_limit.RateLimitScopeService,
+					RatePerSecond: cfg.ServiceRateLimitProfile("icore-agent").RatePerSecond,
+					Burst:         cfg.ServiceRateLimitProfile("icore-agent").Burst,
+				},
+				"payment-service": {
+					Scope:         rate_limit.RateLimitScopeService,
+					RatePerSecond: cfg.ServiceRateLimitProfile("payment-service").RatePerSecond,
+					Burst:         cfg.ServiceRateLimitProfile("payment-service").Burst,
+				},
 			},
+			ratelimitinfra.TokenBucketProfile{Scope: rate_limit.RateLimitScopeService},
 			cfg.RateLimitKeyPrefix,
 			time.Now,
 		),
@@ -101,7 +109,7 @@ func main() {
 	pipeline := appgateway.NewPipeline(
 		appgateway.PipelineConfig{
 			ServiceName:     cfg.LoggingServiceName,
-			RoutePolicy:     route_policy.NewDefaultRoutePolicy(cfg.BackendURL),
+			RoutePolicy:     route_policy.NewDefaultRoutePolicy(cfg.BackendURL, cfg.PaymentServiceURL),
 			RequestIDPolicy: domain2.RequestIDPolicy{},
 			IdentityPolicy:  identity_policy.IdentityPolicy{},
 			Location:        timeLocation,

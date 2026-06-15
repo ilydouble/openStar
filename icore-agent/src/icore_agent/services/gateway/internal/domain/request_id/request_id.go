@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+
+	sharedheaders "icore-services-lib-go/http/headers"
 )
 
 const (
 	// RequestIDHeader is the canonical gateway request-correlation header.
-	RequestIDHeader = "X-Request-ID"
+	RequestIDHeader = sharedheaders.HeaderXRequestID
 )
 
 // RequestIDPolicy normalizes inbound request ids and generates safe fallback ids.

@@ -47,6 +47,9 @@ build/
 .env.*.local
 icore-agent/dotenv/.env.*
 !icore-agent/dotenv/.env.*.example
+icore-agent/secrets/
+icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/*
+!icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/.gitkeep
 icore-agent-web/.env
 !icore-agent-web/.env.example
 
@@ -143,3 +146,7 @@ lerna-debug.log*
 # ----------------------
 ft-base-services-dev_v3.0.0.1/
 ft-operation-mng-services-dev_v3.0.0.1/
+
+# Go
+.gocache/
+.gomodcache/

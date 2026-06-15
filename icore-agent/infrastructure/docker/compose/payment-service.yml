@@ -1,0 +1,108 @@
+services:
+  payment-db-migrate:
+    build:
+      context: ../../../src/icore_agent/services
+      dockerfile: payment-service/Dockerfile.migrate
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+    image: icore-payment-service-migrate:dev
+    container_name: icore-payment-db-migrate
+    restart: 'no'
+    environment:
+      POSTGRES_HOST: ${PAYMENT_DB_HOST:-postgres}
+      POSTGRES_PORT: ${PAYMENT_DB_PORT:-5432}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-icore_agent}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-change-me}
+      POSTGRES_ADMIN_DB: ${POSTGRES_ADMIN_DB:-icore_agent_db}
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:-icore_payment}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-change-me}
+      PAYMENT_DB_NAME: ${PAYMENT_DB_NAME:-icore_payment_db}
+      PAYMENT_DB_SCHEMA: ${PAYMENT_DB_SCHEMA:-payment}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,icore-postgres
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,icore-postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - icore-net
+
+  payment-service:
+    build:
+      context: ../../../src/icore_agent/services
+      dockerfile: payment-service/Dockerfile
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        GOPROXY: ${BUILD_GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
+        GONOPROXY: ${BUILD_GONOPROXY:-}
+        GONOSUMDB: ${BUILD_GONOSUMDB:-}
+    image: icore-payment-service:dev
+    container_name: icore-payment-service
+    restart: unless-stopped
+    environment:
+      PAYMENT_SERVICE_ADDR: ${PAYMENT_SERVICE_ADDR:-:8080}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:change-me@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment}
+      PAYMENT_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
+      PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      PAYMENT_KAFKA_CHECK_TIMEOUT: ${PAYMENT_KAFKA_CHECK_TIMEOUT:-10s}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
+      PAYMENT_LOGGING_SERVICE_NAME: ${PAYMENT_LOGGING_SERVICE_NAME:-payment-service}
+      PAYMENT_LOGGING_SERVICE_TIMEOUT: ${PAYMENT_LOGGING_SERVICE_TIMEOUT:-2s}
+      PAYMENT_LOGGING_QUEUE_SIZE: ${PAYMENT_LOGGING_QUEUE_SIZE:-4096}
+      PAYMENT_CATALOG_JSON_PATH: ${PAYMENT_CATALOG_JSON_PATH:-/etc/icore/payment-service/catalog/plan_items.json}
+      PAYMENT_ORDER_TTL: ${PAYMENT_ORDER_TTL:-30m}
+      PAYMENT_OUTBOX_POLL_INTERVAL: ${PAYMENT_OUTBOX_POLL_INTERVAL:-2s}
+      PAYMENT_OUTBOX_BATCH_SIZE: ${PAYMENT_OUTBOX_BATCH_SIZE:-50}
+      PAYMENT_OUTBOX_PUBLISH_TIMEOUT: ${PAYMENT_OUTBOX_PUBLISH_TIMEOUT:-10s}
+      PAYMENT_RECONCILIATION_POLL_INTERVAL: ${PAYMENT_RECONCILIATION_POLL_INTERVAL:-30s}
+      PAYMENT_RECONCILIATION_BATCH_SIZE: ${PAYMENT_RECONCILIATION_BATCH_SIZE:-50}
+      PAYMENT_RECONCILIATION_QUERY_TIMEOUT: ${PAYMENT_RECONCILIATION_QUERY_TIMEOUT:-10s}
+      WECHATPAY_APP_ID: ${WECHATPAY_APP_ID:-}
+      WECHATPAY_MCH_ID: ${WECHATPAY_MCH_ID:-}
+      WECHATPAY_MCH_CERT_SERIAL_NO: ${WECHATPAY_MCH_CERT_SERIAL_NO:-}
+      WECHATPAY_MCH_PRIVATE_KEY_PATH: ${WECHATPAY_MCH_PRIVATE_KEY_PATH:-/etc/icore/payment-service/wechatpay/secrets/apiclient_key.pem}
+      WECHATPAY_API_V3_KEY: ${WECHATPAY_API_V3_KEY:-}
+      WECHATPAY_PUBLIC_KEY_ID: ${WECHATPAY_PUBLIC_KEY_ID:-}
+      WECHATPAY_PUBLIC_KEY_PATH: ${WECHATPAY_PUBLIC_KEY_PATH:-/etc/icore/payment-service/wechatpay/public/wechatpay_public_key.pem}
+      WECHATPAY_NOTIFY_URL: ${WECHATPAY_NOTIFY_URL:-}
+      WECHATPAY_API_HOST: ${WECHATPAY_API_HOST:-}
+      WECHATPAY_HTTP_TIMEOUT: ${WECHATPAY_HTTP_TIMEOUT:-10s}
+      WECHATPAY_REQUIRE_PRODUCTION_HOST: ${WECHATPAY_REQUIRE_PRODUCTION_HOST:-false}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,logging-service,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-logging-service,icore-payment-service
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,logging-service,payment-service,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-logging-service,icore-payment-service
+    expose:
+      - '8080'
+    volumes:
+      - ../../../src/icore_agent/services/payment-service/config:/etc/icore/payment-service:ro
+    depends_on:
+      payment-db-migrate:
+        condition: service_completed_successfully
+      logging-service:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    networks:
+      - icore-net
+    healthcheck:
+      test: ['CMD-SHELL', 'port="$${PAYMENT_SERVICE_ADDR##*:}"; wget -Y off -qO- "http://127.0.0.1:$${port:-8080}/health"']
+      interval: 30s
+      timeout: 10s
+      retries: 5

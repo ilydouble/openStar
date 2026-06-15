@@ -31,7 +31,7 @@ func TestReverseProxyForwardsToConfiguredBackend(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/account/login", nil)
-	proxy.ServeHTTP(response, request)
+	proxy.ServeHTTP(response, request, "http://backend.local")
 
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", response.Code)
@@ -44,6 +44,29 @@ func TestReverseProxyForwardsToConfiguredBackend(t *testing.T) {
 	}
 }
 
+func TestReverseProxyForwardsToSelectedPaymentUpstream(t *testing.T) {
+	var upstreamHost string
+	proxy := NewReverseProxy("http://backend.local", roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		upstreamHost = request.Host
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+		}, nil
+	}))
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/payment/native/prepay", nil)
+	proxy.ServeHTTP(response, request, "http://payment.local")
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if upstreamHost != "payment.local" {
+		t.Fatalf("host = %q, want payment.local", upstreamHost)
+	}
+}
+
 // TestReverseProxyErrorUsesApiEnvelope verifies gateway proxy failures.
 func TestReverseProxyErrorUsesApiEnvelope(t *testing.T) {
 	proxy := NewReverseProxy("http://backend.local", roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -52,7 +75,7 @@ func TestReverseProxyErrorUsesApiEnvelope(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/account/login", nil)
-	proxy.ServeHTTP(response, request)
+	proxy.ServeHTTP(response, request, "http://backend.local")
 
 	if response.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", response.Code)
@@ -70,7 +93,11 @@ func TestReverseProxyErrorUsesApiEnvelope(t *testing.T) {
 	if payload["data"] != nil {
 		t.Fatalf("data = %#v, want nil", payload["data"])
 	}
-	if payload["error_code"] != http.StatusText(http.StatusBadGateway) {
-		t.Fatalf("error_code = %#v", payload["error_code"])
+	if _, ok := payload["error_reason"]; ok {
+		t.Fatalf("error_reason = %#v, want omitted", payload["error_reason"])
+	}
+	legacyErrorCodeKey := "error" + "_code"
+	if _, ok := payload[legacyErrorCodeKey]; ok {
+		t.Fatalf("legacy error code = %#v, want omitted", payload[legacyErrorCodeKey])
 	}
 }

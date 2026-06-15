@@ -67,7 +67,6 @@ def test_rank_facts_for_turn_prefers_relevant_fact() -> None:
         facts,
         TurnMemoryContext(
             message="Help me optimize my Shopify checkout flow",
-            agent_hint="research",
         ),
     )
     assert selected

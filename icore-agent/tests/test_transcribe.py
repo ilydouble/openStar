@@ -78,7 +78,7 @@ def test_transcribe_converts_webm_before_zai(mock_zai, mock_prepare, client):
         data={"language": "zh-CN"},
         headers=headers,
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 200, resp.TEXT
     mock_prepare.assert_called_once()
     mock_zai.assert_awaited_once()
     assert mock_zai.await_args.kwargs["filename"] == "speech.wav"
@@ -97,7 +97,7 @@ def test_transcribe_zai_returns_text(mock_zai, mock_prepare, client):
         data={"language": "zh-CN"},
         headers=headers,
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 200, resp.TEXT
     assert _api_data(resp) == {"text": "hello world"}
     mock_zai.assert_awaited_once()
     call_kw = mock_zai.await_args.kwargs

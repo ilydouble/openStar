@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	sharedheaders "icore-services-lib-go/http/headers"
 	sharedlogging "icore-services-lib-go/logging"
 )
 
@@ -90,7 +91,7 @@ func (pipeline *Pipeline) beginRequest(w http.ResponseWriter, r *http.Request, r
 		Method:           r.Method,
 		Path:             r.URL.Path,
 		Query:            r.URL.RawQuery,
-		ClientIP:         getClientIP(r),
+		ClientIP:         sharedheaders.ClientIP(r),
 		AuthResult:       "skipped",
 		UserAgent:        userAgent,
 		UserAgentType:    classifyUserAgentType(userAgent),

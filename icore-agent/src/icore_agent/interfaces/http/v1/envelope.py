@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from http import HTTPStatus
 from typing import Any, Generic, TypeVar
 
 from fastapi import FastAPI, Request
@@ -33,7 +32,7 @@ class ApiEnvelope(BaseModel, Generic[T]):
     message: str
     data: T | None
     timestamp: str
-    error_code: str | None = None
+    error_reason: str | None = None
 
 
 def make_api_envelope(
@@ -41,7 +40,7 @@ def make_api_envelope(
     code: int,
     message: str,
     data: Any,
-    error_code: str | None = None,
+    error_reason: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON-ready ApiEnvelope payload used by HTTP v1."""
     envelope: dict[str, Any] = {
@@ -50,8 +49,8 @@ def make_api_envelope(
         "data": data,
         "timestamp": datetime.now(UTC).isoformat(),
     }
-    if error_code:
-        envelope["error_code"] = error_code
+    if error_reason:
+        envelope["error_reason"] = error_reason
     return envelope
 
 
@@ -102,7 +101,6 @@ async def api_http_exception_handler(
             code=exc.status_code,
             message=str(exc.detail),
             data=None,
-            error_code=_error_code(exc.status_code),
         ),
         status_code=exc.status_code,
         headers=exc.headers,
@@ -121,7 +119,6 @@ async def api_validation_exception_handler(
             code=422,
             message=json.dumps(exc.errors(), ensure_ascii=False),
             data=None,
-            error_code=_error_code(422),
         ),
         status_code=422,
     )
@@ -171,7 +168,6 @@ def _envelope_for_payload(status_code: int, payload: Any) -> dict[str, Any]:
             code=status_code,
             message=_error_message(payload),
             data=None,
-            error_code=_error_code(status_code),
         )
     return make_api_envelope(
         code=status_code,
@@ -199,11 +195,3 @@ def _error_message(payload: Any) -> str:
         if message:
             return str(message)
     return "请求失败"
-
-
-def _error_code(status_code: int) -> str:
-    """Return the standard HTTP reason phrase for an error status."""
-    try:
-        return HTTPStatus(status_code).phrase
-    except ValueError:
-        return "HTTPError"

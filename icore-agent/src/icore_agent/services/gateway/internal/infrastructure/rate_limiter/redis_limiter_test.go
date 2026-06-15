@@ -113,6 +113,49 @@ func TestRedisLimiterRejectedDecisionDoesNotConsumeTokenInScript(t *testing.T) {
 	}
 }
 
+func TestServiceRedisLimiterUsesProfileForRequestedService(t *testing.T) {
+	now := time.Date(2026, 5, 17, 10, 0, 0, 0, time.UTC)
+	client := &spyRedisClient{result: []interface{}{int64(1), "allowed", "2"}}
+	limiter := NewServiceRedisLimiter(
+		client,
+		map[string]TokenBucketProfile{
+			"icore-agent": {
+				Scope:         rate_limit.RateLimitScopeService,
+				RatePerSecond: 10,
+				Burst:         20,
+			},
+			"payment-service": {
+				Scope:         rate_limit.RateLimitScopeService,
+				RatePerSecond: 3,
+				Burst:         6,
+			},
+		},
+		TokenBucketProfile{Scope: rate_limit.RateLimitScopeService, RatePerSecond: 1, Burst: 1},
+		"icore-gateway:rate",
+		func() time.Time { return now },
+	)
+
+	_, err := limiter.GetRateLimitDecision(context.Background(), rate_limit.RateLimitTarget{
+		Scope: rate_limit.RateLimitScopeService,
+		Key:   "payment-service",
+	})
+	if err != nil {
+		t.Fatalf("allow: %v", err)
+	}
+
+	if len(client.calls) != 1 {
+		t.Fatalf("Eval calls = %d, want 1", len(client.calls))
+	}
+	call := client.calls[0]
+	wantArgs := []interface{}{now.UnixMilli(), 3, 6, int64(4000)}
+	if !equalInterfaces(call.args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", call.args, wantArgs)
+	}
+	if len(call.keys) != 1 || call.keys[0] != "icore-gateway:rate:service:payment-service" {
+		t.Fatalf("keys = %#v", call.keys)
+	}
+}
+
 func equalInterfaces(left []interface{}, right []interface{}) bool {
 	if len(left) != len(right) {
 		return false

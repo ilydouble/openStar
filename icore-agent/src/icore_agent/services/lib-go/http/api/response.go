@@ -1,34 +1,38 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // WriteJSON wraps successful payloads in the API envelope shared by Go services.
-func WriteJSON(ctx *gin.Context, status int, payload any) {
+func WriteJSON(w http.ResponseWriter, status int, payload any) {
 	message := "操作成功"
 	if status >= http.StatusBadRequest {
 		message = "请求失败"
 	}
 
-	ctx.JSON(status, gin.H{
-		"code":      status,
-		"message":   message,
-		"data":      payload,
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+	writeEnvelope(w, status, ApiEnvelope{
+		Code:      status,
+		Message:   message,
+		Data:      payload,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 }
 
-// WriteError wraps API errors in the shared envelope and aborts the Gin handler chain.
-func WriteError(ctx *gin.Context, status int, message string) {
-	ctx.AbortWithStatusJSON(status, gin.H{
-		"code":       status,
-		"message":    message,
-		"data":       nil,
-		"error_code": http.StatusText(status),
-		"timestamp":  time.Now().UTC().Format(time.RFC3339Nano),
+// WriteError wraps API errors in the shared envelope.
+func WriteError(w http.ResponseWriter, status int, message string) {
+	writeEnvelope(w, status, ApiEnvelope{
+		Code:      status,
+		Message:   message,
+		Data:      nil,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 	})
+}
+
+func writeEnvelope(w http.ResponseWriter, status int, payload ApiEnvelope) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }

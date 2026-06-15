@@ -152,6 +152,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   const reader = resp.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
+  let receivedAssistantText = false
 
   while (true) {
     const { done, value } = await reader.read()
@@ -181,7 +182,10 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       if (parsed && typeof parsed === 'object') {
         const type = parsed.type
         if (type === 'token') {
-          for (const ev of yieldTokenChunks(String(parsed.text ?? ''))) yield ev
+          for (const ev of yieldTokenChunks(String(parsed.text ?? ''))) {
+            receivedAssistantText = true
+            yield ev
+          }
         } else if (type === 'status') {
           yield {
             kind: 'status',
@@ -198,6 +202,40 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
           throw new Error(String(parsed.message ?? 'unknown error'))
         } else if (type === 'done') {
           return
+        } else if (type === 'item_delta') {
+          const text = String(parsed.delta?.text ?? '')
+          for (const ev of yieldTokenChunks(text)) {
+            receivedAssistantText = true
+            yield ev
+          }
+        } else if (type === 'item_started') {
+          const status = parseTurnItemStatus(parsed.item)
+          if (status) yield status
+        } else if (type === 'item_completed') {
+          const item = parsed.item
+          if (!receivedAssistantText && item?.type === 'agent_message') {
+            for (const ev of yieldTokenChunks(String(item.text ?? ''))) {
+              receivedAssistantText = true
+              yield ev
+            }
+          } else if (item?.type === 'tool_call' && item.function?.name === 'pi_file_changed') {
+            // Pi mode: surface a synthetic completed tool-call item as a
+            // file_changed event so the UI can render its Undo / Save All card.
+            yield {
+              kind: 'file_changed',
+              change: item.result?.structured_content ?? {},
+            }
+          }
+        } else if (type === 'turn_completed') {
+          if (!receivedAssistantText) {
+            for (const ev of yieldTokenChunks(String(parsed.reply ?? ''))) {
+              receivedAssistantText = true
+              yield ev
+            }
+          }
+          return
+        } else if (type === 'turn_failed') {
+          throw new Error(parseTurnErrorMessage(parsed.error))
         }
         continue
       }
@@ -205,10 +243,39 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       // 旧协议：裸字符串
       if (typeof parsed === 'string') {
         if (parsed.startsWith('[ERROR]')) throw new Error(parsed)
-        for (const ev of yieldTokenChunks(parsed)) yield ev
+        for (const ev of yieldTokenChunks(parsed)) {
+          receivedAssistantText = true
+          yield ev
+        }
       }
     }
   }
+}
+
+function parseTurnItemStatus(item) {
+  if (!item || item.type !== 'tool_call') return null
+  const functionPayload = item.function || {}
+  const argsText = String(functionPayload.arguments_text || '').trim()
+  const argsJson = functionPayload.arguments_json
+  let inputPreview = argsText
+  if (!inputPreview && argsJson && typeof argsJson === 'object') {
+    try {
+      inputPreview = JSON.stringify(argsJson)
+    } catch {
+      inputPreview = ''
+    }
+  }
+  return {
+    kind: 'status',
+    tool: String(functionPayload.name || ''),
+    input_preview: inputPreview,
+    step: Number(item.index ?? 0),
+  }
+}
+
+function parseTurnErrorMessage(error) {
+  if (!error || typeof error !== 'object') return 'Agent turn failed'
+  return String(error.message || error.code || 'Agent turn failed')
 }
 
 /**

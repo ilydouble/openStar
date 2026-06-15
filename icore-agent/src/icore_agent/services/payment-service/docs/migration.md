@@ -1,6 +1,6 @@
 # payment-service Database Migration Plan
 
-Status: draft for the future implementation. This document describes how `payment-service` should own its PostgreSQL schema with `golang-migrate`.
+Status: v1 implemented. This document is the source of truth for payment-owned PostgreSQL schema changes: `payment-service` uses an isolated PostgreSQL database and owns its schema with service-local `golang-migrate` migrations.
 
 ## Existing Pattern
 
@@ -11,7 +11,7 @@ Status: draft for the future implementation. This document describes how `paymen
 - `infrastructure/docker/compose/click-house.yml` starts `clickhouse-migrate` after ClickHouse is healthy.
 - `clickhouse-writer` starts only after `clickhouse-migrate` completes successfully.
 
-`payment-service` should use the same operational shape: a health-gated one-shot migration service that must finish before the app container starts.
+`payment-service` should use the same operational shape: a health-gated one-shot migration service that must finish before the app container starts. The payment bootstrap image is only a migration client. It must not run its own PostgreSQL server or define a separate PostgreSQL service; it connects to the existing `postgres` compose service.
 
 ## Target Ownership Model
 
@@ -98,12 +98,14 @@ icore-agent/src/icore_agent/services/payment-service/
     db-bootstrap.sh
 ```
 
-The migration container can follow the ClickHouse image pattern:
+The migration container should copy the `golang-migrate` binary into a lightweight client image with `psql`. It should not use a PostgreSQL server image.
 
 ```dockerfile
 FROM migrate/migrate:v4.17.1 AS migrate
 
-FROM postgres:16-alpine
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates postgresql16-client
 
 COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
 COPY payment-service/scripts/db-bootstrap.sh /usr/local/bin/payment-db-bootstrap
@@ -117,7 +119,7 @@ The final implementation can split the bootstrap and migration entrypoints if th
 
 ## Compose Shape
 
-Add a payment migration service alongside the future payment app service:
+Add a payment migration service that depends on the existing compose `postgres` service:
 
 ```yaml
 services:
@@ -129,10 +131,11 @@ services:
     container_name: icore-payment-db-migrate
     restart: "no"
     environment:
-      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-icore_postgres_admin}
+      POSTGRES_HOST: ${PAYMENT_DB_HOST:-postgres}
+      POSTGRES_PORT: ${PAYMENT_DB_PORT:-5432}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-icore_agent}
       POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-change-me}
-      POSTGRES_HOST: ${DB_HOST:-postgres}
-      POSTGRES_PORT: ${DB_INTERNAL_PORT:-5432}
+      POSTGRES_ADMIN_DB: ${POSTGRES_ADMIN_DB:-icore_agent_db}
       PAYMENT_DB_USER: ${PAYMENT_DB_USER:-icore_payment}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-change-me}
       PAYMENT_DB_NAME: ${PAYMENT_DB_NAME:-icore_payment_db}
@@ -142,14 +145,9 @@ services:
         condition: service_healthy
     networks:
       - icore-net
-
-  payment-service:
-    depends_on:
-      payment-db-migrate:
-        condition: service_completed_successfully
 ```
 
-If local development keeps the current `DB_USER=icore_agent` superuser temporarily, use the admin variables to point at that role only as a transitional development shortcut. Production should not do that.
+The payment app container depends on `payment-db-migrate` with `condition: service_completed_successfully`, then connects to the existing compose `postgres` service through `PAYMENT_DATABASE_URL`. If local development keeps the current `DB_USER=icore_agent` superuser temporarily, use the admin variables to point at that role only as a transitional development shortcut. Production should not do that.
 
 ## Environment Files
 
@@ -162,6 +160,10 @@ dotenv/.env.payment.example
 Expected database settings:
 
 ```text
+POSTGRES_ADMIN_USER=icore_agent
+POSTGRES_ADMIN_PASSWORD=change-me
+POSTGRES_ADMIN_DB=icore_agent_db
+
 PAYMENT_DB_HOST=postgres
 PAYMENT_DB_PORT=5432
 PAYMENT_DB_USER=icore_payment
@@ -178,6 +180,7 @@ PAYMENT_DATABASE_URL=postgres://icore_payment:<replace-with-payment-db-password>
 - Keep payment table migrations in `payment-service/migrations/`.
 - Use paired `.up.sql` and `.down.sql` files.
 - Do not put payment-service tables in `icore-agent/alembic/`; Alembic remains for the Python-owned database.
+- If Python later needs a processed-payment-event table for the account/billing Kafka consumer, that Python-owned table belongs under `icore-agent/alembic/`.
 - Do not let HTTP handlers issue schema changes or ad hoc SQL.
 - Keep table access behind payment-service repository types.
 - Avoid cross-database joins between `icore_agent_db` and `icore_payment_db`.
@@ -188,15 +191,18 @@ PAYMENT_DATABASE_URL=postgres://icore_payment:<replace-with-payment-db-password>
 The first migration should create the payment source-of-truth tables:
 
 - `payment_orders`
+- `payment_provider_transactions`
 - `payment_order_events`
 - `payment_outbox`
 - optionally `payment_catalog_items` if pricing is stored in the database instead of config
 
 Use database constraints for critical invariants:
 
-- unique `out_trade_no`
+- unique service order number `order_no`
 - unique `idempotency_key`
-- unique provider notification/event id
+- unique provider merchant order per `(provider, merchant_id, merchant_order_no)`
+- unique provider transaction id per `(provider, merchant_id, provider_transaction_id)` when present
+- unique provider notification/event id scoped by `(provider, merchant_id, provider_event_id)`
 - enum/check constraints for local payment status
 - indexes for pending-order reconciliation and outbox publishing
 

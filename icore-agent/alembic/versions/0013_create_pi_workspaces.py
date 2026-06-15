@@ -1,7 +1,7 @@
 """create pi_workspaces table for Pi Agent uploaded-project archives
 
-Revision ID: 0011
-Revises: 0010
+Revision ID: 0013
+Revises: 0012
 Create Date: 2026-06-08
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0011"
-down_revision = "0010"
+revision = "0013"
+down_revision = "0012"
 branch_labels = None
 depends_on = None
 

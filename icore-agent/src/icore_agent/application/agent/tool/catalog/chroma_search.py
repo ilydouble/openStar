@@ -1,8 +1,6 @@
-"""chroma_search — Strands tool for querying the ChromaDB knowledge base."""
+"""chroma_search tool for querying the ChromaDB knowledge base."""
 
 from __future__ import annotations
-
-from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -11,7 +9,6 @@ from icore_agent.infrastructure.memory.chroma_store import search as chroma_sear
 log = get_logger(__name__)
 
 
-@tool
 def chroma_search(query: str, tenant_code: str = "", top_k: int = 5) -> str:
     """Search the internal knowledge base for documents relevant to a query.
 

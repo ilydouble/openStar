@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import json
 
-from strands import tool
 
-
-@tool
 def number_comparator(left: float, right: float, tolerance: float = 0.0) -> str:
     """Compare two numeric values and return a structured result.
 

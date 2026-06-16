@@ -1,4 +1,4 @@
-"""Async queue bridge for blocking Strands Agent runs."""
+"""Async queue bridge for blocking prepared agent runs."""
 
 from __future__ import annotations
 
@@ -10,12 +10,7 @@ from typing import Any, cast
 
 from icore_agent.domain.agent.turn import TurnEvent
 
-from .loop.types import PreparedAgentRunner
-from .tool import (
-    StrandsToolEventBridge,
-    reset_parent_callback,
-    set_parent_callback,
-)
+from .loop.types import AgentToolEventBridge, PreparedAgentRunner
 
 
 QueueItem = tuple[str, Any]
@@ -39,17 +34,16 @@ def start_agent_worker(
     queue: asyncio.Queue[QueueItem],
     runner: PreparedAgentRunner,
     message: str,
-    tool_bridge: StrandsToolEventBridge,
+    tool_bridge: AgentToolEventBridge,
     emit_assistant_delta: Callable[[str], None],
     invoke: AgentInvoker | None = None,
 ) -> threading.Thread:
-    """Run a blocking Strands Agent invocation in a worker thread."""
+    """Run a blocking prepared agent invocation in a worker thread."""
 
     def emit(event: TurnEvent) -> None:
         put_threadsafe(loop=loop, queue=queue, kind="event", payload=event)
 
     def invoke_runner() -> None:
-        parent_callback_token = set_parent_callback(tool_bridge.on_callback)
         try:
             with tool_bridge.bound_to(
                 emit=emit,
@@ -65,7 +59,6 @@ def start_agent_worker(
         except Exception as exc:
             put_threadsafe(loop=loop, queue=queue, kind="error", payload=exc)
         finally:
-            reset_parent_callback(parent_callback_token)
             put_threadsafe(loop=loop, queue=queue, kind="done", payload=None)
 
     thread = threading.Thread(target=invoke_runner, daemon=True)

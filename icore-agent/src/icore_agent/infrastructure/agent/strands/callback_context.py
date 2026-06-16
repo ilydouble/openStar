@@ -1,4 +1,4 @@
-"""Cross-agent tool callback plumbing."""
+"""Cross-agent Strands callback plumbing."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ def sub_agent_callback() -> Callable | None:
         return None
 
     def _filtered(**kwargs):
+        """Forward nested Strands tool-use callbacks to the parent agent."""
         if kwargs.get("current_tool_use"):
             parent(**kwargs)
 

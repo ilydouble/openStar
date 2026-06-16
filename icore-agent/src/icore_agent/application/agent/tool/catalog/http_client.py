@@ -1,14 +1,10 @@
-"""HTTP client tool — lets agents call arbitrary REST APIs.
-
-Strands @tool wrapper around httpx.
-"""
+"""HTTP client tool — lets agents call arbitrary REST APIs."""
 
 from __future__ import annotations
 
 import json
 
 import httpx
-from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -18,7 +14,6 @@ _TIMEOUT = 30  # seconds
 _MAX_BODY_CHARS = 6_000
 
 
-@tool
 def http_request(
     url: str,
     method: str = "GET",

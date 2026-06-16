@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from typing import Any, Protocol
+
+from icore_agent.domain.agent.turn import TurnEvent
 
 
 class PreparedAgentRunner(Protocol):
@@ -12,4 +16,21 @@ class PreparedAgentRunner(Protocol):
 
     def __call__(self, message: str) -> Any:
         """Run one user message through the prepared agent."""
+        ...
+
+
+class AgentToolEventBridge(Protocol):
+    """Runtime-neutral bridge between agent callbacks and turn events."""
+
+    def on_callback(self, **kwargs: Any) -> None:
+        """Handle a provider runtime streaming callback."""
+        ...
+
+    def bound_to(
+        self,
+        *,
+        emit: Callable[[TurnEvent], None],
+        emit_assistant_delta: Callable[[str], None],
+    ) -> AbstractContextManager[None]:
+        """Bind event sinks while one prepared runner invocation is active."""
         ...

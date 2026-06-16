@@ -1,4 +1,4 @@
-"""Factory helpers for chat-layer LiteLLM models."""
+"""Factory helpers for Strands LiteLLM models."""
 
 from __future__ import annotations
 

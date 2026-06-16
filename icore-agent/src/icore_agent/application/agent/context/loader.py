@@ -5,7 +5,7 @@ from __future__ import annotations
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .attachments import load_attachment_context
-from .history import load_history_context, to_strands_messages
+from .history import load_history_context, to_runner_messages
 from .memory import build_user_memory_prompt
 from icore_agent.domain.agent.context.models import AgentContext
 from .ports import (
@@ -58,7 +58,7 @@ async def load_agent_context(
     )
     return AgentContext(
         summary=summary,
-        strands_history=to_strands_messages(history),
+        runner_history=to_runner_messages(history),
         has_rag=False,
         image_attachments=image_refs,
         file_attachments=file_refs,

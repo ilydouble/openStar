@@ -17,7 +17,7 @@ def tool_name(tool_use: dict[str, Any]) -> str:
 
 
 def tool_arguments(tool_use: dict[str, Any]) -> dict[str, Any]:
-    """Extract JSON-safe tool arguments from a Strands toolUse payload."""
+    """Extract JSON-safe tool arguments from a Strands tool-use payload."""
     raw_arguments = tool_use.get("input")
     if not isinstance(raw_arguments, dict):
         return {}

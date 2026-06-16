@@ -1,9 +1,3 @@
-"""Agent runner assembly helpers."""
+"""Application runner protocols are defined in agent.loop.types."""
 
-from .model_factory import create_litellm_model
-from .orchestrator import create_orchestrator
-
-__all__ = [
-    "create_litellm_model",
-    "create_orchestrator",
-]
+__all__: list[str] = []

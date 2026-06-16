@@ -11,11 +11,11 @@ from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.application.agent.tool import (
-    AgentTool,
     ToolDefinition,
     ToolExecutionContext,
 )
 from icore_agent.domain.files.models import FileAsset
+from icore_agent.infrastructure.agent.strands import AgentTool
 
 
 @pytest.mark.asyncio

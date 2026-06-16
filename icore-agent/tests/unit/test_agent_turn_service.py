@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -14,9 +16,14 @@ from icore_agent.application.agent import (
     classify_turn_intent,
 )
 from icore_agent.application.agent.context import dedupe_file_uuids
-from icore_agent.application.agent.tool import StrandsToolEventBridge
+from icore_agent.domain.agent.session import (
+    ToolCallItem,
+    ToolCallResult,
+    ToolCallStatus,
+    ToolFunction,
+)
 from icore_agent.domain.files.models import FileAsset
-from icore_agent.domain.agent.turn import Turn, TurnEventKind, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -44,6 +51,7 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        tool_bridge_factory=FakeToolBridge,
         usage_service=usage,
     )
 
@@ -66,7 +74,7 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
     assert len(factory.calls[0]["hooks"]) == 1
-    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
+    assert isinstance(factory.calls[0]["hooks"][0], FakeToolBridge)
     assert factory.agent.messages == []
     assert usage.calls == [
         ("user-1", "attachments", 1),
@@ -89,6 +97,7 @@ async def test_agent_turn_run_links_recorded_tool_calls_to_assistant() -> None:
             reply="assistant reply",
             emit_tool_call=True,
         ),
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
     )
 
@@ -112,6 +121,7 @@ async def test_agent_turn_run_skips_user_memory_without_compression() -> None:
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -132,6 +142,7 @@ async def test_agent_turn_run_schedules_user_memory_extract_on_compression() -> 
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
         orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -153,6 +164,7 @@ async def test_agent_turn_stream_skips_user_memory_without_compression() -> None
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=FakeOrchestratorFactory(reply="", streaming=True),
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -177,6 +189,7 @@ async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
         file_service=FakeFileService(),
         conversation_memory=memory,
         orchestrator_factory=factory,
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
     )
 
@@ -217,6 +230,7 @@ async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> No
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
         orchestrator_factory=factory,
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -231,7 +245,7 @@ async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> No
     assert memory_service.compression_checks == []
     assert memory_service.extract_calls == []
     assert len(factory.calls[0]["hooks"]) == 1
-    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
+    assert isinstance(factory.calls[0]["hooks"][0], FakeToolBridge)
     assert factory.calls[0]["user_memory_prompt"] is None
 
 
@@ -253,6 +267,7 @@ async def test_agent_turn_run_incognito_skips_memory_prompt_injection() -> None:
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
         orchestrator_factory=factory,
+        tool_bridge_factory=FakeToolBridge,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -322,6 +337,107 @@ class FakeUsageService:
     def record_llm_usage(self, **payload: Any) -> None:
         """Record one LLM usage persistence call."""
         self.llm_calls.append(dict(payload))
+
+
+class FakeToolBridge:
+    """Provider-neutral tool bridge fake for agent turn service tests."""
+
+    def __init__(self, *, session_id: str, turn_id: str) -> None:
+        """Create a bridge fake for one turn."""
+        self._session_id = session_id
+        self._turn_id = turn_id
+        self._emit = None
+        self._emit_assistant_delta = None
+        self._items: dict[str, ToolCallItem] = {}
+
+    @contextmanager
+    def bound_to(self, *, emit, emit_assistant_delta):
+        """Bind synchronous event sinks during one fake runner invocation."""
+        previous_emit = self._emit
+        previous_delta = self._emit_assistant_delta
+        self._emit = emit
+        self._emit_assistant_delta = emit_assistant_delta
+        try:
+            yield
+        finally:
+            self._emit = previous_emit
+            self._emit_assistant_delta = previous_delta
+
+    def on_callback(self, **kwargs: Any) -> None:
+        """Forward fake streaming callbacks into the current event sinks."""
+        current_tool = kwargs.get("current_tool_use")
+        if isinstance(current_tool, dict):
+            self.record_start(current_tool)
+        token = kwargs.get("data")
+        if token and isinstance(token, str) and self._emit_assistant_delta is not None:
+            self._emit_assistant_delta(token)
+
+    def record_start(self, tool_use: dict[str, Any]) -> None:
+        """Emit a tool-start event for fake provider hook calls."""
+        tool_call_id = str(tool_use.get("toolUseId") or "")
+        if not tool_call_id or tool_call_id in self._items:
+            return
+        item = ToolCallItem(
+            provider_tool_call_id=tool_call_id,
+            function=ToolFunction(
+                name=str(tool_use.get("name") or "unknown"),
+                arguments_json=tool_use.get("input") or {},
+            ),
+            created_at=datetime.now(UTC),
+        )
+        self._items[tool_call_id] = item
+        if self._emit is not None:
+            self._emit(TurnEvent.item_started(
+                session_id=self._session_id,
+                turn_id=self._turn_id,
+                item=item,
+            ))
+
+    def record_finish(
+        self,
+        tool_use: dict[str, Any],
+        result: dict[str, Any],
+        *,
+        exception: Exception | None,
+    ) -> None:
+        """Emit a tool-completed event for fake provider hook calls."""
+        tool_call_id = str(tool_use.get("toolUseId") or "")
+        if not tool_call_id:
+            return
+        if tool_call_id not in self._items:
+            self.record_start(tool_use)
+        item = self._items.get(tool_call_id)
+        if item is None:
+            return
+        completed = item.model_copy(update={
+            "status": (
+                ToolCallStatus.FAILED
+                if exception is not None
+                else ToolCallStatus.COMPLETED
+            ),
+            "result": ToolCallResult(
+                content=_tool_result_text(result),
+                structured_content=result,
+            ),
+            "completed_at": datetime.now(UTC),
+        })
+        self._items[tool_call_id] = completed
+        if self._emit is not None:
+            self._emit(TurnEvent.item_completed(
+                session_id=self._session_id,
+                turn_id=self._turn_id,
+                item=completed,
+            ))
+
+
+def _tool_result_text(result: dict[str, Any]) -> str | None:
+    """Extract fake tool result text from a provider-style result payload."""
+    content = result.get("content")
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("text"):
+                return str(block["text"])
+    return None
 
 
 class FakeMemory:

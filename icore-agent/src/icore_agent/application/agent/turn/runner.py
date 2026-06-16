@@ -7,10 +7,13 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from icore_agent.application.agent.loop.agent_loop import AgentLoopRequest
-from icore_agent.application.agent.loop.types import PreparedAgentRunner
-from icore_agent.application.agent.tool import StrandsToolEventBridge
+from icore_agent.application.agent.loop.types import (
+    AgentToolEventBridge,
+    PreparedAgentRunner,
+)
 
 OrchestratorFactory = Callable[..., PreparedAgentRunner]
+ToolEventBridgeFactory = Callable[..., AgentToolEventBridge]
 
 
 class AgentTurnRunnerFactory:
@@ -20,10 +23,12 @@ class AgentTurnRunnerFactory:
         self,
         orchestrator_factory: OrchestratorFactory,
         *,
+        tool_bridge_factory: ToolEventBridgeFactory,
         file_service: Any | None = None,
     ) -> None:
         """Create a runner factory from the existing orchestrator factory."""
         self._orchestrator_factory = orchestrator_factory
+        self._tool_bridge_factory = tool_bridge_factory
         self._file_service = file_service
 
     def build_loop_request(
@@ -35,7 +40,7 @@ class AgentTurnRunnerFactory:
         invoke: Callable[[PreparedAgentRunner, str], Any] | None,
     ) -> AgentLoopRequest:
         """Build an AgentLoopRequest for one turn."""
-        tool_bridge = StrandsToolEventBridge(
+        tool_bridge = self._tool_bridge_factory(
             session_id=command.session_id,
             turn_id=turn_id,
         )
@@ -52,7 +57,7 @@ class AgentTurnRunnerFactory:
                 context,
             ),
             runner=runner,
-            history_messages=context.strands_history,
+            history_messages=context.runner_history,
             tool_bridge=tool_bridge,
             invoke=invoke,
         )
@@ -62,9 +67,9 @@ class AgentTurnRunnerFactory:
         *,
         command: Any,
         context: Any,
-        tool_bridge: StrandsToolEventBridge,
+        tool_bridge: AgentToolEventBridge,
     ) -> PreparedAgentRunner:
-        """Create one prepared Strands runner for AgentLoop."""
+        """Create one prepared runner for AgentLoop."""
         orchestrator = self._orchestrator_factory(
             callback_handler=tool_bridge.on_callback,
             summary=context.summary,

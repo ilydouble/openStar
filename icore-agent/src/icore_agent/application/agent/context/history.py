@@ -30,8 +30,8 @@ async def load_history_context(
     return summary or None, history
 
 
-def to_strands_messages(history: list[AgentHistoryMessage]) -> list[dict[str, Any]]:
-    """Convert cached or persisted messages to Strands message format."""
+def to_runner_messages(history: list[AgentHistoryMessage]) -> list[dict[str, Any]]:
+    """Convert cached or persisted messages to the prepared-runner message shape."""
     return [
         {
             "role": message["role"],

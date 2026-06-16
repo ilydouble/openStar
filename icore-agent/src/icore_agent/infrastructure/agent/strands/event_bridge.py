@@ -18,6 +18,7 @@ from icore_agent.domain.agent.session import (
 )
 from icore_agent.domain.agent.turn import TurnEvent
 
+from .callback_context import reset_parent_callback, set_parent_callback
 from .payloads import (
     json_dumps,
     json_safe_object,
@@ -50,11 +51,13 @@ class StrandsToolEventBridge:
         """Bind synchronous event sinks for the duration of one Strands run."""
         previous = self._emit
         previous_delta = self._emit_assistant_delta
+        parent_callback_token = set_parent_callback(self.on_callback)
         self._emit = emit
         self._emit_assistant_delta = emit_assistant_delta
         try:
             yield
         finally:
+            reset_parent_callback(parent_callback_token)
             self._emit = previous
             self._emit_assistant_delta = previous_delta
 
@@ -160,13 +163,24 @@ class StrandsToolEventBridge:
         ))
 
     def _duration_ms(self, provider_tool_call_id: str, completed_at: datetime) -> int | None:
+        """Return elapsed milliseconds for a completed tool call."""
         started_at = self._started_at.get(provider_tool_call_id)
         if started_at is None:
             return None
         return max(int((completed_at - started_at).total_seconds() * 1000), 0)
 
     def _emit_event(self, event: TurnEvent) -> None:
+        """Emit one turn event when a sink is currently bound."""
         emit = self._emit
         if emit is None:
             return
         emit(event)
+
+
+def create_strands_tool_event_bridge(
+    *,
+    session_id: str,
+    turn_id: str,
+) -> StrandsToolEventBridge:
+    """Create a Strands tool event bridge for one agent turn."""
+    return StrandsToolEventBridge(session_id=session_id, turn_id=turn_id)

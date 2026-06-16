@@ -541,6 +541,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     agent_session_dir = agent_dir / "session"
     agent_runner_dir = agent_dir / "runner"
     agent_tool_dir = agent_dir / "tool"
+    strands_dir = package_dir / "infrastructure" / "agent" / "strands"
     turn_service = (agent_turn_dir / "service.py").read_text(
         encoding="utf-8"
     )
@@ -575,13 +576,20 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_session_dir / "__init__.py").is_file()
     assert (agent_session_dir / "service.py").is_file()
     assert (agent_runner_dir / "__init__.py").is_file()
-    assert (agent_runner_dir / "orchestrator.py").is_file()
-    assert (agent_runner_dir / "model_factory.py").is_file()
+    assert not (agent_runner_dir / "orchestrator.py").exists()
+    assert not (agent_runner_dir / "model_factory.py").exists()
     assert (agent_tool_dir / "__init__.py").is_file()
-    assert (agent_tool_dir / "callback_context.py").is_file()
-    assert (agent_tool_dir / "event_bridge.py").is_file()
-    assert (agent_tool_dir / "payloads.py").is_file()
+    assert not (agent_tool_dir / "callback_context.py").exists()
+    assert not (agent_tool_dir / "event_bridge.py").exists()
+    assert not (agent_tool_dir / "payloads.py").exists()
     assert (agent_tool_dir / "projection.py").is_file()
+    assert (strands_dir / "__init__.py").is_file()
+    assert (strands_dir / "agent_factory.py").is_file()
+    assert (strands_dir / "model_factory.py").is_file()
+    assert (strands_dir / "tool_adapter.py").is_file()
+    assert (strands_dir / "event_bridge.py").is_file()
+    assert (strands_dir / "payloads.py").is_file()
+    assert (strands_dir / "callback_context.py").is_file()
     assert not (agent_turn_dir / "tool_projection.py").exists()
     assert not (package_dir / "application" /
                 "agent" / "strands_bridge.py").exists()
@@ -599,6 +607,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "def classify_turn_intent" in routing
     assert not (agent_dir / "results.py").exists()
     assert "AgentTurnResult" not in agent_init
+    assert "StrandsToolEventBridge" not in agent_init
     assert not (package_dir / "domain" / "chat").exists()
     assert "class AgentHint" not in routing
     assert "agent_hint" not in routing
@@ -606,6 +615,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "class AgentSessionService" in session_service
     assert "AgentTurnExecutor" in turn_service
     assert "PreparedAgentRunner" in agent_init
+    assert "AgentToolEventBridge" in agent_init
     assert "AgentRunnerLike" not in (
         agent_dir / "async_bridge.py"
     ).read_text(encoding="utf-8")
@@ -613,7 +623,8 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "StrandsToolEventBridge" not in turn_service
     assert "begin_turn_usage_capture" not in turn_service
     assert "_safe_persist_event" not in turn_service
-    assert "from .tool import StrandsToolEventBridge" in agent_init
+    for path in agent_dir.rglob("*.py"):
+        assert "from strands" not in path.read_text(encoding="utf-8")
     assert "class ChatCompletionRole(str, Enum)" in roles
     assert 'TOOL = "tool"' in roles
 
@@ -639,9 +650,9 @@ def test_llm_tool_calls_migration_aligns_with_chat_history_ids():
 
 def test_number_comparator_is_registered_with_orchestrator_tools():
     """The orchestrator should expose the deterministic number comparison tool."""
-    orchestrator = (
+    agent_factory = (
         AGENT_ROOT / "src" / "icore_agent" /
-        "application" / "agent" / "runner" / "orchestrator.py"
+        "infrastructure" / "agent" / "strands" / "agent_factory.py"
     ).read_text(encoding="utf-8")
     catalog_init = (
         AGENT_ROOT / "src" / "icore_agent" /
@@ -651,16 +662,23 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
         AGENT_ROOT / "src" / "icore_agent" /
         "application" / "agent" / "tool" / "tool_definition.py"
     ).read_text(encoding="utf-8")
+    tool_adapter = (
+        AGENT_ROOT / "src" / "icore_agent" /
+        "infrastructure" / "agent" / "strands" / "tool_adapter.py"
+    ).read_text(encoding="utf-8")
 
-    assert "build_orchestrator_tool_definitions" in orchestrator
-    assert "make_agent_tool" in orchestrator
-    assert "build_orchestrator_tools" in catalog_init
+    assert "build_orchestrator_tool_definitions" in agent_factory
+    assert "make_agent_tool" in agent_factory
+    assert "build_orchestrator_tools" not in catalog_init
     assert "number_comparator" in catalog_init
     assert "orchestrator_tool_names" not in catalog_init
     assert "class ToolDefinition" in tool_definition
-    assert "class AgentTool" in tool_definition
+    assert "class AgentTool" not in tool_definition
+    assert "class AgentTool" in tool_adapter
     assert "strands.types._events" not in tool_definition
     assert "ToolResultEvent" not in tool_definition
+    assert "ToolResultEvent" not in tool_adapter
+    assert "strands.types.tools" in tool_adapter
     assert "prompt_snippet" in catalog_init
     assert "research_agent_tool" not in catalog_init
     assert "data_agent_tool" not in catalog_init
@@ -671,7 +689,9 @@ def test_chat_orchestration_lives_in_application_layer():
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
     agent_dir = package_dir / "application" / "agent"
-    orchestrator = (agent_dir / "runner" / "orchestrator.py").read_text(
+    agent_factory = (
+        package_dir / "infrastructure" / "agent" / "strands" / "agent_factory.py"
+    ).read_text(
         encoding="utf-8"
     )
     prompt_builder = (
@@ -688,11 +708,11 @@ def test_chat_orchestration_lives_in_application_layer():
     assert chat_sources == []
     assert (catalog_dir / "web_search.py").is_file()
     assert (agent_dir / "sequential" / "agent.py").is_file()
-    assert "ModuleNotFoundError" not in orchestrator
-    assert "_Fallback" not in orchestrator
-    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in orchestrator
-    assert "sub-agent" not in orchestrator
-    assert "build_system_prompt" in orchestrator
+    assert "ModuleNotFoundError" not in agent_factory
+    assert "_Fallback" not in agent_factory
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in agent_factory
+    assert "sub-agent" not in agent_factory
+    assert "build_system_prompt" in agent_factory
     assert "class BuildSystemPromptOptions" in prompt_builder
     assert "build_runtime_context_prompt" not in prompt_builder
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in prompt_sources

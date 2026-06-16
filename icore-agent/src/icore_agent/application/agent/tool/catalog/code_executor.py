@@ -10,8 +10,6 @@ import subprocess
 import sys
 import textwrap
 
-from strands import tool
-
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings
@@ -32,7 +30,6 @@ def _is_safe(code: str) -> tuple[bool, str]:
     return True, ""
 
 
-@tool
 def run_python_snippet(code: str, timeout: int = 30) -> str:
     """Execute a Python code snippet and return its stdout/stderr.
 

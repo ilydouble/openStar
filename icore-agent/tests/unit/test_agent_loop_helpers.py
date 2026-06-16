@@ -5,14 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.application.agent.async_bridge import patch_runner_callback
-from icore_agent.application.agent.tool import (
-    StrandsToolEventBridge,
-    json_dumps,
-    json_safe_object,
-    result_text,
+from icore_agent.infrastructure.agent.strands import StrandsToolEventBridge
+from icore_agent.infrastructure.agent.strands.callback_context import (
     sub_agent_callback,
     set_parent_callback,
     reset_parent_callback,
+)
+from icore_agent.infrastructure.agent.strands.payloads import (
+    json_dumps,
+    json_safe_object,
+    result_text,
     tool_arguments,
     tool_call_id,
     tool_name,

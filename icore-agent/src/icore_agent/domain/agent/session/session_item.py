@@ -139,7 +139,7 @@ class ToolCallError(BaseModel):
 
 
 class ToolCallItem(SessionItemBase):
-    """A tool invocation requested by the model and executed by Strands."""
+    """A tool invocation requested by the model and executed by the runtime."""
 
     type: Literal["tool_call"] = "tool_call"
     status: ToolCallStatus = ToolCallStatus.RUNNING

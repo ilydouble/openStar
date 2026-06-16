@@ -59,6 +59,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         file_service=_FakeFileService({}),
         conversation_memory=_NoopMemory(),
         orchestrator_factory=_StaticOrchestratorFactory("ok"),
+        tool_bridge_factory=_NoopToolBridge,
         usage_service=_NoopUsageService(),
     )
     command = AgentTurnCommand(
@@ -187,6 +188,29 @@ class _NoopUsageService:
 
     def record_llm_usage(self, **payload: Any) -> None:
         """Accept LLM usage recording without persisting anything."""
+
+
+class _NoopToolBridge:
+    """No-op bridge for attachment-focused turn tests."""
+
+    def __init__(self, *, session_id: str, turn_id: str) -> None:
+        self.session_id = session_id
+        self.turn_id = turn_id
+
+    def on_callback(self, **kwargs: Any) -> None:
+        """Ignore fake runner callbacks."""
+
+    def bound_to(self, **kwargs: Any):
+        """Return a no-op context manager."""
+
+        class _Context:
+            def __enter__(self) -> None:
+                return None
+
+            def __exit__(self, exc_type, exc, traceback) -> None:
+                return None
+
+        return _Context()
 
 
 class _FakeFileService:

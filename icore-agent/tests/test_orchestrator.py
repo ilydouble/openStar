@@ -13,11 +13,12 @@ from icore_agent.application.agent.sys_prompt import (
     BuildSystemPromptOptions,
     build_system_prompt,
 )
-from icore_agent.application.agent.tool import AgentTool, ToolDefinition
+from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.application.agent.runner.orchestrator import create_orchestrator
+from icore_agent.infrastructure.agent.strands import AgentTool
+from icore_agent.infrastructure.agent.strands import create_strands_orchestrator
 from icore_agent.main import app
 from .test_account_flow import ASGISyncTestClient
 
@@ -63,7 +64,7 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_strands_orchestrator")
 @patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
@@ -151,12 +152,12 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.application.agent.runner.model_factory.LiteLLMModel")
-@patch("icore_agent.application.agent.runner.orchestrator.Agent")
-def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
+@patch("icore_agent.infrastructure.agent.strands.model_factory.LiteLLMModel")
+@patch("icore_agent.infrastructure.agent.strands.agent_factory.Agent")
+def test_create_strands_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
     from icore_agent.config import settings
 
-    create_orchestrator()
+    create_strands_orchestrator()
     _, model_kwargs = mock_model_cls.call_args
     assert model_kwargs["model_id"] == settings.model_id
     assert "client_args" in model_kwargs

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from icore_agent.domain.agent.session import ToolCallItem, ToolCallStatus
 from icore_agent.domain.agent.turn import TurnEvent, TurnEventKind
 from icore_agent.shared.logging.app_logger import get_logger
-
-from .payloads import json_dumps
 
 log = get_logger(__name__)
 
@@ -131,7 +130,7 @@ class TurnToolProjection:
             return self._agent_session.save_tool_message(
                 command.session_id,
                 command.user_id,
-                json_dumps(result),
+                _json_dumps(result),
                 metadata={
                     "tool_call_id": tool_call_id,
                     "tool_name": item.function.name or "unknown",
@@ -150,3 +149,8 @@ class TurnToolProjection:
 def _value(value: Any) -> str:
     """Return the plain value for enum-like objects."""
     return str(getattr(value, "value", value))
+
+
+def _json_dumps(value: Any) -> str:
+    """Serialize compatibility tool-message payloads as compact JSON."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)

@@ -238,9 +238,12 @@ def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None
 
 
 def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
-    """AgentTurnRunnerFactory should hide Strands runner construction details."""
+    """AgentTurnRunnerFactory should hide concrete runner construction details."""
     factory = RecordingOrchestratorFactory()
-    runner_factory = AgentTurnRunnerFactory(factory)
+    runner_factory = AgentTurnRunnerFactory(
+        factory,
+        tool_bridge_factory=FakeToolBridge,
+    )
     command = _command(stream=False)
     context = StubContext()
     request = runner_factory.build_loop_request(
@@ -257,6 +260,7 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
     assert "read_uploaded_file" in request.message
     assert request.runner is factory.runner
     assert request.history_messages == [{"role": "user", "content": "old"}]
+    assert isinstance(request.tool_bridge, FakeToolBridge)
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
     assert "attachments_text" not in factory.calls[0]
@@ -471,8 +475,32 @@ class StubContext:
     image_attachments = [object()]
     file_attachments = [object(), object()]
     user_memory_prompt = "remember"
-    strands_history = [{"role": "user", "content": "old"}]
+    runner_history = [{"role": "user", "content": "old"}]
     has_attachments = True
+
+
+class FakeToolBridge:
+    """Tool bridge fake for runner factory tests."""
+
+    def __init__(self, *, session_id: str, turn_id: str) -> None:
+        """Create the fake bridge."""
+        self.session_id = session_id
+        self.turn_id = turn_id
+
+    def on_callback(self, **kwargs: Any) -> None:
+        """Accept provider callbacks."""
+
+    def bound_to(self, **kwargs: Any):
+        """Return a no-op context manager."""
+
+        class _Context:
+            def __enter__(self) -> None:
+                return None
+
+            def __exit__(self, exc_type, exc, traceback) -> None:
+                return None
+
+        return _Context()
 
 
 class StubSettings:

@@ -1,4 +1,4 @@
-"""Minimal Strands Agent loop wrapper."""
+"""Minimal prepared-agent loop wrapper."""
 
 from __future__ import annotations
 
@@ -19,8 +19,7 @@ from icore_agent.application.agent.async_bridge import (
     put_threadsafe,
     start_agent_worker,
 )
-from icore_agent.application.agent.tool import StrandsToolEventBridge
-from .types import PreparedAgentRunner
+from .types import AgentToolEventBridge, PreparedAgentRunner
 
 log = get_logger(__name__)
 
@@ -34,7 +33,7 @@ class AgentLoopRequest:
     message: str
     runner: PreparedAgentRunner
     history_messages: list[dict[str, Any]]
-    tool_bridge: StrandsToolEventBridge
+    tool_bridge: AgentToolEventBridge
     invoke: AgentInvoker | None = None
 
 
@@ -43,7 +42,7 @@ class AgentLoopError(Exception):
 
 
 class AgentLoop:
-    """Run a prepared Strands Agent and emit item-level turn events."""
+    """Run a prepared agent and emit item-level turn events."""
 
     def __init__(self, *, wall_budget_sec: int) -> None:
         """Create a loop with a hard wall-clock budget."""

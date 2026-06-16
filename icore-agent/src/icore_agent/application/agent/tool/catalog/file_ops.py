@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from strands import tool
-
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.config import settings
@@ -27,7 +25,6 @@ def _safe_path(relative_path: str) -> Path:
     return target
 
 
-@tool
 def read_file(path: str, encoding: str = "utf-8") -> str:
     """Read a file from the agent workspace.
 
@@ -54,7 +51,6 @@ def read_file(path: str, encoding: str = "utf-8") -> str:
         return f"[ERROR] {exc}"
 
 
-@tool
 def write_file(path: str, content: str, encoding: str = "utf-8") -> str:
     """Write content to a file in the agent workspace (creates directories as needed).
 
@@ -79,7 +75,6 @@ def write_file(path: str, content: str, encoding: str = "utf-8") -> str:
         return f"[ERROR] {exc}"
 
 
-@tool
 def list_files(directory: str = ".", max_depth: int = 2) -> str:
     """List files and directories inside the agent workspace.
 

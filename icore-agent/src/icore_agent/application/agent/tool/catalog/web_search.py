@@ -5,13 +5,12 @@ Priority:
   2. Zhipu Search — if ZAI_API_KEY is set     (best for Chinese content)
   3. DuckDuckGo   — no-key fallback           (limited, instant-answer only)
 
-Exposed as a Strands @tool for use by the main agent.
+Exposed through the provider-neutral tool catalog for use by the main agent.
 """
 
 from __future__ import annotations
 
 import httpx
-from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -101,7 +100,6 @@ def _ddg_fallback(query: str, max_results: int) -> list[dict]:
     return results[:max_results]
 
 
-@tool
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web for up-to-date information.
 

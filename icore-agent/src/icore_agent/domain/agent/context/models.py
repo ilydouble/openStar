@@ -43,7 +43,7 @@ class AgentContext:
     """Loaded prompt context for one agent turn."""
 
     summary: str | None
-    strands_history: list[dict[str, Any]]
+    runner_history: list[dict[str, Any]]
     has_rag: bool
     image_attachments: list[AgentImageAttachment]
     file_attachments: list[AgentFileAttachment]
@@ -54,7 +54,7 @@ class AgentContext:
         """Return an empty context after a cache loading failure."""
         return cls(
             summary=None,
-            strands_history=[],
+            runner_history=[],
             has_rag=False,
             image_attachments=[],
             file_attachments=[],

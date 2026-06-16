@@ -10,7 +10,10 @@ from icore_agent.application.agent.context import (
     load_agent_context,
 )
 from icore_agent.application.agent.loop.agent_loop import AgentLoop
-from icore_agent.application.agent.loop.types import PreparedAgentRunner
+from icore_agent.application.agent.loop.types import (
+    AgentToolEventBridge,
+    PreparedAgentRunner,
+)
 from icore_agent.application.agent.turn import (
     AgentTurnExecutor,
     AgentTurnRunnerFactory,
@@ -34,6 +37,7 @@ log = get_logger(__name__)
 CHAT_STREAM_WALL_BUDGET_SEC = 600
 
 OrchestratorFactory = Callable[..., PreparedAgentRunner]
+ToolEventBridgeFactory = Callable[..., AgentToolEventBridge]
 
 
 class AgentTurnService:
@@ -46,6 +50,7 @@ class AgentTurnService:
         file_service: FileAssetService,
         conversation_memory: ConversationMemory,
         orchestrator_factory: OrchestratorFactory,
+        tool_bridge_factory: ToolEventBridgeFactory,
         usage_service: UsageService | None = None,
         user_memory_service: UserMemoryService | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
@@ -62,6 +67,7 @@ class AgentTurnService:
                 wall_budget_sec=wall_budget_sec),
             runner_factory=AgentTurnRunnerFactory(
                 orchestrator_factory,
+                tool_bridge_factory=tool_bridge_factory,
                 file_service=file_service,
             ),
             persistence=TurnPersistence(agent_session),

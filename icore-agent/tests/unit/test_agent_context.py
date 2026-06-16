@@ -19,7 +19,7 @@ def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
 
 @pytest.mark.asyncio
 async def test_load_agent_context_prefers_cached_history() -> None:
-    """Cached conversation history should be converted to Strands messages."""
+    """Cached conversation history should be converted to runner messages."""
     context = await agent_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
@@ -38,7 +38,7 @@ async def test_load_agent_context_prefers_cached_history() -> None:
     )
 
     assert context.summary == "Earlier summary"
-    assert context.strands_history == [
+    assert context.runner_history == [
         {"role": "user", "content": [
             {"type": "text", "text": "Cached question"}]},
     ]
@@ -64,7 +64,7 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
     )
 
     assert history.load_calls == [("session-1", "user-1")]
-    assert context.strands_history == [
+    assert context.runner_history == [
         {"role": "assistant", "content": [
             {"type": "text", "text": "Persisted answer"}]},
     ]

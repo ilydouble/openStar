@@ -9,10 +9,10 @@ from typing import Any
 
 import litellm
 
-from icore_agent.application.agent.tool import ToolDefinition, ToolExecutionContext
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.config import settings
 from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.tool import ToolDefinition, ToolExecutionContext
 
 from .renderer import (
     render_chat_completions_messages,

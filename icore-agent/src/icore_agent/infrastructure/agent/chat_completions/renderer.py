@@ -9,10 +9,9 @@ from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.prompt import (
     PromptEnvelope,
     PromptHistoryItem,
-    ToolChoice,
-    user_message_text,
 )
 from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
+from icore_agent.domain.agent.tool import ToolChoice
 
 
 def render_chat_completions_messages(
@@ -38,7 +37,7 @@ def render_chat_completions_messages(
     )
     messages.append({
         "role": ChatCompletionRole.USER.value,
-        "content": user_message_text(envelope.current_user_item),
+        "content": envelope.current_user_item.to_text(),
     })
     return messages
 
@@ -57,7 +56,7 @@ def _render_history_message(item: PromptHistoryItem) -> dict[str, Any]:
         return {"role": ChatCompletionRole.ASSISTANT.value, "content": item.text}
     return {
         "role": ChatCompletionRole.USER.value,
-        "content": user_message_text(item),
+        "content": item.to_text(),
     }
 
 
@@ -65,13 +64,13 @@ def _history_item_text(item: PromptHistoryItem) -> str:
     """Return text used to decide whether a history item is model-visible."""
     if isinstance(item, AgentMessageItem):
         return item.text
-    return user_message_text(item)
+    return item.to_text()
 
 
 def render_chat_completions_tools(
     envelope: PromptEnvelope,
 ) -> list[dict[str, Any]]:
-    """Render envelope tool specs as top-level Chat Completions tools."""
+    """Render envelope tool definitions as top-level Chat Completions tools."""
     return [
         {
             "type": "function",

@@ -11,11 +11,11 @@ from icore_agent.application.agent.loop.types import (
     PreparedAgentRunner,
 )
 from icore_agent.application.agent.prompt import build_agent_prompt_envelope
-from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.tool import ToolDefinition
 
 OrchestratorFactory = Callable[..., PreparedAgentRunner]
 ToolEventBridgeFactory = Callable[..., AgentToolEventBridge]

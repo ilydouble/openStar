@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.application.agent.tool import ToolDefinition, ToolExecutionContext
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
-from icore_agent.domain.agent.prompt import (
-    PromptEnvelope,
+from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.tool import (
     ToolChoice,
-    ToolSpec,
+    ToolDefinition,
+    ToolExecutionContext,
 )
 from icore_agent.infrastructure.agent.chat_completions import (
     ChatCompletionsRunner,
@@ -53,19 +53,18 @@ def test_chat_completions_runner_executes_tool_call_and_continues(monkeypatch) -
         fake_completion,
     )
     bridge = RecordingToolBridge()
+    tool_definition = ToolDefinition(
+        name="number_comparator",
+        label="Number comparator",
+        description="Compare numbers.",
+        parameters={"type": "object"},
+        execute=_compare_numbers,
+    )
     runner = ChatCompletionsRunner(
         model_id="test-model",
         client_args={},
         params={},
-        tool_definitions=[
-            ToolDefinition(
-                name="number_comparator",
-                label="Number comparator",
-                description="Compare numbers.",
-                parameters={"type": "object"},
-                execute=_compare_numbers,
-            )
-        ],
+        tool_definitions=[tool_definition],
         tool_bridge=bridge,
     )
     envelope = PromptEnvelope(
@@ -75,13 +74,7 @@ def test_chat_completions_runner_executes_tool_call_and_continues(monkeypatch) -
         current_user_item=UserMessageItem(content=[
             UserInput(type=UserInputType.TEXT, text="Which is larger?"),
         ]),
-        tools=[
-            ToolSpec(
-                name="number_comparator",
-                description="Compare numbers.",
-                parameters={"type": "object"},
-            )
-        ],
+        tools=[tool_definition],
         tool_choice=ToolChoice.AUTO,
     )
 

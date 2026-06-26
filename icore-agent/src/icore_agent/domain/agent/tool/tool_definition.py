@@ -1,4 +1,4 @@
-"""Provider-neutral tool definitions for application-owned agent tools."""
+"""Provider-neutral tool definitions for agent tools."""
 
 from __future__ import annotations
 

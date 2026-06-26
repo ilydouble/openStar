@@ -10,11 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from icore_agent.domain.agent.prompt import (
-    BuildSystemPromptOptions,
     PromptEnvelope,
-    build_system_prompt,
+    build_base_instructions,
 )
-from icore_agent.application.agent.tool import ToolDefinition
+from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
@@ -224,11 +223,8 @@ def test_create_strands_orchestrator_accepts_prompt_envelope(mock_agent_cls, _mo
 
 def test_orchestrator_prompt_builder_uses_only_base_and_tool_rules():
     """System prompt should include base policy and generic tool behavior."""
-    prompt = str(build_system_prompt(BuildSystemPromptOptions(
-        tools=build_orchestrator_tool_definitions(session_id="session-1"),
-        summary="Earlier summary",
-        user_memory_prompt="## About this user\n- tone: concise",
-    )))
+    _ = build_orchestrator_tool_definitions(session_id="session-1")
+    prompt = build_base_instructions()
 
     assert "You are iCore Agent" in prompt
     assert "Tool-use rules" in prompt
@@ -252,7 +248,7 @@ def test_system_prompt_omits_tool_prompt_snippets():
         """Return a stable test result."""
         return "ok"
 
-    prompt = str(build_system_prompt(BuildSystemPromptOptions(tools=[
+    _ = [
         ToolDefinition(
             name="visible_tool",
             label="Visible tool",
@@ -268,7 +264,8 @@ def test_system_prompt_omits_tool_prompt_snippets():
             parameters={"type": "object"},
             execute=_execute,
         ),
-    ])))
+    ]
+    prompt = build_base_instructions()
 
     assert "Tool-use rules" in prompt
     assert "visible_tool" not in prompt

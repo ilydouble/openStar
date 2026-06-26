@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from icore_agent.application.agent.tool.tool_definition import (
+from icore_agent.domain.agent.tool import (
     ToolDefinition,
     ToolExecutionContext,
     ToolExecutor,

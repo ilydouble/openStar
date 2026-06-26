@@ -6,13 +6,9 @@ import json
 from typing import Any
 
 from icore_agent.domain.agent.prompt import (
-    BuildSystemPromptOptions,
     PromptEnvelope,
-    ToolChoice,
-    ToolSpec,
-    build_system_prompt,
+    build_base_instructions,
 )
-from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.context import AgentContext
 from icore_agent.domain.agent.session import (
@@ -21,6 +17,7 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
+from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
 
 
 def build_agent_prompt_envelope(
@@ -31,7 +28,7 @@ def build_agent_prompt_envelope(
 ) -> PromptEnvelope:
     """Build the model-visible prompt envelope for one agent turn."""
     return PromptEnvelope(
-        base_instructions=str(build_system_prompt(BuildSystemPromptOptions())),
+        base_instructions=build_base_instructions(),
         context_items=_context_items(context),
         history_items=context.history_items,
         current_user_item=UserMessageItem(
@@ -42,14 +39,7 @@ def build_agent_prompt_envelope(
                 ),
             ],
         ),
-        tools=[
-            ToolSpec(
-                name=definition.name,
-                description=definition.description,
-                parameters=definition.parameters,
-            )
-            for definition in tool_definitions
-        ],
+        tools=tool_definitions,
         tool_choice=ToolChoice.AUTO,
     )
 

@@ -10,15 +10,28 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.prompt import (
-    PromptEnvelope,
-    ToolChoice,
-    ToolSpec,
-)
+from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
 from icore_agent.infrastructure.agent.chat_completions import (
     render_chat_completions_messages,
     render_chat_completions_tools,
 )
+
+
+def _execute_tool(*_: object) -> str:
+    """Return a stable test result for ToolDefinition construction."""
+    return "ok"
+
+
+def test_user_message_item_converts_text_blocks_to_text() -> None:
+    """UserMessageItem should own its model-visible text conversion."""
+    item = UserMessageItem(content=[
+        UserInput(type=UserInputType.TEXT, text="Line one"),
+        UserInput(type=UserInputType.IMAGE, image_file_uuid="image-1"),
+        UserInput(type=UserInputType.TEXT, text="Line two"),
+    ])
+
+    assert item.to_text() == "Line one\nLine two"
 
 
 def test_prompt_envelope_renders_base_context_history_and_user_in_order() -> None:
@@ -39,10 +52,12 @@ def test_prompt_envelope_renders_base_context_history_and_user_in_order() -> Non
             UserInput(type=UserInputType.TEXT, text="Current question"),
         ]),
         tools=[
-            ToolSpec(
+            ToolDefinition(
                 name="read_uploaded_file",
+                label="Read uploaded file",
                 description="Read uploaded files.",
                 parameters={"type": "object"},
+                execute=_execute_tool,
             )
         ],
         tool_choice=ToolChoice.AUTO,
@@ -77,13 +92,15 @@ def test_prompt_envelope_renders_tools_as_top_level_schema() -> None:
             UserInput(type=UserInputType.TEXT, text="Current question"),
         ]),
         tools=[
-            ToolSpec(
+            ToolDefinition(
                 name="number_comparator",
+                label="Number comparator",
                 description="Compare numbers.",
                 parameters={
                     "type": "object",
                     "properties": {"left": {"type": "number"}},
                 },
+                execute=_execute_tool,
             )
         ],
         tool_choice=ToolChoice.AUTO,

@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from icore_agent.domain.agent.session.session_item import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItem,
 )

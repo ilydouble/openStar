@@ -13,18 +13,16 @@ from strands.tools.executors import SequentialToolExecutor
 
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.prompt import (
-    BuildSystemPromptOptions,
     PromptEnvelope,
     PromptHistoryItem,
-    build_system_prompt,
-    user_message_text,
+    build_base_instructions,
 )
-from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import settings
 from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
+from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .model_factory import create_litellm_model
@@ -53,7 +51,7 @@ class StrandsPreparedAgentRunner:
     def __call__(self, prompt_envelope: PromptEnvelope) -> Any:
         """Render envelope history into Strands state and run current input."""
         self._agent.messages = _strands_messages(prompt_envelope)
-        return self._agent(user_message_text(prompt_envelope.current_user_item))
+        return self._agent(prompt_envelope.current_user_item.to_text())
 
 
 def create_strands_orchestrator(
@@ -91,7 +89,7 @@ def create_strands_orchestrator(
     system_prompt = (
         prompt_envelope.base_instructions
         if prompt_envelope is not None
-        else str(build_system_prompt(BuildSystemPromptOptions()))
+        else build_base_instructions()
     )
     tools = [make_agent_tool(definition) for definition in definitions]
 
@@ -143,14 +141,14 @@ def _history_message(item: PromptHistoryItem) -> dict[str, Any]:
     """Render one prior user or assistant item in the Strands message shape."""
     if isinstance(item, AgentMessageItem):
         return _text_message(ChatCompletionRole.ASSISTANT.value, item.text)
-    return _text_message(ChatCompletionRole.USER.value, user_message_text(item))
+    return _text_message(ChatCompletionRole.USER.value, item.to_text())
 
 
 def _history_item_text(item: PromptHistoryItem) -> str:
     """Return text used to decide whether a history item is model-visible."""
     if isinstance(item, AgentMessageItem):
         return item.text
-    return user_message_text(item)
+    return item.to_text()
 
 
 def _text_message(role: str, content: str) -> dict[str, Any]:

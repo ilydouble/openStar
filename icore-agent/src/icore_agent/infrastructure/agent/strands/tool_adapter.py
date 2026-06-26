@@ -14,7 +14,7 @@ from strands.types.tools import (
     ToolUse,
 )
 
-from icore_agent.application.agent.tool import (
+from icore_agent.domain.agent.tool import (
     PreparedArguments,
     ToolDefinition,
     ToolExecutionContext,

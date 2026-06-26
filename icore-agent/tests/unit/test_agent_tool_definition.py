@@ -10,7 +10,7 @@ import pytest
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.application.agent.tool import (
+from icore_agent.domain.agent.tool import (
     ToolDefinition,
     ToolExecutionContext,
 )

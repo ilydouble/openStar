@@ -678,7 +678,7 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
     ).read_text(encoding="utf-8")
     tool_definition = (
         AGENT_ROOT / "src" / "icore_agent" /
-        "application" / "agent" / "tool" / "tool_definition.py"
+        "domain" / "agent" / "tool" / "tool_definition.py"
     ).read_text(encoding="utf-8")
     tool_adapter = (
         AGENT_ROOT / "src" / "icore_agent" /
@@ -692,6 +692,10 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
     assert "orchestrator_tool_names" not in catalog_init
     assert "class ToolDefinition" in tool_definition
     assert "class AgentTool" not in tool_definition
+    assert not (
+        AGENT_ROOT / "src" / "icore_agent" /
+        "application" / "agent" / "tool" / "tool_definition.py"
+    ).exists()
     assert "class AgentTool" in tool_adapter
     assert "strands.types._events" not in tool_definition
     assert "ToolResultEvent" not in tool_definition
@@ -715,7 +719,18 @@ def test_chat_orchestration_lives_in_application_layer():
     domain_prompt = (
         package_dir / "domain" / "agent" / "prompt" / "system_prompt.py"
     ).read_text(encoding="utf-8")
+    domain_prompt_init = (
+        package_dir / "domain" / "agent" / "prompt" / "__init__.py"
+    ).read_text(encoding="utf-8")
+    domain_tool_dir = package_dir / "domain" / "agent" / "tool"
+    domain_tool_init = (domain_tool_dir / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    prompt_envelope = (
+        package_dir / "domain" / "agent" / "prompt" / "prompt_envelope.py"
+    ).read_text(encoding="utf-8")
     catalog_dir = agent_dir / "tool" / "catalog"
+    agent_session_dir = package_dir / "domain" / "agent" / "session"
 
     assert not (package_dir / "engine").exists()
     assert not (package_dir / "tools").exists()
@@ -727,12 +742,30 @@ def test_chat_orchestration_lives_in_application_layer():
     assert "_Fallback" not in agent_factory
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in agent_factory
     assert "sub-agent" not in agent_factory
-    assert "build_system_prompt" in agent_factory
-    assert "class BuildSystemPromptOptions" in domain_prompt
+    assert "build_base_instructions" in agent_factory
+    assert "build_system_prompt" not in agent_factory
+    assert "class BuildSystemPromptOptions" not in domain_prompt
+    assert "class SystemPrompt" not in domain_prompt
+    assert "class PromptSource" not in domain_prompt
+    assert "def base_system_prompt" not in domain_prompt
+    assert "def build_tool_use_rules" not in domain_prompt
+    assert "def build_base_instructions" in domain_prompt
+    assert "BuildSystemPromptOptions" not in domain_prompt_init
     assert "build_runtime_context_prompt" not in domain_prompt
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in domain_prompt
     assert "RESEARCH_SYSTEM_PROMPT" not in domain_prompt
     assert "SEQUENTIAL_SYSTEM_PROMPT" not in domain_prompt
+    assert (domain_tool_dir / "tool_definition.py").is_file()
+    assert "ToolDefinition" in domain_tool_init
+    assert "ToolChoice" in domain_tool_init
+    assert "class ToolSpec" not in prompt_envelope
+    assert "list[ToolDefinition]" in prompt_envelope
+    assert not (agent_dir / "tool" / "tool_definition.py").exists()
+    assert not (agent_session_dir / "session_item.py").exists()
+    assert (agent_session_dir / "user_message_item.py").is_file()
+    assert "def to_text" in (
+        agent_session_dir / "user_message_item.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_agent_session_schema_uses_explicit_payload_models():

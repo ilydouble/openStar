@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from icore_agent.domain.agent.prompt import (
-    BaseInstructions,
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
     ContextItem,
-    ModelVisibleItem,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
+)
+from icore_agent.domain.agent.prompt import (
     PromptEnvelope,
     ToolChoice,
     ToolSpec,
-    UserPromptItem,
 )
 from icore_agent.infrastructure.agent.chat_completions import (
     render_chat_completions_messages,
@@ -20,16 +24,20 @@ from icore_agent.infrastructure.agent.chat_completions import (
 def test_prompt_envelope_renders_base_context_history_and_user_in_order() -> None:
     """PromptEnvelope should render base instructions separately from history."""
     envelope = PromptEnvelope(
-        base_instructions=BaseInstructions(text="Base policy"),
+        base_instructions="Base policy",
         context_items=[
-            ContextItem(kind="summary", content="Earlier summary"),
+            ContextItem(kind="session_summary", content="Earlier summary"),
             ContextItem(kind="file_attachment", content="file uuid=file-1"),
         ],
         history_items=[
-            ModelVisibleItem(role="user", content="Old question"),
-            ModelVisibleItem(role="assistant", content="Old answer"),
+            UserMessageItem(content=[
+                UserInput(type=UserInputType.TEXT, text="Old question"),
+            ]),
+            AgentMessageItem(text="Old answer"),
         ],
-        current_user_item=UserPromptItem(content="Current question"),
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Current question"),
+        ]),
         tools=[
             ToolSpec(
                 name="read_uploaded_file",
@@ -43,12 +51,18 @@ def test_prompt_envelope_renders_base_context_history_and_user_in_order() -> Non
     messages = render_chat_completions_messages(envelope)
 
     assert messages == [
-        {"role": "system", "content": "Base policy"},
-        {"role": "user", "content": "Earlier summary"},
-        {"role": "user", "content": "file uuid=file-1"},
-        {"role": "user", "content": "Old question"},
-        {"role": "assistant", "content": "Old answer"},
-        {"role": "user", "content": "Current question"},
+        {"role": ChatCompletionRole.SYSTEM.value, "content": "Base policy"},
+        {
+            "role": ChatCompletionRole.USER.value,
+            "content": "<context type='session_summary'>Earlier summary</context>",
+        },
+        {
+            "role": ChatCompletionRole.USER.value,
+            "content": "<context type='file_attachment'>file uuid=file-1</context>",
+        },
+        {"role": ChatCompletionRole.USER.value, "content": "Old question"},
+        {"role": ChatCompletionRole.ASSISTANT.value, "content": "Old answer"},
+        {"role": ChatCompletionRole.USER.value, "content": "Current question"},
     ]
     assert all(message["content"] != "Base policy" for message in messages[1:])
 
@@ -56,10 +70,12 @@ def test_prompt_envelope_renders_base_context_history_and_user_in_order() -> Non
 def test_prompt_envelope_renders_tools_as_top_level_schema() -> None:
     """Tool specs should render as Chat Completions tools, not prompt text."""
     envelope = PromptEnvelope(
-        base_instructions=BaseInstructions(text="Base policy"),
+        base_instructions="Base policy",
         context_items=[],
         history_items=[],
-        current_user_item=UserPromptItem(content="Current question"),
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Current question"),
+        ]),
         tools=[
             ToolSpec(
                 name="number_comparator",
@@ -86,3 +102,27 @@ def test_prompt_envelope_renders_tools_as_top_level_schema() -> None:
             },
         }
     ]
+
+
+def test_prompt_envelope_escapes_context_wrapper_content() -> None:
+    """Context wrapper should not be breakable by context kind or content text."""
+    envelope = PromptEnvelope(
+        base_instructions="Base policy",
+        context_items=[
+            ContextItem(
+                kind="runtime<context>",
+                content="A < B & \"quoted\"",
+            ),
+        ],
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Current question"),
+        ]),
+    )
+
+    assert render_chat_completions_messages(envelope)[1] == {
+        "role": ChatCompletionRole.USER.value,
+        "content": (
+            "<context type='runtime&lt;context&gt;'>"
+            "A &lt; B &amp; &quot;quoted&quot;</context>"
+        ),
+    }

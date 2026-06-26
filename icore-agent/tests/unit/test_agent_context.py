@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 import icore_agent.application.agent.context as agent_context
+from icore_agent.domain.agent.session import AgentMessageItem, UserMessageItem
 from icore_agent.domain.files.models import FileAsset
 
 
@@ -15,6 +16,17 @@ def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
     """File UUID normalization should keep the first occurrence of each UUID."""
     assert agent_context.dedupe_file_uuids(
         (" a ", "b", "a", "", "b")) == ("a", "b")
+
+
+def _history_texts(items: list[UserMessageItem | AgentMessageItem]) -> list[tuple[str, str]]:
+    """Return role/text pairs from provider-neutral session history items."""
+    pairs: list[tuple[str, str]] = []
+    for item in items:
+        if isinstance(item, UserMessageItem):
+            pairs.append(("user", item.content[0].text or ""))
+        else:
+            pairs.append(("assistant", item.text))
+    return pairs
 
 
 @pytest.mark.asyncio
@@ -38,9 +50,8 @@ async def test_load_agent_context_prefers_cached_history() -> None:
     )
 
     assert context.summary == "Earlier summary"
-    assert [item.model_dump() for item in context.history_items] == [
-        {"role": "user", "content": "Cached question"},
-    ]
+    assert _history_texts(context.history_items) == [
+        ("user", "Cached question")]
 
 
 @pytest.mark.asyncio
@@ -63,8 +74,8 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
     )
 
     assert history.load_calls == [("session-1", "user-1")]
-    assert [item.model_dump() for item in context.history_items] == [
-        {"role": "assistant", "content": "Persisted answer"},
+    assert _history_texts(context.history_items) == [
+        ("assistant", "Persisted answer"),
     ]
 
 
@@ -88,8 +99,8 @@ async def test_load_agent_context_excludes_current_user_message_from_fallback_hi
         user_memory_service=None,
     )
 
-    assert [item.model_dump() for item in context.history_items] == [
-        {"role": "assistant", "content": "Persisted answer"},
+    assert _history_texts(context.history_items) == [
+        ("assistant", "Persisted answer"),
     ]
 
 

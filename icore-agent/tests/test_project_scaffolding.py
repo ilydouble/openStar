@@ -563,13 +563,15 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_context_dir / "loader.py").is_file()
     assert not (agent_context_dir / "models.py").exists()
     assert (agent_domain_context_dir / "__init__.py").is_file()
-    assert (agent_domain_context_dir / "models.py").is_file()
+    assert not (agent_domain_context_dir / "models.py").exists()
     assert (agent_domain_context_dir / "attachments.py").is_file()
     assert (agent_domain_context_dir / "loaded_context.py").is_file()
     assert (agent_domain_prompt_dir / "__init__.py").is_file()
     assert (agent_domain_prompt_dir / "prompt_envelope.py").is_file()
+    assert (agent_domain_prompt_dir / "system_prompt.py").is_file()
     assert (agent_prompt_dir / "__init__.py").is_file()
     assert (agent_prompt_dir / "assembler.py").is_file()
+    assert not list((agent_dir / "sys_prompt").glob("**/*.py"))
     assert (agent_context_dir / "ports.py").is_file()
     assert (agent_context_dir / "attachments.py").is_file()
     assert (agent_context_dir / "history.py").is_file()
@@ -710,11 +712,8 @@ def test_chat_orchestration_lives_in_application_layer():
     ).read_text(
         encoding="utf-8"
     )
-    prompt_builder = (
-        agent_dir / "sys_prompt" / "system_prompt_builder.py"
-    ).read_text(encoding="utf-8")
-    prompt_sources = (
-        agent_dir / "sys_prompt" / "prompt_source" / "system_prompt.py"
+    domain_prompt = (
+        package_dir / "domain" / "agent" / "prompt" / "system_prompt.py"
     ).read_text(encoding="utf-8")
     catalog_dir = agent_dir / "tool" / "catalog"
 
@@ -729,11 +728,11 @@ def test_chat_orchestration_lives_in_application_layer():
     assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in agent_factory
     assert "sub-agent" not in agent_factory
     assert "build_system_prompt" in agent_factory
-    assert "class BuildSystemPromptOptions" in prompt_builder
-    assert "build_runtime_context_prompt" not in prompt_builder
-    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in prompt_sources
-    assert "RESEARCH_SYSTEM_PROMPT" not in prompt_sources
-    assert "SEQUENTIAL_SYSTEM_PROMPT" not in prompt_sources
+    assert "class BuildSystemPromptOptions" in domain_prompt
+    assert "build_runtime_context_prompt" not in domain_prompt
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" in domain_prompt
+    assert "RESEARCH_SYSTEM_PROMPT" not in domain_prompt
+    assert "SEQUENTIAL_SYSTEM_PROMPT" not in domain_prompt
 
 
 def test_agent_session_schema_uses_explicit_payload_models():

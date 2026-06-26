@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from icore_agent.domain.agent.prompt import ModelVisibleItem
+from icore_agent.domain.agent.prompt import PromptHistoryItem
 
 from .attachments import AgentFileAttachment, AgentImageAttachment
 
@@ -15,7 +15,7 @@ class AgentContext:
     """Loaded context materials before prompt-envelope assembly."""
 
     summary: str | None
-    history_items: list[ModelVisibleItem]
+    history_items: list[PromptHistoryItem]
     has_rag: bool
     image_attachments: list[AgentImageAttachment]
     file_attachments: list[AgentFileAttachment]

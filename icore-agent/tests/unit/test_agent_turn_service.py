@@ -681,7 +681,7 @@ class FakeAgent:
     def __call__(self, prompt_envelope: PromptEnvelope) -> str:
         """Return a reply or emit callback stream events."""
         self.last_prompt_envelope = prompt_envelope
-        message = prompt_envelope.current_user_item.content
+        message = prompt_envelope.current_user_item.content[0].text or ""
         if self.emit_tool_call:
             tool_use = {
                 "toolUseId": "tool-1",

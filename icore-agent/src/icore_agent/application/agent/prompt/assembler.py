@@ -5,19 +5,21 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from icore_agent.application.agent.sys_prompt import (
-    BuildSystemPromptOptions,
-    build_system_prompt,
-)
-from icore_agent.application.agent.tool import ToolDefinition
-from icore_agent.domain.agent.context import AgentContext
 from icore_agent.domain.agent.prompt import (
-    BaseInstructions,
-    ContextItem,
+    BuildSystemPromptOptions,
     PromptEnvelope,
     ToolChoice,
     ToolSpec,
-    UserPromptItem,
+    build_system_prompt,
+)
+from icore_agent.application.agent.tool import ToolDefinition
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.context import AgentContext
+from icore_agent.domain.agent.session import (
+    ContextItem,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
 
 
@@ -29,13 +31,16 @@ def build_agent_prompt_envelope(
 ) -> PromptEnvelope:
     """Build the model-visible prompt envelope for one agent turn."""
     return PromptEnvelope(
-        base_instructions=BaseInstructions(
-            text=str(build_system_prompt(BuildSystemPromptOptions())),
-        ),
+        base_instructions=str(build_system_prompt(BuildSystemPromptOptions())),
         context_items=_context_items(context),
         history_items=context.history_items,
-        current_user_item=UserPromptItem(
-            content=command.agent_message or command.message,
+        current_user_item=UserMessageItem(
+            content=[
+                UserInput(
+                    type=UserInputType.TEXT,
+                    text=command.agent_message or command.message,
+                ),
+            ],
         ),
         tools=[
             ToolSpec(
@@ -54,18 +59,21 @@ def _context_items(context: AgentContext) -> list[ContextItem]:
     items: list[ContextItem] = []
     if context.summary:
         items.append(ContextItem(
-            kind="conversation_summary",
+            kind="session_summary",
+            role_hint=ChatCompletionRole.USER,
             content=f"Earlier conversation summary:\n{context.summary}",
         ))
     if context.user_memory_prompt:
         items.append(ContextItem(
             kind="user_memory",
+            role_hint=ChatCompletionRole.USER,
             content=context.user_memory_prompt,
         ))
     attachment_note = _attachment_reference_note(context)
     if attachment_note:
         items.append(ContextItem(
             kind="attachments",
+            role_hint=ChatCompletionRole.USER,
             content=attachment_note,
         ))
     return items

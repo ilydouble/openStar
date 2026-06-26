@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from icore_agent.domain.agent.roles import ChatCompletionRole
 from icore_agent.domain.identifiers import uuid7
 from icore_agent.shared.time.utils import utc_now
 
@@ -20,6 +21,7 @@ def _new_id() -> str:
 class SessionItemType(StrEnum):
     """Supported timeline item kinds in a chat session turn."""
 
+    CONTEXT = "context"
     USER_MESSAGE = "user_message"
     AGENT_MESSAGE = "agent_message"
     REASONING = "reasoning"
@@ -69,6 +71,39 @@ class UserMessageItem(SessionItemBase):
     type: Literal["user_message"] = "user_message"
     status: SessionItemStatus = SessionItemStatus.COMPLETED
     content: list[UserInput]
+
+
+class ContextItem(SessionItemBase):
+    """Runtime context injected into the model for one turn only.
+
+    Context items are not conversation history and do not mean the user said
+    the content.  They carry extra model-visible material such as summaries,
+    durable user memory, attachment references, RAG results, permissions, or
+    runtime environment notes.
+    """
+
+    type: Literal["context"] = "context"
+    status: SessionItemStatus = SessionItemStatus.COMPLETED
+    kind: str = Field(
+        description=(
+            "Context source or purpose, such as session_summary, user_memory, "
+            "runtime_context, tool_context, attachments, or rag_result."
+        ),
+    )
+    role_hint: Literal[ChatCompletionRole.USER] = Field(
+        default=ChatCompletionRole.USER,
+        description=(
+            "Provider role hint used by prompt adapters.  The current v1 "
+            "contract only supports user, so adapters render this item as a "
+            "user-role context wrapper message."
+        ),
+    )
+    content: str = Field(
+        description=(
+            "External context text visible to the model for this turn.  This "
+            "text is not persisted as chat history and is not a user utterance."
+        ),
+    )
 
 
 class AgentMessageItem(SessionItemBase):
@@ -156,6 +191,11 @@ class ToolCallItem(SessionItemBase):
 
 
 SessionItem = Annotated[
-    UserMessageItem | AgentMessageItem | ReasoningItem | PlanItem | ToolCallItem,
+    ContextItem
+    | UserMessageItem
+    | AgentMessageItem
+    | ReasoningItem
+    | PlanItem
+    | ToolCallItem,
     Field(discriminator="type"),
 ]

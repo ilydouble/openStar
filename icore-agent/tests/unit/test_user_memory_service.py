@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.application.agent.sys_prompt import (
+from icore_agent.domain.agent.prompt import (
     BuildSystemPromptOptions,
     build_system_prompt,
 )

@@ -11,6 +11,7 @@ from icore_agent.application.usage.recording import (
     flush_turn_usage_capture,
 )
 from icore_agent.config import settings
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
@@ -158,7 +159,7 @@ class TurnUsageRecorder:
                         counter(
                             model=model,
                             messages=[{
-                                "role": "user",
+                                "role": ChatCompletionRole.USER.value,
                                 "content": prompt_text,
                             }],
                         )

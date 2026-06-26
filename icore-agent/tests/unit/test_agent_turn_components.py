@@ -16,7 +16,7 @@ from icore_agent.application.agent.turn import (
 )
 from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.agent import AgentTurnCommand
-from icore_agent.domain.agent.prompt import ModelVisibleItem, PromptEnvelope
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
@@ -24,6 +24,9 @@ from icore_agent.domain.agent.session import (
     ToolCallResult,
     ToolCallStatus,
     ToolFunction,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
 from icore_agent.domain.agent.turn import TurnError, TurnEvent, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
@@ -256,7 +259,7 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
-    assert request.prompt_envelope.current_user_item.content == "Hello"
+    assert request.prompt_envelope.current_user_item.content[0].text == "Hello"
     attachment_context = "\n".join(
         item.content
         for item in request.prompt_envelope.context_items
@@ -265,10 +268,7 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
     assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
     assert "read_uploaded_file" in attachment_context
     assert request.runner is factory.runner
-    assert [
-        item.model_dump()
-        for item in request.prompt_envelope.history_items
-    ] == [{"role": "user", "content": "old"}]
+    assert request.prompt_envelope.history_items[0].content[0].text == "old"
     assert request.prompt_envelope.tools
     assert isinstance(request.tool_bridge, FakeToolBridge)
     assert "enable_tools" not in factory.calls[0]
@@ -487,7 +487,11 @@ class StubContext:
     image_attachments = [object()]
     file_attachments = [object(), object()]
     user_memory_prompt = "remember"
-    history_items = [ModelVisibleItem(role="user", content="old")]
+    history_items = [
+        UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="old"),
+        ]),
+    ]
     has_attachments = True
 
 
@@ -535,7 +539,7 @@ class RecordingRunner:
     def __call__(self, prompt_envelope: PromptEnvelope) -> str:
         """Return a fixed reply."""
         self.prompt_envelopes.append(prompt_envelope)
-        return f"reply to {prompt_envelope.current_user_item.content}"
+        return f"reply to {prompt_envelope.current_user_item.content[0].text}"
 
 
 class RecordingOrchestratorFactory:

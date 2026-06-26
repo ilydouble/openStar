@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    ContextItem,
+    UserMessageItem,
+)
+
+PromptHistoryItem = UserMessageItem | AgentMessageItem
 
 
 class ToolChoice(StrEnum):
@@ -14,41 +21,6 @@ class ToolChoice(StrEnum):
     AUTO = "auto"
     NONE = "none"
     REQUIRED = "required"
-
-
-class BaseInstructions(BaseModel):
-    """Stable instructions that should be rendered as the first system message."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str
-
-
-class ContextItem(BaseModel):
-    """Model-visible context material that is not conversation history."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: str
-    content: str
-    role: Literal["user"] = "user"
-
-
-class ModelVisibleItem(BaseModel):
-    """One completed prior-turn item visible to the next model request."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    role: Literal["user", "assistant"]
-    content: str
-
-
-class UserPromptItem(BaseModel):
-    """Current-turn user prompt sent after context and prior history."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    content: str
 
 
 class ToolSpec(BaseModel):
@@ -66,17 +38,33 @@ class PromptEnvelope(BaseModel):
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
-    base_instructions: BaseInstructions
+    base_instructions: str
     context_items: list[ContextItem] = Field(default_factory=list)
-    history_items: list[ModelVisibleItem] = Field(default_factory=list)
-    current_user_item: UserPromptItem
+    history_items: list[PromptHistoryItem] = Field(default_factory=list)
+    current_user_item: UserMessageItem
     tools: list[ToolSpec] = Field(default_factory=list)
     tool_choice: ToolChoice = ToolChoice.AUTO
 
     def usage_text(self) -> str:
         """Return a rough text representation for fallback usage estimation."""
-        parts = [self.base_instructions.text]
+        parts = [self.base_instructions]
         parts.extend(item.content for item in self.context_items)
-        parts.extend(item.content for item in self.history_items)
-        parts.append(self.current_user_item.content)
+        parts.extend(_history_item_text(item) for item in self.history_items)
+        parts.append(user_message_text(self.current_user_item))
         return "\n\n".join(part for part in parts if part)
+
+
+def user_message_text(item: UserMessageItem) -> str:
+    """Return model-visible text blocks from one user message item."""
+    return "\n".join(
+        block.text or ""
+        for block in item.content
+        if block.text
+    )
+
+
+def _history_item_text(item: PromptHistoryItem) -> str:
+    """Return model-visible text from a prior user or assistant item."""
+    if isinstance(item, UserMessageItem):
+        return user_message_text(item)
+    return item.text

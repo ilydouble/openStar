@@ -9,8 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from icore_agent.application.agent.sys_prompt import (
+from icore_agent.domain.agent.prompt import (
     BuildSystemPromptOptions,
+    PromptEnvelope,
     build_system_prompt,
 )
 from icore_agent.application.agent.tool import ToolDefinition
@@ -18,10 +19,10 @@ from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import ResolvedLiteLLMConfig
-from icore_agent.domain.agent.prompt import (
-    BaseInstructions,
-    PromptEnvelope,
-    UserPromptItem,
+from icore_agent.domain.agent.session import (
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
 from icore_agent.infrastructure.agent.chat_completions import (
     ChatCompletionsRunner,
@@ -202,8 +203,10 @@ def test_create_strands_orchestrator_accepts_prompt_envelope(mock_agent_cls, _mo
     mock_agent.callback_handler = None
     mock_agent_cls.return_value = mock_agent
     envelope = PromptEnvelope(
-        base_instructions=BaseInstructions(text="Base policy"),
-        current_user_item=UserPromptItem(content="Hello"),
+        base_instructions="Base policy",
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Hello"),
+        ]),
     )
 
     runner = create_strands_orchestrator(

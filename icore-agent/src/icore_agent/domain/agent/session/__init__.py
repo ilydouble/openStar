@@ -1,5 +1,6 @@
 from .session_item import (
     AgentMessageItem,
+    ContextItem,
     PlanItem,
     ReasoningItem,
     SessionItem,
@@ -18,6 +19,7 @@ from .session_item import (
 
 __all__ = [
     "AgentMessageItem",
+    "ContextItem",
     "PlanItem",
     "ReasoningItem",
     "SessionItem",

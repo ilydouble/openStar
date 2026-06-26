@@ -10,6 +10,7 @@ from typing import Any
 import litellm
 
 from icore_agent.application.agent.tool import ToolDefinition, ToolExecutionContext
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.config import settings
 from icore_agent.domain.agent.prompt import PromptEnvelope
 
@@ -113,7 +114,7 @@ class ChatCompletionsRunner:
         }
         self._record_finish(tool_use, result_payload, exception=exception)
         return {
-            "role": "tool",
+            "role": ChatCompletionRole.TOOL.value,
             "tool_call_id": tool_call_id,
             "name": name,
             "content": text,
@@ -203,7 +204,7 @@ def _assistant_tool_call_message(
 ) -> dict[str, Any]:
     """Render the assistant message that requested tool calls."""
     return {
-        "role": "assistant",
+        "role": ChatCompletionRole.ASSISTANT.value,
         "content": _message_content(message) or None,
         "tool_calls": [_normalize_tool_call(call) for call in tool_calls],
     }

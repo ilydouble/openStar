@@ -1,6 +1,7 @@
 from .roles import ChatCompletionRole
 from .session import (
     AgentMessageItem,
+    ContextItem,
     PlanItem,
     ReasoningItem,
     SessionItem,
@@ -21,6 +22,7 @@ from .turn import Turn, TurnError, TurnEvent, TurnEventKind, TurnStatus
 __all__ = [
     "AgentMessageItem",
     "ChatCompletionRole",
+    "ContextItem",
     "PlanItem",
     "ReasoningItem",
     "SessionItem",

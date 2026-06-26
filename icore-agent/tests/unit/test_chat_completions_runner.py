@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.application.agent.tool import ToolDefinition, ToolExecutionContext
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
 from icore_agent.domain.agent.prompt import (
-    BaseInstructions,
     PromptEnvelope,
     ToolChoice,
     ToolSpec,
-    UserPromptItem,
 )
 from icore_agent.infrastructure.agent.chat_completions import (
     ChatCompletionsRunner,
@@ -69,10 +69,12 @@ def test_chat_completions_runner_executes_tool_call_and_continues(monkeypatch) -
         tool_bridge=bridge,
     )
     envelope = PromptEnvelope(
-        base_instructions=BaseInstructions(text="Base policy"),
+        base_instructions="Base policy",
         context_items=[],
         history_items=[],
-        current_user_item=UserPromptItem(content="Which is larger?"),
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Which is larger?"),
+        ]),
         tools=[
             ToolSpec(
                 name="number_comparator",
@@ -89,7 +91,7 @@ def test_chat_completions_runner_executes_tool_call_and_continues(monkeypatch) -
     assert calls[0]["tools"][0]["function"]["name"] == "number_comparator"
     assert calls[0]["tool_choice"] == "auto"
     assert calls[1]["messages"][-1] == {
-        "role": "tool",
+        "role": ChatCompletionRole.TOOL.value,
         "tool_call_id": "tool-1",
         "name": "number_comparator",
         "content": '{"comparison": "greater"}',

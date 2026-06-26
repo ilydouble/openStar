@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.prompt import ModelVisibleItem
+from icore_agent.domain.agent.prompt import PromptHistoryItem
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    SessionItemStatus,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
+)
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .ports import AgentHistoryMessage, AgentSessionReader, ConversationMemory
@@ -36,20 +43,24 @@ async def load_history_context(
 
 def to_model_visible_items(
     history: list[AgentHistoryMessage],
-) -> list[ModelVisibleItem]:
+) -> list[PromptHistoryItem]:
     """Convert loaded history into provider-neutral model-visible items."""
-    return [
-        ModelVisibleItem(
-            role=message["role"],
-            content=message["content"],
-        )
-        for message in history
-        if message.get("role") in (
-            ChatCompletionRole.USER.value,
-            ChatCompletionRole.ASSISTANT.value,
-        )
-        and message.get("content")
-    ]
+    items: list[PromptHistoryItem] = []
+    for message in history:
+        content = str(message.get("content") or "")
+        if not content:
+            continue
+        role = message.get("role")
+        if role == ChatCompletionRole.USER.value:
+            items.append(UserMessageItem(content=[
+                UserInput(type=UserInputType.TEXT, text=content),
+            ]))
+        elif role == ChatCompletionRole.ASSISTANT.value:
+            items.append(AgentMessageItem(
+                status=SessionItemStatus.COMPLETED,
+                text=content,
+            ))
+    return items
 
 
 def exclude_current_user_message(

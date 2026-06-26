@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 from strands import Agent
@@ -10,16 +11,20 @@ from strands.agent.conversation_manager.sliding_window_conversation_manager impo
 )
 from strands.tools.executors import SequentialToolExecutor
 
-from icore_agent.application.agent.sys_prompt import (
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.prompt import (
     BuildSystemPromptOptions,
+    PromptEnvelope,
+    PromptHistoryItem,
     build_system_prompt,
+    user_message_text,
 )
 from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import settings
-from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .model_factory import create_litellm_model
@@ -48,7 +53,7 @@ class StrandsPreparedAgentRunner:
     def __call__(self, prompt_envelope: PromptEnvelope) -> Any:
         """Render envelope history into Strands state and run current input."""
         self._agent.messages = _strands_messages(prompt_envelope)
-        return self._agent(prompt_envelope.current_user_item.content)
+        return self._agent(user_message_text(prompt_envelope.current_user_item))
 
 
 def create_strands_orchestrator(
@@ -84,7 +89,7 @@ def create_strands_orchestrator(
         )
     )
     system_prompt = (
-        prompt_envelope.base_instructions.text
+        prompt_envelope.base_instructions
         if prompt_envelope is not None
         else str(build_system_prompt(BuildSystemPromptOptions()))
     )
@@ -114,16 +119,38 @@ def _strands_messages(prompt_envelope: PromptEnvelope) -> list[dict[str, Any]]:
     """Render context and prior history into Strands message state."""
     messages: list[dict[str, Any]] = []
     messages.extend(
-        _text_message(item.role, item.content)
+        _text_message(ChatCompletionRole.USER.value, _context_block(item))
         for item in prompt_envelope.context_items
         if item.content
     )
     messages.extend(
-        _text_message(item.role, item.content)
+        _history_message(item)
         for item in prompt_envelope.history_items
-        if item.content
+        if _history_item_text(item)
     )
     return messages
+
+
+def _context_block(item: ContextItem) -> str:
+    """Render one runtime context item in the shared model-visible wrapper."""
+    return (
+        f"<context type='{escape(item.kind, quote=True)}'>"
+        f"{escape(item.content, quote=True)}</context>"
+    )
+
+
+def _history_message(item: PromptHistoryItem) -> dict[str, Any]:
+    """Render one prior user or assistant item in the Strands message shape."""
+    if isinstance(item, AgentMessageItem):
+        return _text_message(ChatCompletionRole.ASSISTANT.value, item.text)
+    return _text_message(ChatCompletionRole.USER.value, user_message_text(item))
+
+
+def _history_item_text(item: PromptHistoryItem) -> str:
+    """Return text used to decide whether a history item is model-visible."""
+    if isinstance(item, AgentMessageItem):
+        return item.text
+    return user_message_text(item)
 
 
 def _text_message(role: str, content: str) -> dict[str, Any]:

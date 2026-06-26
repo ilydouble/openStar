@@ -1,21 +1,31 @@
 """Domain prompt envelope value objects."""
 
 from .prompt_envelope import (
-    BaseInstructions,
-    ContextItem,
-    ModelVisibleItem,
+    PromptHistoryItem,
     PromptEnvelope,
     ToolChoice,
     ToolSpec,
-    UserPromptItem,
+    user_message_text,
+)
+from .system_prompt import (
+    BuildSystemPromptOptions,
+    PromptSource,
+    SystemPrompt,
+    base_system_prompt,
+    build_system_prompt,
+    build_tool_use_rules,
 )
 
 __all__ = [
-    "BaseInstructions",
-    "ContextItem",
-    "ModelVisibleItem",
+    "BuildSystemPromptOptions",
+    "PromptHistoryItem",
     "PromptEnvelope",
+    "PromptSource",
+    "SystemPrompt",
     "ToolChoice",
     "ToolSpec",
-    "UserPromptItem",
+    "base_system_prompt",
+    "build_system_prompt",
+    "build_tool_use_rules",
+    "user_message_text",
 ]

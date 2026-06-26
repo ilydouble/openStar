@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
-from icore_agent.domain.agent.prompt import PromptEnvelope, ToolChoice
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.prompt import (
+    PromptEnvelope,
+    PromptHistoryItem,
+    ToolChoice,
+    user_message_text,
+)
+from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
 
 
 def render_chat_completions_messages(
@@ -12,24 +20,52 @@ def render_chat_completions_messages(
 ) -> list[dict[str, Any]]:
     """Render envelope instructions, context, history, and user input as messages."""
     messages: list[dict[str, Any]] = [{
-        "role": "system",
-        "content": envelope.base_instructions.text,
+        "role": ChatCompletionRole.SYSTEM.value,
+        "content": envelope.base_instructions,
     }]
     messages.extend(
-        {"role": item.role, "content": item.content}
+        {
+            "role": ChatCompletionRole.USER.value,
+            "content": render_context_item(item),
+        }
         for item in envelope.context_items
         if item.content
     )
     messages.extend(
-        {"role": item.role, "content": item.content}
+        _render_history_message(item)
         for item in envelope.history_items
-        if item.content
+        if _history_item_text(item)
     )
     messages.append({
-        "role": "user",
-        "content": envelope.current_user_item.content,
+        "role": ChatCompletionRole.USER.value,
+        "content": user_message_text(envelope.current_user_item),
     })
     return messages
+
+
+def render_context_item(item: ContextItem) -> str:
+    """Render one runtime context item as a guarded model-visible block."""
+    return (
+        f"<context type='{escape(item.kind, quote=True)}'>"
+        f"{escape(item.content, quote=True)}</context>"
+    )
+
+
+def _render_history_message(item: PromptHistoryItem) -> dict[str, Any]:
+    """Render one prior user or assistant item as a Chat Completions message."""
+    if isinstance(item, AgentMessageItem):
+        return {"role": ChatCompletionRole.ASSISTANT.value, "content": item.text}
+    return {
+        "role": ChatCompletionRole.USER.value,
+        "content": user_message_text(item),
+    }
+
+
+def _history_item_text(item: PromptHistoryItem) -> str:
+    """Return text used to decide whether a history item is model-visible."""
+    if isinstance(item, AgentMessageItem):
+        return item.text
+    return user_message_text(item)
 
 
 def render_chat_completions_tools(

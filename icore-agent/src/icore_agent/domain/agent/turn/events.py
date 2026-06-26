@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from icore_agent.domain.agent.session import SessionItem
+from domain.agent.session import SessionItem
 
 from .turn import Turn
 from .turn_error import TurnError

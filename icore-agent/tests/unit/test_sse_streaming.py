@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.domain.agent.session import AgentMessageItem
+from domain.agent.session import AgentMessageItem
 from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind
 from icore_agent.interfaces.http.v1.streaming import encode_sse_event, sse_frames
 

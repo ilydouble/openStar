@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from domain.agent.session import UserInput, UserInputType, UserMessageItem
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.tool import (
     ToolChoice,

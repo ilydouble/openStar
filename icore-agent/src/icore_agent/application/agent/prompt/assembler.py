@@ -11,7 +11,7 @@ from icore_agent.domain.agent.prompt import (
 )
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.context import AgentContext
-from icore_agent.domain.agent.session import (
+from domain.agent.session import (
     ContextItem,
     UserInput,
     UserInputType,

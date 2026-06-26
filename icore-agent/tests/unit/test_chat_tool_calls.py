@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from domain.agent.session import UserInput, UserInputType, UserMessageItem
 from icore_agent.domain.agent.turn import Turn, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.models import (
     ChatSessionItem,

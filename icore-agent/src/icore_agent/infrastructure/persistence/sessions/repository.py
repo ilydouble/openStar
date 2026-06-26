@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.agent.session import SessionItem
+from domain.agent.session import SessionItem
 from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
 
 from .models import (

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import TypeAdapter
 
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import (
+from domain.agent.session import (
     AgentMessageItem,
     ContextItem,
     SessionItem,

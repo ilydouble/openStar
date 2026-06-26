@@ -17,7 +17,7 @@ from icore_agent.application.agent.turn import (
 from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.agent import AgentTurnCommand
 from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import (
+from domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
     ToolCallItem,

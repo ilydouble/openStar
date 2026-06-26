@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from icore_agent.domain.agent.session import (
+from domain.agent.session import (
     ToolCallError,
     ToolCallItem,
     ToolCallResult,

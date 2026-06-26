@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from icore_agent.domain.agent.session import ToolCallItem, ToolCallStatus
+from domain.agent.session import ToolCallItem, ToolCallStatus
 from icore_agent.domain.agent.turn import TurnEvent, TurnEventKind
 from icore_agent.shared.logging.app_logger import get_logger
 

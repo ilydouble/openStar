@@ -10,7 +10,7 @@ from icore_agent.domain.agent.prompt import (
     PromptEnvelope,
     PromptHistoryItem,
 )
-from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
+from domain.agent.session import AgentMessageItem, ContextItem
 from icore_agent.domain.agent.tool import ToolChoice
 
 

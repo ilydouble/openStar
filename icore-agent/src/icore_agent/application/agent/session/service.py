@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import SessionItem
+from domain.agent.session import SessionItem
 from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,

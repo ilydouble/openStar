@@ -10,7 +10,7 @@ import pytest
 from fastapi.responses import StreamingResponse
 
 from icore_agent.application.agent.session import AgentSessionService
-from icore_agent.domain.agent.session import (
+from domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
 )

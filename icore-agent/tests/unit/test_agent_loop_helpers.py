@@ -19,7 +19,7 @@ from icore_agent.infrastructure.agent.strands.payloads import (
     tool_call_id,
     tool_name,
 )
-from icore_agent.domain.agent.session import ToolCallItem, ToolCallStatus
+from domain.agent.session import ToolCallItem, ToolCallStatus
 from icore_agent.domain.agent.turn import TurnEventKind
 
 

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 import icore_agent.application.agent.context as agent_context
-from icore_agent.domain.agent.session import AgentMessageItem, UserMessageItem
+from domain.agent.session import AgentMessageItem, UserMessageItem
 from icore_agent.domain.files.models import FileAsset
 
 

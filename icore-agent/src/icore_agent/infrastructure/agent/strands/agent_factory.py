@@ -14,10 +14,12 @@ from icore_agent.application.agent.sys_prompt import (
     BuildSystemPromptOptions,
     build_system_prompt,
 )
+from icore_agent.application.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import settings
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.shared.logging.app_logger import get_logger
 
 from .model_factory import create_litellm_model
@@ -25,7 +27,28 @@ from .tool_adapter import make_agent_tool
 
 log = get_logger(__name__)
 
-PreparedStrandsAgent = Any
+
+class StrandsPreparedAgentRunner:
+    """Adapter that lets a Strands Agent consume a PromptEnvelope."""
+
+    def __init__(self, agent: Agent) -> None:
+        """Wrap one prepared Strands agent."""
+        self._agent = agent
+
+    @property
+    def callback_handler(self) -> Any:
+        """Return the underlying Strands callback handler."""
+        return getattr(self._agent, "callback_handler", None)
+
+    @callback_handler.setter
+    def callback_handler(self, value: Any) -> None:
+        """Patch the underlying Strands callback handler."""
+        setattr(self._agent, "callback_handler", value)
+
+    def __call__(self, prompt_envelope: PromptEnvelope) -> Any:
+        """Render envelope history into Strands state and run current input."""
+        self._agent.messages = _strands_messages(prompt_envelope)
+        return self._agent(prompt_envelope.current_user_item.content)
 
 
 def create_strands_orchestrator(
@@ -36,7 +59,10 @@ def create_strands_orchestrator(
     user_id: str = "",
     user_memory_prompt: str | None = None,
     file_service: Any | None = None,
-) -> PreparedStrandsAgent:
+    prompt_envelope: PromptEnvelope | None = None,
+    tool_definitions: list[ToolDefinition] | None = None,
+    **_: Any,
+) -> StrandsPreparedAgentRunner:
     """Create a fresh Strands Agent via LiteLLM for one agent turn."""
     _ = summary, user_memory_prompt
     selected_model = settings.effective_model_id()
@@ -49,15 +75,20 @@ def create_strands_orchestrator(
     )
 
     conversation_manager = SlidingWindowConversationManager(window_size=40)
-    tool_definitions = build_orchestrator_tool_definitions(
-        session_id=session_id,
-        user_id=user_id,
-        file_service=file_service,
+    definitions = list(
+        tool_definitions
+        or build_orchestrator_tool_definitions(
+            session_id=session_id,
+            user_id=user_id,
+            file_service=file_service,
+        )
     )
-    system_prompt = str(build_system_prompt(BuildSystemPromptOptions(
-        tools=tool_definitions,
-    )))
-    tools = [make_agent_tool(definition) for definition in tool_definitions]
+    system_prompt = (
+        prompt_envelope.base_instructions.text
+        if prompt_envelope is not None
+        else str(build_system_prompt(BuildSystemPromptOptions()))
+    )
+    tools = [make_agent_tool(definition) for definition in definitions]
 
     orchestrator = Agent(
         model=model,
@@ -76,4 +107,28 @@ def create_strands_orchestrator(
         model=selected_model,
         n_tools=len(tools),
     )
-    return orchestrator
+    return StrandsPreparedAgentRunner(orchestrator)
+
+
+def _strands_messages(prompt_envelope: PromptEnvelope) -> list[dict[str, Any]]:
+    """Render context and prior history into Strands message state."""
+    messages: list[dict[str, Any]] = []
+    messages.extend(
+        _text_message(item.role, item.content)
+        for item in prompt_envelope.context_items
+        if item.content
+    )
+    messages.extend(
+        _text_message(item.role, item.content)
+        for item in prompt_envelope.history_items
+        if item.content
+    )
+    return messages
+
+
+def _text_message(role: str, content: str) -> dict[str, Any]:
+    """Render one text message in the Strands conversation shape."""
+    return {
+        "role": role,
+        "content": [{"type": "text", "text": content}],
+    }

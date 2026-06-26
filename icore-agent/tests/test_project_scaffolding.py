@@ -537,11 +537,16 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     )
     agent_context_dir = agent_dir / "context"
     agent_domain_context_dir = package_dir / "domain" / "agent" / "context"
+    agent_domain_prompt_dir = package_dir / "domain" / "agent" / "prompt"
+    agent_prompt_dir = agent_dir / "prompt"
     agent_turn_dir = agent_dir / "turn"
     agent_session_dir = agent_dir / "session"
     agent_runner_dir = agent_dir / "runner"
     agent_tool_dir = agent_dir / "tool"
     strands_dir = package_dir / "infrastructure" / "agent" / "strands"
+    chat_completions_dir = (
+        package_dir / "infrastructure" / "agent" / "chat_completions"
+    )
     turn_service = (agent_turn_dir / "service.py").read_text(
         encoding="utf-8"
     )
@@ -559,6 +564,12 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert not (agent_context_dir / "models.py").exists()
     assert (agent_domain_context_dir / "__init__.py").is_file()
     assert (agent_domain_context_dir / "models.py").is_file()
+    assert (agent_domain_context_dir / "attachments.py").is_file()
+    assert (agent_domain_context_dir / "loaded_context.py").is_file()
+    assert (agent_domain_prompt_dir / "__init__.py").is_file()
+    assert (agent_domain_prompt_dir / "prompt_envelope.py").is_file()
+    assert (agent_prompt_dir / "__init__.py").is_file()
+    assert (agent_prompt_dir / "assembler.py").is_file()
     assert (agent_context_dir / "ports.py").is_file()
     assert (agent_context_dir / "attachments.py").is_file()
     assert (agent_context_dir / "history.py").is_file()
@@ -590,6 +601,11 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (strands_dir / "event_bridge.py").is_file()
     assert (strands_dir / "payloads.py").is_file()
     assert (strands_dir / "callback_context.py").is_file()
+    assert (chat_completions_dir / "__init__.py").is_file()
+    assert (chat_completions_dir / "runner.py").is_file()
+    assert (chat_completions_dir / "renderer.py").is_file()
+    assert (chat_completions_dir / "event_bridge.py").is_file()
+    assert (chat_completions_dir / "payloads.py").is_file()
     assert not (agent_turn_dir / "tool_projection.py").exists()
     assert not (package_dir / "application" /
                 "agent" / "strands_bridge.py").exists()

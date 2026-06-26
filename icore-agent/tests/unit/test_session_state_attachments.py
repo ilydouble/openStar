@@ -165,9 +165,9 @@ class _StaticOrchestratorFactory:
         reply = self._reply
 
         class _Agent:
-            messages = []
-
-            def __call__(self, message: str) -> str:
+            def __call__(self, prompt_envelope) -> str:
+                """Return the configured reply for any prompt envelope."""
+                _ = prompt_envelope
                 return reply
 
         return _Agent()

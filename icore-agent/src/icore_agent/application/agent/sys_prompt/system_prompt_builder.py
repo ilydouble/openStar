@@ -13,7 +13,7 @@ from .prompt_source.system_prompt import (
     base_system_prompt,
     coerce_prompt_source,
 )
-from .prompt_source.tools import build_tools_prompt
+from .prompt_source.tools import build_tool_use_rules
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,7 @@ def build_system_prompt(
     prompt_source = coerce_prompt_source(resolved.prompt_source)
     parts = [
         base_system_prompt(prompt_source),
-        build_tools_prompt(resolved.tools),
+        build_tool_use_rules(),
     ]
 
     return SystemPrompt("\n\n".join(part for part in parts if part))

@@ -16,6 +16,7 @@ from icore_agent.application.agent import (
     classify_turn_intent,
 )
 from icore_agent.application.agent.context import dedupe_file_uuids
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     ToolCallItem,
     ToolCallResult,
@@ -75,7 +76,8 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
     assert "agent_hint" not in factory.calls[0]
     assert len(factory.calls[0]["hooks"]) == 1
     assert isinstance(factory.calls[0]["hooks"][0], FakeToolBridge)
-    assert factory.agent.messages == []
+    assert factory.calls[0]["prompt_envelope"] is factory.agent.last_prompt_envelope
+    assert factory.calls[0]["tool_definitions"]
     assert usage.calls == [
         ("user-1", "attachments", 1),
         ("user-1", "tasks", 1),
@@ -246,7 +248,10 @@ async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> No
     assert memory_service.extract_calls == []
     assert len(factory.calls[0]["hooks"]) == 1
     assert isinstance(factory.calls[0]["hooks"][0], FakeToolBridge)
-    assert factory.calls[0]["user_memory_prompt"] is None
+    assert all(
+        item.kind != "user_memory"
+        for item in factory.calls[0]["prompt_envelope"].context_items
+    )
 
 
 @pytest.mark.asyncio
@@ -275,7 +280,10 @@ async def test_agent_turn_run_incognito_skips_memory_prompt_injection() -> None:
     await service.run(_command(stream=False, incognito=True))
 
     assert memory_service.build_calls == []
-    assert factory.calls[0]["user_memory_prompt"] is None
+    assert all(
+        item.kind != "user_memory"
+        for item in factory.calls[0]["prompt_envelope"].context_items
+    )
 
 
 def _command(
@@ -668,10 +676,12 @@ class FakeAgent:
     emit_tool_call: bool = False
     callback_handler: Any = None
     hooks: list[Any] | None = None
-    messages: list[dict[str, Any]] | None = None
+    last_prompt_envelope: PromptEnvelope | None = None
 
-    def __call__(self, message: str) -> str:
+    def __call__(self, prompt_envelope: PromptEnvelope) -> str:
         """Return a reply or emit callback stream events."""
+        self.last_prompt_envelope = prompt_envelope
+        message = prompt_envelope.current_user_item.content
         if self.emit_tool_call:
             tool_use = {
                 "toolUseId": "tool-1",
@@ -717,7 +727,6 @@ class FakeOrchestratorFactory:
             reply=reply,
             streaming=streaming,
             emit_tool_call=emit_tool_call,
-            messages=[],
         )
 
     def __call__(self, **kwargs) -> FakeAgent:

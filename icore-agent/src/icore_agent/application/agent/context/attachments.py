@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from icore_agent.application.files import FileAssetNotFoundError
-from icore_agent.domain.agent.context.models import (
+from icore_agent.domain.agent.context import (
     AgentFileAttachment,
     AgentImageAttachment,
 )

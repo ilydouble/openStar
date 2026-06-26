@@ -6,9 +6,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
-
 from icore_agent.domain.agent.session import AgentMessageItem, SessionItemStatus
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.turn import TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -30,9 +29,8 @@ class AgentLoopRequest:
 
     session_id: str
     turn_id: str
-    message: str
+    prompt_envelope: PromptEnvelope
     runner: PreparedAgentRunner
-    history_messages: list[dict[str, Any]]
     tool_bridge: AgentToolEventBridge
     invoke: AgentInvoker | None = None
 
@@ -50,7 +48,6 @@ class AgentLoop:
 
     async def run(self, request: AgentLoopRequest) -> AsyncIterator[TurnEvent]:
         """Run one prepared agent request and stream domain events."""
-        request.runner.messages = request.history_messages
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[QueueItem] = asyncio.Queue()
         assistant_item = AgentMessageItem()
@@ -75,7 +72,7 @@ class AgentLoop:
                 loop=loop,
                 queue=queue,
                 runner=request.runner,
-                message=request.message,
+                prompt_envelope=request.prompt_envelope,
                 tool_bridge=request.tool_bridge,
                 emit_assistant_delta=emit_assistant_delta,
                 invoke=request.invoke,

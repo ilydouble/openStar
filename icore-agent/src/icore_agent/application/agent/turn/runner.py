@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -11,6 +10,12 @@ from icore_agent.application.agent.loop.types import (
     AgentToolEventBridge,
     PreparedAgentRunner,
 )
+from icore_agent.application.agent.prompt import build_agent_prompt_envelope
+from icore_agent.application.agent.tool import ToolDefinition
+from icore_agent.application.agent.tool.catalog import (
+    build_orchestrator_tool_definitions,
+)
+from icore_agent.domain.agent.prompt import PromptEnvelope
 
 OrchestratorFactory = Callable[..., PreparedAgentRunner]
 ToolEventBridgeFactory = Callable[..., AgentToolEventBridge]
@@ -37,27 +42,34 @@ class AgentTurnRunnerFactory:
         command: Any,
         context: Any,
         turn_id: str,
-        invoke: Callable[[PreparedAgentRunner, str], Any] | None,
+        invoke: Callable[[PreparedAgentRunner, PromptEnvelope], Any] | None,
     ) -> AgentLoopRequest:
         """Build an AgentLoopRequest for one turn."""
         tool_bridge = self._tool_bridge_factory(
             session_id=command.session_id,
             turn_id=turn_id,
         )
-        runner = self.build_runner(
+        tool_definitions = build_orchestrator_tool_definitions(
+            session_id=command.session_id,
+            user_id=command.user_id,
+            file_service=self._file_service,
+        )
+        prompt_envelope = build_agent_prompt_envelope(
             command=command,
             context=context,
+            tool_definitions=tool_definitions,
+        )
+        runner = self.build_runner(
+            command=command,
+            prompt_envelope=prompt_envelope,
+            tool_definitions=tool_definitions,
             tool_bridge=tool_bridge,
         )
         return AgentLoopRequest(
             session_id=command.session_id,
             turn_id=turn_id,
-            message=_message_with_attachment_refs(
-                command.agent_message or command.message,
-                context,
-            ),
+            prompt_envelope=prompt_envelope,
             runner=runner,
-            history_messages=context.runner_history,
             tool_bridge=tool_bridge,
             invoke=invoke,
         )
@@ -66,59 +78,17 @@ class AgentTurnRunnerFactory:
         self,
         *,
         command: Any,
-        context: Any,
+        prompt_envelope: PromptEnvelope,
+        tool_definitions: list[ToolDefinition],
         tool_bridge: AgentToolEventBridge,
     ) -> PreparedAgentRunner:
         """Create one prepared runner for AgentLoop."""
         orchestrator = self._orchestrator_factory(
             callback_handler=tool_bridge.on_callback,
-            summary=context.summary,
             session_id=command.session_id,
             hooks=[tool_bridge],
             user_id=command.user_id,
-            user_memory_prompt=context.user_memory_prompt,
-            file_service=self._file_service,
+            prompt_envelope=prompt_envelope,
+            tool_definitions=tool_definitions,
         )
         return cast(PreparedAgentRunner, orchestrator)
-
-
-def _message_with_attachment_refs(message: str, context: Any) -> str:
-    """Append compact attachment references to the current turn message."""
-    note = _attachment_reference_note(context)
-    if not note:
-        return message
-    return f"{message.rstrip()}\n\n{note}"
-
-
-def _attachment_reference_note(context: Any) -> str:
-    """Build a compact metadata-only attachment note for the agent."""
-    image_refs = getattr(context, "image_attachment_payloads", []) or []
-    file_refs = getattr(context, "file_attachment_payloads", []) or []
-    if not image_refs and not file_refs:
-        return ""
-
-    lines = ["Attached files for this turn:"]
-    for attachment in image_refs:
-        lines.append(
-            "- image_attachment "
-            f"filename={_json_value(attachment.get('filename'))} "
-            f"uuid={_json_value(attachment.get('file_uuid'))} "
-            f"ref={_json_value(attachment.get('ref'))}"
-        )
-    for attachment in file_refs:
-        lines.append(
-            "- file_attachment "
-            f"filename={_json_value(attachment.get('filename'))} "
-            f"uuid={_json_value(attachment.get('file_uuid'))}"
-        )
-    if file_refs:
-        lines.append(
-            "Use read_uploaded_file with the uuid when file_attachment "
-            "contents are needed."
-        )
-    return "\n".join(lines)
-
-
-def _json_value(value: Any) -> str:
-    """Render one attachment metadata value as a quoted JSON string."""
-    return json.dumps(str(value or ""), ensure_ascii=False)

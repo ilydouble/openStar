@@ -8,13 +8,14 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any, cast
 
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.turn import TurnEvent
 
 from .loop.types import AgentToolEventBridge, PreparedAgentRunner
 
 
 QueueItem = tuple[str, Any]
-AgentInvoker = Callable[[PreparedAgentRunner, str], Any]
+AgentInvoker = Callable[[PreparedAgentRunner, PromptEnvelope], Any]
 
 
 def put_threadsafe(
@@ -33,7 +34,7 @@ def start_agent_worker(
     loop: asyncio.AbstractEventLoop,
     queue: asyncio.Queue[QueueItem],
     runner: PreparedAgentRunner,
-    message: str,
+    prompt_envelope: PromptEnvelope,
     tool_bridge: AgentToolEventBridge,
     emit_assistant_delta: Callable[[str], None],
     invoke: AgentInvoker | None = None,
@@ -50,9 +51,9 @@ def start_agent_worker(
                 emit_assistant_delta=emit_assistant_delta,
             ):
                 result = (
-                    invoke(runner, message)
+                    invoke(runner, prompt_envelope)
                     if invoke is not None
-                    else runner(message)
+                    else runner(prompt_envelope)
                 )
             put_threadsafe(loop=loop, queue=queue,
                            kind="result", payload=result)

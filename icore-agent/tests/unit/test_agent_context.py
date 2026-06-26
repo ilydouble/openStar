@@ -19,7 +19,7 @@ def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
 
 @pytest.mark.asyncio
 async def test_load_agent_context_prefers_cached_history() -> None:
-    """Cached conversation history should be converted to runner messages."""
+    """Cached conversation history should be converted to model-visible items."""
     context = await agent_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
@@ -38,9 +38,8 @@ async def test_load_agent_context_prefers_cached_history() -> None:
     )
 
     assert context.summary == "Earlier summary"
-    assert context.runner_history == [
-        {"role": "user", "content": [
-            {"type": "text", "text": "Cached question"}]},
+    assert [item.model_dump() for item in context.history_items] == [
+        {"role": "user", "content": "Cached question"},
     ]
 
 
@@ -64,9 +63,33 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
     )
 
     assert history.load_calls == [("session-1", "user-1")]
-    assert context.runner_history == [
-        {"role": "assistant", "content": [
-            {"type": "text", "text": "Persisted answer"}]},
+    assert [item.model_dump() for item in context.history_items] == [
+        {"role": "assistant", "content": "Persisted answer"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_agent_context_excludes_current_user_message_from_fallback_history() -> None:
+    """Durable fallback history should not duplicate the current turn prompt."""
+    history = FakeHistory([
+        {"role": "assistant", "content": "Persisted answer"},
+        {"role": "user", "content": "Hello"},
+    ])
+
+    context = await agent_context.load_agent_context(
+        session_id="session-1",
+        file_uuids=(),
+        user_id="user-1",
+        user_message="Hello",
+        incognito=False,
+        file_service=FakeFileService({}),
+        agent_session=history,
+        conversation_memory=FakeMemory(summary=None, messages=[]),
+        user_memory_service=None,
+    )
+
+    assert [item.model_dump() for item in context.history_items] == [
+        {"role": "assistant", "content": "Persisted answer"},
     ]
 
 

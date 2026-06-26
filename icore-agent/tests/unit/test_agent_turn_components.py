@@ -16,6 +16,7 @@ from icore_agent.application.agent.turn import (
 )
 from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.agent import AgentTurnCommand
+from icore_agent.domain.agent.prompt import ModelVisibleItem, PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
@@ -250,22 +251,33 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
         command=command,
         context=context,
         turn_id="turn-1",
-        invoke=lambda runner, message: runner(message),
+        invoke=lambda runner, prompt_envelope: runner(prompt_envelope),
     )
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
-    assert request.message.startswith("Hello\n\nAttached files for this turn:")
-    assert 'file_attachment filename="notes.txt" uuid="file-1"' in request.message
-    assert "read_uploaded_file" in request.message
+    assert request.prompt_envelope.current_user_item.content == "Hello"
+    attachment_context = "\n".join(
+        item.content
+        for item in request.prompt_envelope.context_items
+        if item.kind == "attachments"
+    )
+    assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
+    assert "read_uploaded_file" in attachment_context
     assert request.runner is factory.runner
-    assert request.history_messages == [{"role": "user", "content": "old"}]
+    assert [
+        item.model_dump()
+        for item in request.prompt_envelope.history_items
+    ] == [{"role": "user", "content": "old"}]
+    assert request.prompt_envelope.tools
     assert isinstance(request.tool_bridge, FakeToolBridge)
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
     assert "attachments_text" not in factory.calls[0]
     assert "data_attachments" not in factory.calls[0]
-    assert factory.calls[0]["file_service"] is None
+    assert "file_service" not in factory.calls[0]
+    assert factory.calls[0]["prompt_envelope"] is request.prompt_envelope
+    assert factory.calls[0]["tool_definitions"]
     assert len(factory.calls[0]["hooks"]) == 1
 
 
@@ -475,7 +487,7 @@ class StubContext:
     image_attachments = [object()]
     file_attachments = [object(), object()]
     user_memory_prompt = "remember"
-    runner_history = [{"role": "user", "content": "old"}]
+    history_items = [ModelVisibleItem(role="user", content="old")]
     has_attachments = True
 
 
@@ -514,11 +526,16 @@ class StubSettings:
 class RecordingRunner:
     """Prepared agent fake."""
 
-    messages: list[dict[str, Any]]
+    prompt_envelopes: list[PromptEnvelope]
 
-    def __call__(self, message: str) -> str:
+    def __init__(self) -> None:
+        """Create the fake."""
+        self.prompt_envelopes = []
+
+    def __call__(self, prompt_envelope: PromptEnvelope) -> str:
         """Return a fixed reply."""
-        return f"reply to {message}"
+        self.prompt_envelopes.append(prompt_envelope)
+        return f"reply to {prompt_envelope.current_user_item.content}"
 
 
 class RecordingOrchestratorFactory:

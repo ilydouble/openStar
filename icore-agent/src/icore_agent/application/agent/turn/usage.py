@@ -11,6 +11,7 @@ from icore_agent.application.usage.recording import (
     flush_turn_usage_capture,
 )
 from icore_agent.config import settings
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -68,12 +69,15 @@ class TurnUsageRecorder:
 
     def invoke_with_usage(self, command: Any):
         """Return a runner invoker that records actual or estimated LLM usage."""
-        def _invoke(runner: PreparedAgentRunner, message: str) -> Any:
+        def _invoke(
+            runner: PreparedAgentRunner,
+            prompt_envelope: PromptEnvelope,
+        ) -> Any:
             capture_token = begin_turn_usage_capture()
             runtime_token = set_runtime_user(command.user)
             result = None
             try:
-                result = runner(message)
+                result = runner(prompt_envelope)
                 return result
             finally:
                 if self._usage_service is not None:
@@ -85,7 +89,7 @@ class TurnUsageRecorder:
                     if recorded == 0 and result is not None:
                         self.record_estimated_turn_usage(
                             command,
-                            prompt=message,
+                            prompt=prompt_envelope.usage_text(),
                             reply=str(result),
                         )
                 end_turn_usage_capture(capture_token)

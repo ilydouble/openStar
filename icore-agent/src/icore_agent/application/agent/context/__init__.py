@@ -2,7 +2,7 @@
 
 from .attachments import dedupe_file_uuids
 from .loader import load_agent_context
-from icore_agent.domain.agent.context.models import (
+from icore_agent.domain.agent.context import (
     AgentContext,
     AgentFileAttachment,
     AgentImageAttachment,

@@ -6,16 +6,15 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.turn import TurnEvent
 
 
 class PreparedAgentRunner(Protocol):
     """Prepared agent surface needed by the turn loop."""
 
-    messages: list[dict[str, Any]]
-
-    def __call__(self, message: str) -> Any:
-        """Run one user message through the prepared agent."""
+    def __call__(self, prompt_envelope: PromptEnvelope) -> Any:
+        """Run one prompt envelope through the prepared agent."""
         ...
 
 

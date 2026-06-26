@@ -9,6 +9,7 @@ from pydantic import Field
 from icore_agent.domain.agent.roles import ChatCompletionRole
 
 from .base_item import SessionItemBase, SessionItemStatus
+from .session_item_type import SessionItemType
 
 
 class ContextItem(SessionItemBase):
@@ -20,7 +21,7 @@ class ContextItem(SessionItemBase):
     runtime environment notes.
     """
 
-    type: Literal["context"] = "context"
+    type: Literal[SessionItemType.CONTEXT] = SessionItemType.CONTEXT
     status: SessionItemStatus = SessionItemStatus.COMPLETED
     kind: str = Field(
         description=(

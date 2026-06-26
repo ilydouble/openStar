@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
+
+from icore_agent.domain.agent.session import ContextItem
+
+
+def _json_value(value: Any) -> str:
+    """Render an attachment metadata value as a quoted JSON string."""
+    return json.dumps(str(value or ""), ensure_ascii=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,13 +22,17 @@ class AgentImageAttachment:
     ref: str
     file_uuid: str
 
-    def to_context_payload(self) -> dict[str, Any]:
-        """Return the compact dict shape used by prompt context assembly."""
-        return {
-            "filename": self.filename,
-            "ref": self.ref,
-            "file_uuid": self.file_uuid,
-        }
+    def to_context_item(self) -> ContextItem:
+        """Return metadata-only context visible to the model for this image."""
+        return ContextItem(
+            kind="image_attachment",
+            content=(
+                "image_attachment "
+                f"filename={_json_value(self.filename)} "
+                f"uuid={_json_value(self.file_uuid)} "
+                f"ref={_json_value(self.ref)}"
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,9 +42,15 @@ class AgentFileAttachment:
     filename: str
     file_uuid: str
 
-    def to_context_payload(self) -> dict[str, Any]:
-        """Return the compact dict shape used by prompt context assembly."""
-        return {
-            "filename": self.filename,
-            "file_uuid": self.file_uuid,
-        }
+    def to_context_item(self) -> ContextItem:
+        """Return metadata-only context visible to the model for this file."""
+        return ContextItem(
+            kind="file_attachment",
+            content=(
+                "file_attachment "
+                f"filename={_json_value(self.filename)} "
+                f"uuid={_json_value(self.file_uuid)}\n"
+                "Use read_uploaded_file with the uuid when file_attachment "
+                "contents are needed."
+            ),
+        )

@@ -9,7 +9,7 @@ from typing import Any
 
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     ToolCallError,
     ToolCallItem,
     ToolCallResult,

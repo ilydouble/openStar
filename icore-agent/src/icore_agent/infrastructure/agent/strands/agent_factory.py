@@ -21,7 +21,7 @@ from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import settings
-from domain.agent.session import AgentMessageItem, ContextItem
+from icore_agent.domain.agent.session import AgentMessageItem, ContextItem
 from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.shared.logging.app_logger import get_logger
 

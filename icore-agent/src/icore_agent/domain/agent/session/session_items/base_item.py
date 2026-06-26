@@ -16,17 +16,6 @@ def _new_id() -> str:
     return str(uuid7())
 
 
-class SessionItemType(StrEnum):
-    """Supported timeline item kinds in a chat session turn."""
-
-    CONTEXT = "context"
-    USER_MESSAGE = "user_message"
-    AGENT_MESSAGE = "agent_message"
-    REASONING = "reasoning"
-    PLAN = "plan"
-    TOOL_CALL = "tool_call"
-
-
 class SessionItemStatus(StrEnum):
     """Lifecycle status shared by user-visible session items."""
 

@@ -17,8 +17,9 @@ from icore_agent.application.agent.turn import (
 from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.agent import AgentTurnCommand
 from icore_agent.domain.agent.prompt import PromptEnvelope
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
+    ContextItem,
     SessionItemStatus,
     ToolCallItem,
     ToolCallResult,
@@ -263,7 +264,7 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
     attachment_context = "\n".join(
         item.content
         for item in request.prompt_envelope.context_items
-        if item.kind == "attachments"
+        if item.kind == "file_attachment"
     )
     assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
     assert "read_uploaded_file" in attachment_context
@@ -479,11 +480,6 @@ class StubContext:
     """Minimal agent context test double."""
 
     summary = "summary"
-    image_attachment_payloads = [{"file_uuid": "image-1"}]
-    file_attachment_payloads = [
-        {"filename": "notes.txt", "file_uuid": "file-1"},
-        {"filename": "data.csv", "file_uuid": "file-2"},
-    ]
     image_attachments = [object()]
     file_attachments = [object(), object()]
     user_memory_prompt = "remember"
@@ -493,6 +489,21 @@ class StubContext:
         ]),
     ]
     has_attachments = True
+
+    def to_context_items(self) -> list[ContextItem]:
+        """Return context items in the new application AgentContext shape."""
+        return [
+            ContextItem(kind="session_summary", content="summary"),
+            ContextItem(kind="user_memory", content="remember"),
+            ContextItem(
+                kind="file_attachment",
+                content=(
+                    'file_attachment filename="notes.txt" uuid="file-1"\n'
+                    "Use read_uploaded_file with the uuid when "
+                    "file_attachment contents are needed."
+                ),
+            ),
+        ]
 
 
 class FakeToolBridge:

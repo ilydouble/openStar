@@ -17,7 +17,7 @@ from icore_agent.application.agent import (
 )
 from icore_agent.application.agent.context import dedupe_file_uuids
 from icore_agent.domain.agent.prompt import PromptEnvelope
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     ToolCallItem,
     ToolCallResult,
     ToolCallStatus,

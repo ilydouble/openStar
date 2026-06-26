@@ -10,8 +10,10 @@ from .agent_message_item import AgentMessageItem
 from .context_item import ContextItem
 from .plan_item import PlanItem
 from .reasoning_item import ReasoningItem
+from .session_item_type import SessionItemType
 from .tool_call_item import ToolCallItem
 from .user_message_item import UserMessageItem
+
 
 SessionItem = Annotated[
     ContextItem

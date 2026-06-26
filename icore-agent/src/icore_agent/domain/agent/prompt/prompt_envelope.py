@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     ContextItem,
     UserMessageItem,

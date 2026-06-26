@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from icore_agent.shared.time.utils import start_to_completed_duration_ms
 
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     UserInput,
     UserInputType,

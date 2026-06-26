@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from domain.agent.session import SessionItem
+from icore_agent.domain.agent.session import SessionItem
 from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.shared.logging.app_logger import get_logger
 

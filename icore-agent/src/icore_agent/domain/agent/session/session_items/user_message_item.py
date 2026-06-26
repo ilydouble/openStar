@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from .base_item import SessionItemBase, SessionItemStatus
+from .session_item_type import SessionItemType
 
 
 class UserInputType(StrEnum):
@@ -30,7 +31,7 @@ class UserInput(BaseModel):
 class UserMessageItem(SessionItemBase):
     """A user message submitted at the start of a turn."""
 
-    type: Literal["user_message"] = "user_message"
+    type: Literal[SessionItemType.USER_MESSAGE] = SessionItemType.USER_MESSAGE
     status: SessionItemStatus = SessionItemStatus.COMPLETED
     content: list[UserInput]
 

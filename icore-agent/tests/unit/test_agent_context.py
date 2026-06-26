@@ -8,7 +8,11 @@ from typing import Any
 import pytest
 
 import icore_agent.application.agent.context as agent_context
-from domain.agent.session import AgentMessageItem, UserMessageItem
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    ContextItem,
+    UserMessageItem,
+)
 from icore_agent.domain.files.models import FileAsset
 
 
@@ -27,6 +31,47 @@ def _history_texts(items: list[UserMessageItem | AgentMessageItem]) -> list[tupl
         else:
             pairs.append(("assistant", item.text))
     return pairs
+
+
+def test_agent_context_builds_context_items_from_runtime_materials() -> None:
+    """Application AgentContext should own runtime-to-ContextItem assembly."""
+    context = agent_context.AgentContext(
+        summary="Earlier summary",
+        history_items=[],
+        has_rag=False,
+        image_attachments=[
+            agent_context.AgentImageAttachment(
+                filename="chart.png",
+                ref="https://files.example/img-1",
+                file_uuid="img-1",
+            ),
+        ],
+        file_attachments=[
+            agent_context.AgentFileAttachment(
+                filename="notes.txt",
+                file_uuid="file-1",
+            ),
+        ],
+        user_memory_prompt="User prefers concise Chinese replies.",
+    )
+
+    items = context.to_context_items()
+
+    assert [item.kind for item in items] == [
+        "session_summary",
+        "user_memory",
+        "image_attachment",
+        "file_attachment",
+    ]
+    assert all(isinstance(item, ContextItem) for item in items)
+    assert items[0].content == "Earlier conversation summary:\nEarlier summary"
+    assert items[1].content == "User prefers concise Chinese replies."
+    assert 'filename="chart.png"' in items[2].content
+    assert 'uuid="img-1"' in items[2].content
+    assert 'ref="https://files.example/img-1"' in items[2].content
+    assert 'filename="notes.txt"' in items[3].content
+    assert 'uuid="file-1"' in items[3].content
+    assert "Use read_uploaded_file" in items[3].content
 
 
 @pytest.mark.asyncio
@@ -152,18 +197,21 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )
 
-    assert context.image_attachment_payloads == [
-        {
-            "filename": "chart.png",
-            "ref": "https://files.example/img-1",
-            "file_uuid": "img-1",
-        }
+    context_items = context.to_context_items()
+    assert [item.kind for item in context_items] == [
+        "user_memory",
+        "image_attachment",
+        "file_attachment",
+        "file_attachment",
+        "file_attachment",
     ]
-    assert context.file_attachment_payloads == [
-        {"filename": "notes.txt", "file_uuid": "txt-1"},
-        {"filename": "data.csv", "file_uuid": "csv-1"},
-        {"filename": "paper.pdf", "file_uuid": "pdf-1"},
-    ]
+    assert 'filename="chart.png"' in context_items[1].content
+    assert 'uuid="img-1"' in context_items[1].content
+    assert 'ref="https://files.example/img-1"' in context_items[1].content
+    assert 'filename="notes.txt"' in context_items[2].content
+    assert 'uuid="txt-1"' in context_items[2].content
+    assert 'filename="data.csv"' in context_items[3].content
+    assert 'filename="paper.pdf"' in context_items[4].content
     assert context.user_memory_prompt == "memory prompt"
     assert file_service.read_calls == []
     assert file_service.materialize_calls == []

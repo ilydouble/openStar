@@ -5,10 +5,11 @@ from __future__ import annotations
 from pydantic import TypeAdapter
 
 from icore_agent.domain.agent import ChatCompletionRole
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     ContextItem,
     SessionItem,
+    SessionItemType,
     ToolCallItem,
     ToolFunction,
     UserInput,
@@ -49,6 +50,10 @@ def test_session_item_union_parses_user_agent_and_tool_items() -> None:
     assert isinstance(agent_item, AgentMessageItem)
     assert isinstance(tool_item, ToolCallItem)
     assert isinstance(context_item, ContextItem)
+    assert user_item.type == SessionItemType.USER_MESSAGE.value
+    assert agent_item.type == SessionItemType.AGENT_MESSAGE.value
+    assert tool_item.type == SessionItemType.TOOL_CALL.value
+    assert context_item.type == SessionItemType.CONTEXT.value
     assert context_item.role_hint == ChatCompletionRole.USER.value
 
 

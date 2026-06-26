@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .base_item import SessionItemBase
+from .session_item_type import SessionItemType
 
 
 class ToolCallStatus(StrEnum):
@@ -60,7 +61,7 @@ class ToolCallError(BaseModel):
 class ToolCallItem(SessionItemBase):
     """A tool invocation requested by the model and executed by the runtime."""
 
-    type: Literal["tool_call"] = "tool_call"
+    type: Literal[SessionItemType.TOOL_CALL] = SessionItemType.TOOL_CALL
     status: ToolCallStatus = ToolCallStatus.RUNNING
     provider: str | None = None
     provider_tool_call_id: str | None = None

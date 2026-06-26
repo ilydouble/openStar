@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.prompt import PromptHistoryItem
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
     UserInput,

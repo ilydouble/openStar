@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from icore_agent.domain.agent.context import AgentContext
-
+from .agent_context import AgentContext
 from .attachments import load_attachment_context
 from .history import load_history_context, to_model_visible_items
 from .memory import build_user_memory_prompt

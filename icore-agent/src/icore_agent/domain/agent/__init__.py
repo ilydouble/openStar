@@ -1,5 +1,5 @@
 from .roles import ChatCompletionRole
-from domain.agent.session import (
+from .session import (
     AgentMessageItem,
     ContextItem,
     PlanItem,

@@ -731,6 +731,9 @@ def test_chat_orchestration_lives_in_application_layer():
     ).read_text(encoding="utf-8")
     catalog_dir = agent_dir / "tool" / "catalog"
     agent_session_dir = package_dir / "domain" / "agent" / "session"
+    session_items_dir = agent_session_dir / "session_items"
+    application_agent_context_dir = agent_dir / "context"
+    domain_context_dir = package_dir / "domain" / "agent" / "context"
 
     assert not (package_dir / "engine").exists()
     assert not (package_dir / "tools").exists()
@@ -762,10 +765,30 @@ def test_chat_orchestration_lives_in_application_layer():
     assert "list[ToolDefinition]" in prompt_envelope
     assert not (agent_dir / "tool" / "tool_definition.py").exists()
     assert not (agent_session_dir / "session_item.py").exists()
-    assert (agent_session_dir / "user_message_item.py").is_file()
+    assert (session_items_dir / "user_message_item.py").is_file()
+    assert (session_items_dir / "universal_session_item.py").is_file()
     assert "def to_text" in (
-        agent_session_dir / "user_message_item.py"
+        session_items_dir / "user_message_item.py"
     ).read_text(encoding="utf-8")
+    assert (application_agent_context_dir / "agent_context.py").is_file()
+    assert "class AgentContext" in (
+        application_agent_context_dir / "agent_context.py"
+    ).read_text(encoding="utf-8")
+    assert "class AgentContext" not in (
+        domain_context_dir / "loaded_context.py"
+    ).read_text(encoding="utf-8")
+
+
+def test_python_sources_do_not_import_top_level_domain_package():
+    """Keep package imports anchored at icore_agent, not a nonexistent domain."""
+    package_dir = AGENT_ROOT / "src" / "icore_agent"
+    offenders: list[str] = []
+    for source in package_dir.rglob("*.py"):
+        text = source.read_text(encoding="utf-8")
+        if "from domain." in text or "import domain." in text:
+            offenders.append(str(source.relative_to(package_dir)))
+
+    assert offenders == []
 
 
 def test_agent_session_schema_uses_explicit_payload_models():

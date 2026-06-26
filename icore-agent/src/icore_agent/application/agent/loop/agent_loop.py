@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from domain.agent.session import AgentMessageItem, SessionItemStatus
+from icore_agent.domain.agent.session import AgentMessageItem, SessionItemStatus
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.turn import TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger

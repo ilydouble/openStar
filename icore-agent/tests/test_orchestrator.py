@@ -18,7 +18,7 @@ from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import ResolvedLiteLLMConfig
-from domain.agent.session import (
+from icore_agent.domain.agent.session import (
     UserInput,
     UserInputType,
     UserMessageItem,

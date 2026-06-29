@@ -43,6 +43,7 @@ async def sse_frames(
             if event.kind in {
                 TurnEventKind.TURN_COMPLETED,
                 TurnEventKind.TURN_FAILED,
+                TurnEventKind.TURN_ABORTED,
             }:
                 break
             pending = asyncio.create_task(iterator.__anext__())

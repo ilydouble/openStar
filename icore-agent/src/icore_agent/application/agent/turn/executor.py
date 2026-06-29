@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from icore_agent.application.agent.loop.agent_loop import AgentLoop, AgentLoopError
+from icore_agent.application.agent.loop import AgentLoopControl
+from icore_agent.application.agent.loop.agent_loop import (
+    AgentLoop,
+    AgentLoopAborted,
+    AgentLoopError,
+)
 from icore_agent.domain.agent.turn import TurnError, TurnEvent
 
 from .lifecycle import TurnLifecycle
@@ -40,6 +45,7 @@ class AgentTurnExecutor:
         context,
         lifecycle: TurnLifecycle,
         user_event: TurnEvent,
+        control: AgentLoopControl | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run a prepared command through one agent turn lifecycle."""
         yield lifecycle.started_event()
@@ -52,6 +58,7 @@ class AgentTurnExecutor:
             model_client_wrapper=lambda model_client: (
                 self._usage.wrap_model_client(command, model_client)
             ),
+            control=control,
         )
         initial_envelope = request.context_manager.build_prompt(
             turn=lifecycle.turn,
@@ -71,6 +78,21 @@ class AgentTurnExecutor:
                 lifecycle.apply_agent_event(event)
                 self._persistence.persist_event(command, event)
                 yield event
+        except AgentLoopAborted:
+            usage_metadata = self._usage.turn_usage()
+            _apply_turn_usage(lifecycle, usage_metadata)
+            final = lifecycle.aborted()
+            self._persistence.complete(
+                command,
+                turn_id=lifecycle.turn.id,
+                status=final.status,
+                error=final.error,
+                completed_at=final.completed_at,
+                duration_ms=final.duration_ms,
+                **usage_metadata,
+            )
+            yield final.event
+            return
         except AgentLoopError as exc:
             error = TurnError(message=str(exc), code=type(exc).__name__)
             usage_metadata = self._usage.turn_usage()

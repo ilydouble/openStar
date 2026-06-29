@@ -13,7 +13,7 @@ from icore_agent.domain.agent.session import (
 from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
 
 PromptHistoryItem = UserMessageItem | AgentMessageItem
-PromptTurnItem = AgentMessageItem | ToolCallItem
+PromptTurnItem = UserMessageItem | AgentMessageItem | ToolCallItem
 
 
 class PromptEnvelope(BaseModel):
@@ -48,6 +48,8 @@ def _history_item_text(item: PromptHistoryItem) -> str:
 
 def _turn_item_text(item: PromptTurnItem) -> str:
     """Return model-visible text from a current-turn assistant or tool item."""
+    if isinstance(item, UserMessageItem):
+        return item.to_text()
     if isinstance(item, AgentMessageItem):
         return item.text
     if item.result and item.result.content:

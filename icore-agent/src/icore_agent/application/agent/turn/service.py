@@ -12,6 +12,12 @@ from icore_agent.application.agent.context import (
 )
 from icore_agent.application.agent.loop.agent_loop import AgentLoop
 from icore_agent.application.agent.loop import ModelClient
+from icore_agent.application.agent.runtime import (
+    AgentRunControl,
+    AgentRunControlResult,
+    AgentRuntime,
+    InMemoryAgentRunStore,
+)
 from icore_agent.application.agent.turn import (
     AgentTurnExecutor,
     AgentTurnRunnerFactory,
@@ -52,12 +58,16 @@ class AgentTurnService:
         user_memory_service: UserMemoryService | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
         agent_loop: AgentLoop | None = None,
+        agent_runtime: AgentRuntime | None = None,
     ) -> None:
         """Create an agent turn service with its application dependencies."""
         self._agent_session = agent_session
         self._file_service = file_service
         self._conversation_memory = conversation_memory
         self._user_memory_service = user_memory_service
+        self._runtime = agent_runtime or AgentRuntime(
+            run_store=InMemoryAgentRunStore(),
+        )
         self._usage = TurnUsageRecorder(usage_service)
         self._executor = AgentTurnExecutor(
             agent_loop=agent_loop or AgentLoop(
@@ -78,15 +88,11 @@ class AgentTurnService:
     async def run(self, command: AgentTurnCommand) -> Turn:
         """Execute one non-streaming agent turn."""
         self._usage.check_task_quota(command)
-        lifecycle, user_event = await self._prepare_turn(command)
-        context = await self._load_context(command)
-        self._usage.record_attachment_quota(command, context)
-        async for event in self._executor.run(
-            command=command,
-            context=context,
-            lifecycle=lifecycle,
-            user_event=user_event,
-        ):
+        events = await self._runtime.stream(
+            command,
+            lambda control: self._run_events(command, control),
+        )
+        async for event in events:
             if event.kind is TurnEventKind.TURN_COMPLETED:
                 if event.turn is None:
                     raise RuntimeError(
@@ -95,6 +101,8 @@ class AgentTurnService:
             elif event.kind is TurnEventKind.TURN_FAILED:
                 message = event.error.message if event.error is not None else "Agent turn failed"
                 raise RuntimeError(message)
+            elif event.kind is TurnEventKind.TURN_ABORTED:
+                raise RuntimeError("Agent turn aborted")
         raise RuntimeError("Agent turn ended without completion")
 
     async def stream(
@@ -103,15 +111,71 @@ class AgentTurnService:
     ) -> AsyncIterator[TurnEvent]:
         """Prepare one streaming agent turn and return its event stream."""
         self._usage.check_task_quota(command)
+        return await self._runtime.stream(
+            command,
+            lambda control: self._run_events(command, control),
+        )
+
+    async def abort(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+    ) -> AgentRunControlResult:
+        """Request cooperative abort for the active session run."""
+        self._agent_session.assert_owned_session(session_id, user_id)
+        return await self._runtime.abort(
+            session_id=session_id,
+            user_id=user_id,
+        )
+
+    async def steer(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        message: str,
+    ) -> AgentRunControlResult:
+        """Queue steering input for the active session run."""
+        self._agent_session.assert_owned_session(session_id, user_id)
+        return await self._runtime.steer(
+            session_id=session_id,
+            user_id=user_id,
+            message=message,
+        )
+
+    async def follow_up(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        message: str,
+    ) -> AgentRunControlResult:
+        """Queue follow-up input for a later turn boundary."""
+        self._agent_session.assert_owned_session(session_id, user_id)
+        return await self._runtime.follow_up(
+            session_id=session_id,
+            user_id=user_id,
+            message=message,
+        )
+
+    async def _run_events(
+        self,
+        command: AgentTurnCommand,
+        control: AgentRunControl,
+    ) -> AsyncIterator[TurnEvent]:
+        """Prepare context and run the executor for one locked runtime run."""
         lifecycle, user_event = await self._prepare_turn(command)
         context = await self._load_context(command)
         self._usage.record_attachment_quota(command, context)
-        return self._executor.run(
+        async for event in self._executor.run(
             command=command,
             context=context,
             lifecycle=lifecycle,
             user_event=user_event,
-        )
+            control=control,
+        ):
+            yield event
 
     async def _prepare_turn(
         self,

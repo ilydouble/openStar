@@ -1,3 +1,4 @@
+from .agent import AgentSettings, agent_settings
 from .app import AppSettings
 from .auth import AuthSettings, auth_settings
 from .database import DatabaseSettings, database_settings
@@ -18,6 +19,7 @@ from .tools import ToolsSettings, tools_settings
 
 __all__ = [
     "AppSettings",
+    "AgentSettings",
     "AuthSettings",
     "DatabaseSettings",
     "LoggingSettings",
@@ -32,6 +34,7 @@ __all__ = [
     "StorageSettings",
     "ToolsSettings",
     "app_settings",
+    "agent_settings",
     "auth_settings",
     "database_settings",
     "logging_settings",

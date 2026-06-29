@@ -22,6 +22,7 @@ class TurnEventKind(StrEnum):
     ITEM_COMPLETED = "item_completed"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
+    TURN_ABORTED = "turn_aborted"
 
 
 class TurnEvent(BaseModel):
@@ -134,6 +135,24 @@ class TurnEvent(BaseModel):
             session_id=session_id,
             turn_id=turn_id,
             error=error,
+            reply=reply,
+            turn=turn,
+        )
+
+    @classmethod
+    def turn_aborted(
+        cls,
+        *,
+        session_id: str,
+        turn_id: str,
+        reply: str | None = None,
+        turn: Turn | None = None,
+    ) -> TurnEvent:
+        """Create a turn-aborted event."""
+        return cls(
+            kind=TurnEventKind.TURN_ABORTED,
+            session_id=session_id,
+            turn_id=turn_id,
             reply=reply,
             turn=turn,
         )

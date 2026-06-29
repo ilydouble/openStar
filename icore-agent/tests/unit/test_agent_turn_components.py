@@ -75,6 +75,28 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
     assert final.event.turn.reply_text() == "Hello back"
 
 
+def test_turn_lifecycle_marks_aborted_turn_as_interrupted() -> None:
+    """TurnLifecycle should expose aborted turns as interrupted lifecycle state."""
+    started_at = datetime(2026, 6, 8, 1, 2, 3, tzinfo=UTC)
+    completed_at = started_at + timedelta(milliseconds=500)
+    lifecycle = TurnLifecycle.start(
+        session_id="session-1",
+        started_at=started_at,
+    )
+    lifecycle.apply_agent_event(TurnEvent.item_completed(
+        session_id="session-1",
+        turn_id=lifecycle.turn.id,
+        item=AgentMessageItem(text="partial"),
+    ))
+
+    final = lifecycle.aborted(completed_at=completed_at)
+
+    assert final.status is TurnStatus.INTERRUPTED
+    assert final.event.kind == "turn_aborted"
+    assert final.event.reply == "partial"
+    assert final.duration_ms == 500
+
+
 def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
     """TurnPersistence should keep persistence failures out of turn execution."""
     history = FailingHistory()

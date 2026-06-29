@@ -46,6 +46,25 @@ def test_turn_completed_payload_omits_internal_turn_state() -> None:
     }
 
 
+def test_turn_aborted_payload_omits_internal_turn_state() -> None:
+    """Aborted terminal events should expose an explicit public event type."""
+    turn = Turn(session_id="session-1", id="turn-1")
+    event = TurnEvent.turn_aborted(
+        session_id="session-1",
+        turn_id="turn-1",
+        reply="partial",
+        turn=turn,
+    )
+
+    assert event.turn is turn
+    assert event.to_payload() == {
+        "type": "turn_aborted",
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "reply": "partial",
+    }
+
+
 @pytest.mark.asyncio
 async def test_sse_frames_appends_done_sentinel() -> None:
     """SSE adapter should keep the existing [DONE] sentinel."""
@@ -54,6 +73,17 @@ async def test_sse_frames_appends_done_sentinel() -> None:
     assert frames == [
         'data: {"type": "item_started", "session_id": "session-1", "turn_id": "turn-1", "item_id": "item-1", "item": {"id": "item-1", "status": "in_progress", "created_at": "2026-06-08T00:00:00Z", "completed_at": null, "type": "agent_message", "text": ""}}\n\n',
         'data: {"type": "turn_completed", "session_id": "session-1", "turn_id": "turn-1", "reply": "ok"}\n\n',
+        "data: [DONE]\n\n",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sse_frames_stops_on_aborted_turn() -> None:
+    """SSE adapter should close the stream when a turn is aborted."""
+    frames = [frame async for frame in sse_frames(_aborted_events())]
+
+    assert frames == [
+        'data: {"type": "turn_aborted", "session_id": "session-1", "turn_id": "turn-1", "reply": "partial"}\n\n',
         "data: [DONE]\n\n",
     ]
 
@@ -72,4 +102,13 @@ async def _events():
         session_id="session-1",
         turn_id="turn-1",
         reply="ok",
+    )
+
+
+async def _aborted_events():
+    """Yield a minimal aborted terminal stream."""
+    yield TurnEvent.turn_aborted(
+        session_id="session-1",
+        turn_id="turn-1",
+        reply="partial",
     )

@@ -6,7 +6,11 @@ from collections.abc import Callable
 from typing import Any
 
 from icore_agent.application.agent.context import AgentPromptContextManager
-from icore_agent.application.agent.loop import AgentLoopRequest, ModelClient
+from icore_agent.application.agent.loop import (
+    AgentLoopControl,
+    AgentLoopRequest,
+    ModelClient,
+)
 from icore_agent.application.agent.tool import ToolRuntime
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
@@ -37,6 +41,7 @@ class AgentTurnRunnerFactory:
         context: Any,
         turn: Turn,
         model_client_wrapper: ModelClientWrapper | None = None,
+        control: AgentLoopControl | None = None,
     ) -> AgentLoopRequest:
         """Build an AgentLoopRequest for one turn."""
         tool_definitions = build_orchestrator_tool_definitions(
@@ -60,4 +65,5 @@ class AgentTurnRunnerFactory:
             ),
             model_client=model_client,
             tool_runtime=ToolRuntime(tool_definitions),
+            **({"control": control} if control is not None else {}),
         )

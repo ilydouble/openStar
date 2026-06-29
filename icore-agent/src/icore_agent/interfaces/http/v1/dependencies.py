@@ -6,7 +6,11 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
-from icore_agent.application.agent import AgentSessionService, AgentTurnService
+from icore_agent.application.agent import (
+    AgentRuntime,
+    AgentSessionService,
+    AgentTurnService,
+)
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.memory import UserMemoryService
@@ -22,6 +26,7 @@ from icore_agent.infrastructure.control_plane.json_store import control_plane_st
 from icore_agent.infrastructure.agent.chat_completions import (
     create_chat_completions_model_client,
 )
+from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
@@ -92,6 +97,12 @@ file_asset_service = FileAssetService(
     bucket=settings.file_storage_bucket,
     default_expires_in=settings.file_upload_url_expires_in,
 )
+agent_run_store = RedisAgentRunStore(
+    redis_url=settings.redis_url,
+    lock_ttl_seconds=settings.agent_runtime_lock_ttl_seconds,
+    state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
+)
+agent_runtime = AgentRuntime(run_store=agent_run_store)
 
 
 def get_account_service() -> AccountService:
@@ -143,6 +154,7 @@ def get_agent_turn_service() -> AgentTurnService:
         model_client_factory=create_chat_completions_model_client,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
+        agent_runtime=agent_runtime,
     )
 
 

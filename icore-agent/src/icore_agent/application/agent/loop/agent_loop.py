@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from icore_agent.domain.agent.session import (
@@ -15,7 +15,13 @@ from icore_agent.domain.agent.session import (
 from icore_agent.domain.agent.turn import Turn, TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger
 
-from .types import ModelClient, PromptContextManager, ToolRuntimePort
+from .types import (
+    AgentLoopControl,
+    ModelClient,
+    NoopAgentLoopControl,
+    PromptContextManager,
+    ToolRuntimePort,
+)
 
 log = get_logger(__name__)
 
@@ -33,10 +39,15 @@ class AgentLoopRequest:
     model_client: ModelClient
     tool_runtime: ToolRuntimePort
     max_tool_rounds: int = _DEFAULT_MAX_TOOL_ROUNDS
+    control: AgentLoopControl = field(default_factory=NoopAgentLoopControl)
 
 
 class AgentLoopError(Exception):
     """Raised when the application agent loop cannot continue."""
+
+
+class AgentLoopAborted(AgentLoopError):
+    """Raised when the active run is cooperatively aborted."""
 
 
 class AgentLoop:
@@ -52,6 +63,10 @@ class AgentLoop:
         tool_rounds = 0
         while True:
             self._raise_if_over_budget(start)
+            await _raise_if_aborted(request)
+            async for event in _drain_steering_events(request):
+                yield event
+            await _raise_if_aborted(request)
             envelope = request.context_manager.build_prompt(
                 turn=request.turn,
                 session_items=list(request.turn.items),
@@ -86,6 +101,8 @@ class AgentLoop:
             )
 
             if step.stop_reason in {"error", "aborted"}:
+                if step.stop_reason == "aborted":
+                    raise AgentLoopAborted("agent run aborted")
                 raise AgentLoopError(
                     f"model step stopped with {step.stop_reason}",
                 )
@@ -130,6 +147,25 @@ class AgentLoop:
             return
         raise AgentLoopError(
             f"Agent run exceeded {self._wall_budget_sec}s budget",
+        )
+
+
+async def _raise_if_aborted(request: AgentLoopRequest) -> None:
+    """Raise AgentLoopAborted when runtime control requests abort."""
+    if await request.control.abort_requested():
+        raise AgentLoopAborted("agent run aborted")
+
+
+async def _drain_steering_events(
+    request: AgentLoopRequest,
+) -> AsyncIterator[TurnEvent]:
+    """Persist runtime steering input as current-turn user item events."""
+    for item in await request.control.drain_steering():
+        request.turn.upsert_item(item)
+        yield TurnEvent.item_completed(
+            session_id=request.session_id,
+            turn_id=request.turn_id,
+            item=item,
         )
 
 

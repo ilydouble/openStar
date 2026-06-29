@@ -134,6 +134,17 @@ def test_settings_load_logging_service_domain(monkeypatch):
     assert settings.logging_service_timeout == 2.5
 
 
+def test_settings_load_agent_runtime_domain(monkeypatch):
+    """Agent runtime settings should be part of aggregate settings."""
+    monkeypatch.setenv("AGENT_RUNTIME_LOCK_TTL_SECONDS", "42")
+    monkeypatch.setenv("AGENT_RUNTIME_STATE_TTL_SECONDS", "84")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_runtime_lock_ttl_seconds == 42
+    assert settings.agent_runtime_state_ttl_seconds == 84
+
+
 def test_cors_allowed_origins_default_to_local_dev_hosts(monkeypatch):
     monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
 

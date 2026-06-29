@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from icore_agent.application.agent import AgentTurnCommand, AgentTurnService
+from icore_agent.application.agent.runtime import AgentRunConflict
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_agent_turn_service, get_current_user
@@ -49,6 +50,8 @@ async def chat(
         raise HTTPException(status_code=403, detail=msg) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AgentRunConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ChatResponse(session_id=turn.session_id, reply=turn.reply_text())

@@ -159,3 +159,29 @@ class TurnLifecycle:
             completed_at=completed,
             duration_ms=duration_ms,
         )
+
+    def aborted(
+        self,
+        *,
+        completed_at: datetime | None = None,
+    ) -> TurnCompletion:
+        """Mark the turn interrupted and return final lifecycle metadata."""
+        completed = completed_at or datetime.now(UTC)
+        duration_ms = start_to_completed_duration_ms(
+            self.started_at, completed)
+        self.turn.status = TurnStatus.INTERRUPTED
+        self.turn.error = None
+        self.turn.completed_at = completed
+        self.turn.duration_ms = duration_ms
+        return TurnCompletion(
+            event=TurnEvent.turn_aborted(
+                session_id=self.turn.session_id,
+                turn_id=self.turn.id,
+                reply=self.reply,
+                turn=self.turn,
+            ),
+            status=TurnStatus.INTERRUPTED,
+            error=None,
+            completed_at=completed,
+            duration_ms=duration_ms,
+        )

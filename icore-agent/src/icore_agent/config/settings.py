@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .agent import AgentSettings
 from .app import AppSettings
 from .auth import AuthSettings
 from .base import _DOMAINS
@@ -17,6 +18,7 @@ from .tools import ToolsSettings
 
 
 class Settings(
+    AgentSettings,
     AppSettings,
     LoggingSettings,
     LLMSettings,

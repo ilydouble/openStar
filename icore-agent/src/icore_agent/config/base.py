@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DOMAINS = (
     "app",
+    "agent",
     "database",
     "logging",
     "llm",

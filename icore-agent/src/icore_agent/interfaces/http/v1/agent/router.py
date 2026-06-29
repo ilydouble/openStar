@@ -4,16 +4,20 @@ from fastapi import APIRouter
 
 from ..envelope import ApiEnvelopeRoute
 from .handlers import (
+    abort_session_run,
     chat,
     clear_session,
     finalize_session,
+    follow_up_session_run,
     get_session_state,
     list_sessions,
     search_sessions,
     run_sequential,
+    steer_session_run,
     transcribe_audio,
 )
 from .schemas import (
+    AgentRuntimeControlResponse,
     SequentialResponse,
     SessionListResponse,
     SessionSearchResponse,
@@ -30,6 +34,21 @@ router = APIRouter(
 router.post("/chat", summary="Chat with the agent (SSE streaming)")(
     chat
 )
+router.post(
+    "/sessions/{session_id}/abort",
+    response_model=AgentRuntimeControlResponse,
+    summary="Abort the active agent run for a session",
+)(abort_session_run)
+router.post(
+    "/sessions/{session_id}/steer",
+    response_model=AgentRuntimeControlResponse,
+    summary="Queue steering input for the active agent run",
+)(steer_session_run)
+router.post(
+    "/sessions/{session_id}/follow-up",
+    response_model=AgentRuntimeControlResponse,
+    summary="Queue follow-up input for a later turn",
+)(follow_up_session_run)
 router.post(
     "/sequential",
     response_model=SequentialResponse,

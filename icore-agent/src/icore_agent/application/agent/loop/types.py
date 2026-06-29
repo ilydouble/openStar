@@ -10,6 +10,7 @@ from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItem,
     ToolCallItem,
+    UserMessageItem,
 )
 from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.domain.agent.turn import Turn
@@ -62,3 +63,27 @@ class ToolRuntimePort(Protocol):
     async def execute(self, tool_calls: list[ToolCallItem]) -> list[ToolCallItem]:
         """Execute requested tool calls and return completed or failed items."""
         ...
+
+
+class AgentLoopControl(Protocol):
+    """Runtime control surface visible to the application agent loop."""
+
+    async def abort_requested(self) -> bool:
+        """Return whether the active run should abort cooperatively."""
+        ...
+
+    async def drain_steering(self) -> list[UserMessageItem]:
+        """Drain runtime steering input for the current turn."""
+        ...
+
+
+class NoopAgentLoopControl:
+    """Default loop control used when no runtime shell is installed."""
+
+    async def abort_requested(self) -> bool:
+        """Return false because no runtime abort source exists."""
+        return False
+
+    async def drain_steering(self) -> list[UserMessageItem]:
+        """Return no steering input."""
+        return []

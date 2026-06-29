@@ -135,10 +135,38 @@ def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> Non
     }
 
 
+def test_chat_completions_renderer_projects_turn_user_items_to_messages() -> None:
+    """Renderer should expose runtime steering as current-turn user messages."""
+    envelope = _envelope(
+        _tool_definition(),
+        turn_items=[
+            AgentMessageItem(text="I will inspect that."),
+            UserMessageItem(content=[
+                UserInput(
+                    type=UserInputType.TEXT,
+                    text="Actually avoid network access.",
+                ),
+            ]),
+        ],
+    )
+
+    messages = render_chat_completions_messages(envelope)
+
+    assert messages[-2] == {
+        "role": ChatCompletionRole.ASSISTANT.value,
+        "content": "I will inspect that.",
+    }
+    assert messages[-1] == {
+        "role": ChatCompletionRole.USER.value,
+        "content": "Actually avoid network access.",
+    }
+
+
 def _envelope(
     tool_definition: ToolDefinition,
     *,
-    turn_items: list[AgentMessageItem | ToolCallItem] | None = None,
+    turn_items: list[AgentMessageItem |
+                     ToolCallItem | UserMessageItem] | None = None,
 ) -> PromptEnvelope:
     """Build a prompt envelope for chat completions model-client tests."""
     return PromptEnvelope(

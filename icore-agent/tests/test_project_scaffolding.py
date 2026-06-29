@@ -28,6 +28,7 @@ def test_dotenv_files_are_split_by_domain():
     dotenv_dir = AGENT_ROOT / "dotenv"
     domains = {
         "app",
+        "agent",
         "database",
         "llm",
         "sequential",
@@ -64,6 +65,7 @@ def test_compose_wrapper_loads_split_env_files():
     assert "docker compose" in text
     for domain in (
         "app",
+        "agent",
         "build",
         "database",
         "memory",

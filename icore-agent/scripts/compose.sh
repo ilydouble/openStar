@@ -20,6 +20,7 @@ COMPOSE_FILES=(
 
 ENV_FILES=(
   "dotenv/.env.app"
+  "dotenv/.env.agent"
   "dotenv/.env.build"
   "dotenv/.env.database"
   "dotenv/.env.payment"

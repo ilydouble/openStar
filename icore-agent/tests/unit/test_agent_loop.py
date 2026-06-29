@@ -9,6 +9,7 @@ import pytest
 
 from icore_agent.application.agent.loop import (
     AgentLoop,
+    AgentLoopAborted,
     AgentLoopError,
     AgentLoopRequest,
     ModelStepResult,
@@ -73,6 +74,46 @@ async def test_agent_loop_owns_tool_cycle_between_model_samples() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_loop_drains_steering_before_next_model_sample() -> None:
+    """Runtime steering should become a current-turn user item before resampling."""
+    turn = Turn(session_id="session-1")
+    turn.upsert_item(UserMessageItem(content=[
+        UserInput(type=UserInputType.TEXT, text="Initial request"),
+    ]))
+    model_client = ScriptedModelClient([
+        ModelStepResult(
+            assistant_item=AgentMessageItem(text=""),
+            tool_calls=[_tool_call()],
+        ),
+        ModelStepResult(
+            assistant_item=AgentMessageItem(text="steered reply"),
+        ),
+    ])
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=model_client,
+        tool_runtime=CompletingToolRuntime(),
+        control=SteeringControl("Please revise the approach."),
+    )
+
+    events = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+
+    assert events[-1].item.text == "steered reply"
+    assert model_client.prompt_turn_item_types == [
+        [],
+        ["agent_message", "tool_call", "user_message"],
+    ]
+    assert any(
+        isinstance(item, UserMessageItem)
+        and item.to_text() == "Please revise the approach."
+        for item in turn.items
+    )
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_fails_when_tool_round_limit_is_exceeded() -> None:
     """AgentLoop should fail fast when the model keeps requesting tools."""
     turn = Turn(session_id="session-1")
@@ -93,6 +134,24 @@ async def test_agent_loop_fails_when_tool_round_limit_is_exceeded() -> None:
     )
 
     with pytest.raises(AgentLoopError, match="tool loop exceeded"):
+        _ = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_aborts_before_model_sampling_when_requested() -> None:
+    """AgentLoop should stop cooperatively before calling the model client."""
+    turn = Turn(session_id="session-1")
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=FailingModelClient(),
+        tool_runtime=CompletingToolRuntime(),
+        control=AbortControl(),
+    )
+
+    with pytest.raises(AgentLoopAborted):
         _ = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
 
 
@@ -138,6 +197,10 @@ class RecordingContextManager:
                 item
                 for item in session_items
                 if isinstance(item, AgentMessageItem | ToolCallItem)
+                or (
+                    isinstance(item, UserMessageItem)
+                    and item.metadata.get("runtime_input") == "steering"
+                )
             ],
             tools=tools,
             tool_choice=ToolChoice.AUTO,
@@ -160,6 +223,51 @@ class CompletingToolRuntime:
             })
             for call in tool_calls
         ]
+
+
+class SteeringControl:
+    """Runtime control fake that injects one steering message after tools run."""
+
+    def __init__(self, text: str) -> None:
+        """Create the fake control with one steering payload."""
+        self._text = text
+        self._checks = 0
+
+    async def abort_requested(self) -> bool:
+        """Never abort during this steering test."""
+        return False
+
+    async def drain_steering(self) -> list[UserMessageItem]:
+        """Return one steering item only before the second model sample."""
+        self._checks += 1
+        if self._checks != 2:
+            return []
+        return [
+            UserMessageItem(content=[
+                UserInput(type=UserInputType.TEXT, text=self._text),
+            ], metadata={"runtime_input": "steering"})
+        ]
+
+
+class AbortControl:
+    """Runtime control fake that requests immediate abort."""
+
+    async def abort_requested(self) -> bool:
+        """Request abort before model sampling."""
+        return True
+
+    async def drain_steering(self) -> list[UserMessageItem]:
+        """Return no steering input."""
+        return []
+
+
+class FailingModelClient:
+    """Model client fake that must never be called."""
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Fail if abort does not stop the loop before sampling."""
+        _ = envelope
+        raise AssertionError("model client should not be sampled")
 
 
 def _tool_call() -> ToolCallItem:

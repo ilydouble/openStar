@@ -15,6 +15,7 @@ from icore_agent.domain.agent.session import (
     AgentMessageItem,
     ContextItem,
     ToolCallItem,
+    UserMessageItem,
 )
 from icore_agent.domain.agent.tool import ToolChoice
 
@@ -92,7 +93,7 @@ def _history_item_text(item: PromptHistoryItem) -> str:
 
 
 def _render_turn_messages(
-    items: list[AgentMessageItem | ToolCallItem],
+    items: list[AgentMessageItem | ToolCallItem | UserMessageItem],
 ) -> list[dict[str, Any]]:
     """Render current-turn assistant/tool state for a follow-up model step."""
     messages: list[dict[str, Any]] = []
@@ -115,6 +116,13 @@ def _render_turn_messages(
                     "role": ChatCompletionRole.ASSISTANT.value,
                     "content": item.text,
                 })
+        elif isinstance(item, UserMessageItem):
+            content = _render_current_user_content(item)
+            if content:
+                messages.append({
+                    "role": ChatCompletionRole.USER.value,
+                    "content": content,
+                })
         elif _tool_result_content(item) is not None:
             messages.append(_tool_result_message(item))
         index += 1
@@ -122,7 +130,7 @@ def _render_turn_messages(
 
 
 def _following_tool_calls(
-    items: list[AgentMessageItem | ToolCallItem],
+    items: list[AgentMessageItem | ToolCallItem | UserMessageItem],
     start: int,
 ) -> tuple[list[ToolCallItem], int]:
     """Return tool calls immediately following an assistant item."""

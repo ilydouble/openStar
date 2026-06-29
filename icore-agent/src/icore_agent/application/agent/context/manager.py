@@ -11,6 +11,7 @@ from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItem,
     ToolCallItem,
+    UserMessageItem,
 )
 from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.domain.agent.turn import Turn
@@ -45,10 +46,14 @@ class AgentPromptContextManager:
 
 def _model_visible_turn_items(
     session_items: list[SessionItem],
-) -> list[AgentMessageItem | ToolCallItem]:
+) -> list[AgentMessageItem | ToolCallItem | UserMessageItem]:
     """Return current-turn assistant/tool items visible to the next sample."""
     return [
         item
         for item in session_items
         if isinstance(item, (AgentMessageItem, ToolCallItem))
+        or (
+            isinstance(item, UserMessageItem)
+            and item.metadata.get("runtime_input") == "steering"
+        )
     ]

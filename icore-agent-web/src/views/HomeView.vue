@@ -117,228 +117,22 @@
       <main class="relative z-10 flex min-h-0 flex-1 flex-col">
         <div class="flex min-h-0 flex-1 flex-col">
           <div
-            v-if="isChatRoute && messages.length > 0"
+            v-if="isChatRoute && chatHasTimeline"
             ref="scrollEl"
             class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6"
-            @scroll="onChatScroll"
           >
-            <div class="mx-auto w-full max-w-3xl">
-              <div
-                class="relative w-full"
-                :style="{ height: `${virtualTotalHeight}px` }"
-              >
-                <div
-                  class="absolute left-0 right-0 top-0 will-change-transform"
-                  :style="{ transform: `translateY(${virtualOffsetY}px)` }"
-                >
-                  <div
-                    v-for="{ item: msg, index } in virtualVisibleItems"
-                    :key="msg.id"
-                    :ref="(el) => setVirtualRowRef(el, msg, index)"
-                    class="pb-6"
-                    :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
-                  >
-                <div
-                  v-if="msg.role === 'user'"
-                  :class="[
-                    'rounded-2xl rounded-tr-sm text-sm leading-relaxed ring-1 transition-colors duration-300',
-                    userBubbleUsesAttachLayout(msg)
-                      ? 'shadow-sm shadow-zinc-900/5 dark:shadow-md dark:shadow-black/20'
-                      : 'shadow-md shadow-zinc-900/8 dark:shadow-lg dark:shadow-black/25',
-                    'bg-white text-zinc-900 ring-zinc-200/90',
-                    'dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
-                    userBubbleUsesAttachLayout(msg)
-                      ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5'
-                      : 'max-w-[min(88%,calc(100vw-2.5rem))] px-3 py-3 min-[390px]:px-4 sm:max-w-[70%]',
-                  ]"
-                >
-                  <template v-if="msg.type === 'image'">
-                    <template v-for="imgItems in [userImageList(msg)]" :key="`${msg.id}-imglist`">
-                      <div v-if="imgItems.length" class="flex flex-col gap-1.5">
-                        <div class="flex flex-wrap items-end gap-1.5">
-                          <a
-                            v-for="(im, idx) in imgItems"
-                            :key="(im.filename || 'img') + '-' + idx"
-                            :href="im.content"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            :title="`${im.filename || t('chat.imageUntitled')} — ${t('chat.openImageFullSize')}`"
-                            :aria-label="`${t('chat.openImageFullSize')}: ${im.filename || t('chat.imageUntitled')}`"
-                            class="block h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200/90 shadow-sm ring-1 ring-zinc-200/80 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 dark:bg-zinc-700/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
-                          >
-                            <img
-                              :src="im.content"
-                              :alt="imageItemAlt(im.filename)"
-                              class="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          </a>
-                        </div>
-                        <p
-                          v-if="msg.caption"
-                          class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
-                        >
-                          {{ msg.caption }}
-                        </p>
-                      </div>
-                    </template>
-                  </template>
-                  <template v-else-if="msg.type === 'data'">
-                    <div class="flex flex-col gap-1.5">
-                      <div class="flex flex-wrap items-end gap-1.5">
-                        <button
-                          v-for="(row, idx) in (msg.dataAttachments || [])"
-                          :key="(row.filename || 'data') + '-' + idx"
-                          type="button"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
-                          :disabled="!row.file_uuid"
-                          :title="documentChipTitle(row)"
-                          :aria-label="documentChipAria(row)"
-                          @click="openDocumentAttachment(row)"
-                        >
-                          <DocumentFileIcon :filename="row.filename" />
-                          <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
-                            {{ row.filename }}
-                          </span>
-                        </button>
-                      </div>
-                      <p
-                        v-if="msg.caption"
-                        class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
-                      >
-                        {{ msg.caption }}
-                      </p>
-                    </div>
-                  </template>
-                  <template v-else-if="msg.type === 'composite'">
-                    <div class="flex flex-col gap-1.5">
-                      <div v-if="userImageList(msg).length" class="flex flex-wrap items-end gap-1.5">
-                        <a
-                          v-for="(im, idx) in userImageList(msg)"
-                          :key="(im.filename || 'img') + '-' + idx"
-                          :href="im.content"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          :title="`${im.filename || t('chat.imageUntitled')} — ${t('chat.openImageFullSize')}`"
-                          :aria-label="`${t('chat.openImageFullSize')}: ${im.filename || t('chat.imageUntitled')}`"
-                          class="block h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200/90 shadow-sm ring-1 ring-zinc-200/80 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 dark:bg-zinc-700/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
-                        >
-                          <img
-                            :src="im.content"
-                            :alt="imageItemAlt(im.filename)"
-                            class="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </a>
-                      </div>
-                      <div v-if="msg.dataAttachments?.length" class="flex flex-wrap items-end gap-1.5">
-                        <button
-                          v-for="(row, idx) in msg.dataAttachments"
-                          :key="(row.filename || 'data') + '-' + idx"
-                          type="button"
-                          class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 text-left shadow-sm ring-1 ring-zinc-200/70 outline-none transition hover:ring-violet-400/50 focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10 dark:hover:ring-violet-400/35"
-                          :disabled="!row.file_uuid"
-                          :title="documentChipTitle(row)"
-                          :aria-label="documentChipAria(row)"
-                          @click="openDocumentAttachment(row)"
-                        >
-                          <DocumentFileIcon :filename="row.filename" />
-                          <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
-                            {{ row.filename }}
-                          </span>
-                        </button>
-                      </div>
-                      <p
-                        v-if="msg.caption"
-                        class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
-                      >
-                        {{ msg.caption }}
-                      </p>
-                    </div>
-                  </template>
-                  <template v-else>
-                    {{ msg.content }}
-                  </template>
-                </div>
-                <div v-else class="flex max-w-[min(92%,calc(100vw-2.5rem))] gap-2 min-[390px]:max-w-[80%] sm:gap-3">
-                  <div
-                    class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
-                  >
-                    A
-                  </div>
-                  <div class="flex min-w-0 flex-1 flex-col gap-2">
-                    <div
-                      v-if="msg.steps && msg.steps.length"
-                      class="rounded-xl border border-zinc-200/90 bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/40 dark:ring-white/10"
-                    >
-                      <button
-                        type="button"
-                        class="flex w-full items-center gap-1.5 text-left text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
-                        @click="msg.stepsCollapsed = !msg.stepsCollapsed"
-                      >
-                        <span class="transition-transform" :class="msg.stepsCollapsed ? '' : 'rotate-90'">▸</span>
-                        <span>
-                          {{ msg.streaming
-                            ? t('chat.stepsLive', { n: msg.steps.length })
-                            : t('chat.stepsCollapsed', { n: msg.steps.length }) }}
-                        </span>
-                      </button>
-                      <ul
-                        v-if="!msg.stepsCollapsed"
-                        class="mt-2 space-y-1 border-l border-zinc-200 pl-3 dark:border-white/10"
-                      >
-                        <li
-                          v-for="s in msg.steps"
-                          :key="s.step"
-                          class="text-zinc-600 dark:text-zinc-400"
-                        >
-                          <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ s.step }}. {{ s.tool }}</span>
-                          <span v-if="s.input_preview" class="ml-1 text-zinc-500 dark:text-zinc-500">— {{ s.input_preview }}</span>
-                        </li>
-                      </ul>
-                    </div>
-                    <div
-                      :class="[
-                        'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
-                        'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
-                        dark ? 'prose-chat-dark' : 'prose-chat',
-                        msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
-                      ]"
-                    >
-                      <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
-                      <span v-else v-html="assistantMessageHtml(msg)" />
-                    </div>
-                  </div>
-                </div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
-                class="flex justify-start gap-3 pt-2"
-              >
-                <div
-                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
-                >
-                  <span class="text-xs font-bold text-white">A</span>
-                </div>
-                <div
-                  class="flex items-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-md ring-1 ring-black/5 transition-colors duration-300 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:shadow-lg dark:shadow-black/20 dark:ring-white/10"
-                >
-                  <span
-                    v-for="i in 3"
-                    :key="i"
-                    class="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-500"
-                    :style="{ animationDelay: `${(i - 1) * 0.15}s` }"
-                  />
-                </div>
-              </div>
-            </div>
+            <ChatTimeline
+              :timeline="timeline"
+              :attachments="attachmentList"
+              :loading="loading"
+              :dark="dark"
+              :template-labels="templateLabelById"
+              @open-document="openDocumentAttachment"
+            />
           </div>
 
           <div
-            v-else-if="isChatRoute && messages.length === 0"
+            v-else-if="isChatRoute && !chatHasTimeline"
             class="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-6 pt-10"
           >
             <p class="max-w-sm text-center text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
@@ -621,7 +415,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  chatStream,
+  chatEventStream,
   clearSession,
   deleteFileAsset,
   fetchAllSessions,
@@ -643,17 +437,16 @@ import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import QuotaExceededModal from '../components/QuotaExceededModal.vue'
 import SearchBar from '../components/SearchBar.vue'
-import DocumentFileIcon from '../components/DocumentFileIcon.vue'
-import {
-  hydrateSessionMessages,
-  refreshHydratedImageUrls,
-} from '../utils/sessionMessageHydration.js'
+import ChatTimeline from '../components/timeline/ChatTimeline.vue'
 import {
   composeScenarioPrompt,
   resolveTemplateBubbleText,
 } from '../utils/scenarioPrompt.js'
-import { renderMarkdown } from '../utils/sanitizeHtml.js'
-import { useVirtualList } from '../composables/useVirtualList.js'
+import {
+  applyTurnEvent,
+  hydrateSessionTimeline,
+  timelineToChatRows,
+} from '../utils/sessionTimeline.js'
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -692,23 +485,6 @@ function handleOnboardingScenario(agentHint) {
   showOnboarding.value = false
 }
 
-function imageItemAlt(filename) {
-  if (filename) return t('chat.imageUploadedAlt', { name: filename })
-  return t('chat.imageUploadedAltGeneric')
-}
-
-/** Build the hover title for one document attachment chip. */
-function documentChipTitle(row) {
-  const name = row?.filename || t('chat.documentUntitled')
-  return `${name} — ${t('chat.openDocumentFile')}`
-}
-
-/** Build the aria label for one document attachment chip. */
-function documentChipAria(row) {
-  const name = row?.filename || t('chat.documentUntitled')
-  return `${t('chat.openDocumentFile')}: ${name}`
-}
-
 /** Open one uploaded document in a new browser tab. */
 async function openDocumentAttachment(row) {
   const fileUuid = String(row?.file_uuid || '').trim()
@@ -720,69 +496,6 @@ async function openDocumentAttachment(row) {
   } catch (err) {
     console.error('Failed to open document attachment:', err)
   }
-}
-
-/** @param {{ images?: Array<{ content: string, filename?: string }>, content?: string, filename?: string, type?: string }} msg */
-function userImageList(msg) {
-  if (msg?.images?.length) return msg.images
-  if ((msg?.type === 'image' || msg?.type === 'composite') && msg?.content) {
-    return [{ content: msg.content, filename: msg.filename }]
-  }
-  return []
-}
-
-/** Return true when a user bubble should stay visible without plain text content. */
-function userMessageVisible(msg) {
-  if (msg?.role !== 'user') return false
-  if (msg.type === 'image') return userImageList(msg).length > 0 || Boolean(msg.caption?.trim())
-  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
-  if (msg.type === 'composite') {
-    return userImageList(msg).length > 0
-      || (msg.dataAttachments?.length ?? 0) > 0
-      || Boolean(msg.caption?.trim())
-  }
-  return Boolean(msg?.content?.trim())
-}
-
-/** 用户气泡是否采用「附件」紧凑布局（图片 / 数据文件 / 混合） */
-function userBubbleUsesAttachLayout(msg) {
-  if (msg?.role !== 'user') return false
-  if (msg.type === 'image') return userImageList(msg).length > 0
-  if (msg.type === 'data') return (msg.dataAttachments?.length ?? 0) > 0
-  if (msg.type === 'composite') {
-    return userImageList(msg).length > 0 || (msg.dataAttachments?.length ?? 0) > 0
-  }
-  return false
-}
-
-/** Render assistant markdown once after streaming completes; hydrate history on demand. */
-function assistantMessageHtml(msg) {
-  if (msg?.renderedHtml) return msg.renderedHtml
-  return renderMarkdown(msg?.content)
-}
-
-/** Return whether a chat row should occupy space in the virtual list. */
-function shouldShowChatMessage(msg) {
-  if (msg?.role === 'user') return userMessageVisible(msg)
-  return Boolean(msg.content || (msg.steps && msg.steps.length))
-}
-
-/** Rough row-height estimate before a message row is measured in the DOM. */
-function estimateMessageHeight(msg) {
-  if (msg?.role === 'user') {
-    if (msg.type === 'image' || msg.type === 'data' || msg.type === 'composite') {
-      return 96
-    }
-    const lines = Math.ceil(String(msg.content || '').length / 56)
-    return Math.max(56, lines * 22 + 28)
-  }
-
-  const contentLength = String(msg.content || '').length
-  const stepsExtra = (msg.steps?.length || 0) * 28
-  if (msg.streaming) {
-    return Math.max(88, Math.min(420, contentLength * 0.75 + stepsExtra + 56))
-  }
-  return Math.max(120, Math.min(960, contentLength * 0.45 + stepsExtra + 72))
 }
 
 const UI_BY_ID = {
@@ -818,31 +531,27 @@ const UI_BY_ID = {
   },
 }
 
-const messages = ref([])
-const chatListItems = computed(() => messages.value.filter(shouldShowChatMessage))
-const {
-  visibleItems: virtualVisibleItems,
-  totalHeight: virtualTotalHeight,
-  offsetY: virtualOffsetY,
-  syncContainer: syncVirtualContainer,
-  setRowRef: setVirtualRowRef,
-  resetMeasurements: resetVirtualMeasurements,
-} = useVirtualList({
-  items: chatListItems,
-  getKey: (msg) => msg.id,
-  estimateHeight: estimateMessageHeight,
-  itemGap: 24,
-  overscan: 3,
-})
+const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
+const timeline = ref(hydrateSessionTimeline({ session_id: sessionId.value, turns: [], attachments: [] }))
+const messages = computed(() =>
+  timelineToChatRows(timeline.value, {
+    attachments: attachmentList.value,
+    templateLabels: templateLabelById.value,
+  }),
+)
+const chatHasTimeline = computed(() =>
+  loading.value
+  || (timeline.value.turns || []).some((turn) =>
+    (turn.items || []).some((item) => item.type !== 'context'),
+  ),
+)
 const loading = ref(false)
 /** 中止当前 /chat SSE（用户点击停止） */
 const streamAbortController = ref(null)
-const streamingMsg = ref(null)
 /** 中止当前 SSE 流（停止按钮） */
 function stopAssistantStream() {
   streamAbortController.value?.abort()
 }
-const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
 /** When true, chat is ephemeral: no history, memory injection, or session finalize. */
 const incognitoMode = ref(false)
 const scrollEl = ref(null)
@@ -871,6 +580,42 @@ const recentProjects = computed(() => {
     updatedAt: project.updated_at,
   }))
 })
+
+/** Reset the canonical timeline for a session without touching composer state. */
+function resetTimelineState(nextSessionId = sessionId.value) {
+  timeline.value = hydrateSessionTimeline({
+    session_id: nextSessionId,
+    turns: [],
+    attachments: attachmentList.value,
+  })
+}
+
+/** Add a local-only failed turn when the request fails before backend events arrive. */
+function appendLocalErrorTurn(message) {
+  const now = Date.now()
+  timeline.value.turns.push({
+    turnId: `local-error-${now}`,
+    status: 'failed',
+    error: { message },
+    model: null,
+    provider: null,
+    usage: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    items: [{
+      itemId: `local-error-item-${now}`,
+      type: 'agent_message',
+      status: 'completed',
+      payload: {
+        id: `local-error-item-${now}`,
+        type: 'agent_message',
+        status: 'completed',
+        text: message,
+      },
+    }],
+  })
+}
 
 /** 输入区只展示 RAG 等会话级附件；图片与非图片文件均在 SearchBar 预览或气泡内展示 */
 const composerAttachments = computed(() =>
@@ -920,27 +665,13 @@ async function handleFileSelected(file) {
   try {
     const uploaded = await uploadFileAsset(file)
     attachmentList.value = [...attachmentList.value, uploaded]
-    const url = uploaded.download_url || URL.createObjectURL(file)
-    if (url) {
-      messages.value.push({
-        id: `${Date.now()}-u`,
-        role: 'user',
-        type: 'image',
-        images: [{
-          file_uuid: uploaded.file_uuid,
-          content: url,
-          filename: uploaded.original_filename || file.name,
-        }],
+    ensureChatRoute()
+    const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
+    if (!loading.value) {
+      await sendUserMessage(t('chat.imageReplyPrompt'), hint, {
+        skipUserBubble: true,
+        turnFileUuids: [uploaded.file_uuid],
       })
-      ensureChatRoute()
-      await scrollBottom()
-      const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-      if (!loading.value) {
-        await sendUserMessage(t('chat.imageReplyPrompt'), hint, {
-          skipUserBubble: true,
-          turnFileUuids: [uploaded.file_uuid],
-        })
-      }
     }
     await loadSessions()
     await loadPlanSummary()
@@ -966,13 +697,12 @@ async function deleteAttachment(fileUuid) {
 
 function resetConversationState() {
   stopAssistantStream()
-  messages.value = []
-  resetVirtualMeasurements()
-  sessionId.value = newSessionId()
+  const nextSessionId = newSessionId()
+  sessionId.value = nextSessionId
   incognitoMode.value = false
   loading.value = false
-  streamingMsg.value = null
   attachmentList.value = []
+  resetTimelineState(nextSessionId)
   uploadError.value = ''
   activeShortcutId.value = ''
   nextTick(() => {
@@ -997,13 +727,12 @@ function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
 /** Start a fresh session; optionally enable or disable incognito mode. */
 function startFreshSession({ incognito = false, navigate = true } = {}) {
   stopAssistantStream()
-  messages.value = []
   const nextSessionId = newSessionId()
   sessionId.value = nextSessionId
   incognitoMode.value = incognito
   loading.value = false
-  streamingMsg.value = null
   attachmentList.value = []
+  resetTimelineState(nextSessionId)
   uploadError.value = ''
   activeShortcutId.value = ''
   if (navigate) {
@@ -1156,12 +885,10 @@ watch(
       scheduleFinalizeSessionIfNeeded(previousSessionId)
     }
     incognitoMode.value = false
-    messages.value = []
-    resetVirtualMeasurements()
     sessionId.value = resolved
     loading.value = false
-    streamingMsg.value = null
     attachmentList.value = []
+    resetTimelineState(resolved)
     uploadError.value = ''
     activeShortcutId.value = ''
     await loadPlanSummary()
@@ -1170,7 +897,7 @@ watch(
 )
 
 watch(
-  () => [virtualTotalHeight.value, loading.value],
+  () => [messages.value.length, loading.value],
   () => {
     if (loading.value) {
       scrollBottom()
@@ -1194,17 +921,11 @@ async function scrollBottom() {
   })
 }
 
-/** Scroll the chat container to the latest message and sync the virtual window. */
+/** Scroll the chat container to the latest timeline item. */
 function applyChatScrollBottom() {
   const el = scrollEl.value
   if (!el) return
   el.scrollTop = el.scrollHeight
-  syncVirtualContainer(el)
-}
-
-/** Keep the virtual list window aligned with the chat scroll container. */
-function onChatScroll(event) {
-  syncVirtualContainer(event.target)
 }
 
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
@@ -1218,7 +939,7 @@ const SHORTCUT_HINT = {
 }
 
 function mapSessionSummary(item) {
-  const count = Number(item.message_count ?? 0)
+  const count = Number(item.turn_count ?? item.message_count ?? 0)
   return {
     sessionId: item.public_id,
     title: (item.title || '').trim() || t('home.heroTitle'),
@@ -1328,15 +1049,8 @@ async function hydrateCurrentSession() {
   }
   try {
     const state = await getSessionState(sessionId.value)
-    messages.value = hydrateSessionMessages({
-      messages: state.messages || [],
-      attachments: state.attachments || [],
-      sessionId: sessionId.value,
-      templateLabels: templateLabelById.value,
-    })
-    resetVirtualMeasurements()
-    await refreshHydratedImageUrls(messages.value)
     attachmentList.value = state.attachments || []
+    timeline.value = hydrateSessionTimeline(state)
     await loadSessions()
     const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
     if (!activeShortcutId.value) {
@@ -1367,7 +1081,7 @@ function buildTemplateSendPayload(userQuery) {
     }
   }
   return {
-    bubbleText: resolveTemplateBubbleText(activeModeItem.value?.label, query),
+    bubbleText: resolveTemplateBubbleText(activeShortcut.value?.label, query),
     agentMessage: composeScenarioPrompt(query, template),
     templateId: activeShortcutId.value || template.id || '',
   }
@@ -1386,38 +1100,17 @@ async function sendUserMessage(msg, agentHint = '', {
     ? turnFileUuids.map((item) => String(item || '').trim()).filter(Boolean)
     : []
 
-  if (!skipUserBubble) {
-    messages.value.push({ id: `${Date.now()}-u`, role: 'user', content: bubbleText })
-    ensureChatRoute()
-  }
+  void skipUserBubble
+  ensureChatRoute()
   loading.value = true
   startQuotaPolling()
   await scrollBottom()
 
-  const assistant = {
-    id: `${Date.now()}-a`,
-    role: 'assistant',
-    content: '',
-    streaming: true,
-    steps: [],
-    stepsCollapsed: false,
-  }
-  messages.value.push(assistant)
-  const replyIndex = messages.value.length - 1
-  streamingMsg.value = messages.value[replyIndex]
-
   const ac = new AbortController()
   streamAbortController.value = ac
 
-  function commitAssistant(partial) {
-    const cur = messages.value[replyIndex]
-    const next = { ...cur, ...partial }
-    messages.value[replyIndex] = next
-    streamingMsg.value = next
-  }
-
   try {
-    for await (const evt of chatStream(bubbleText, sessionId.value, agentHint, {
+    for await (const evt of chatEventStream(bubbleText, sessionId.value, agentHint, {
       signal: ac.signal,
       fileUuids,
       agentMessage: agentMessage !== bubbleText ? agentMessage : '',
@@ -1426,24 +1119,7 @@ async function sendUserMessage(msg, agentHint = '', {
       incognito: incognitoMode.value,
     })) {
       if (!evt) continue
-      if (evt.kind === 'token') {
-        const cur = messages.value[replyIndex]
-        commitAssistant({
-          content: (cur.content || '') + (evt.text || ''),
-        })
-      } else if (evt.kind === 'status') {
-        const cur = messages.value[replyIndex]
-        commitAssistant({
-          steps: [
-            ...cur.steps,
-            {
-              step: evt.step,
-              tool: evt.tool,
-              input_preview: evt.input_preview,
-            },
-          ],
-        })
-      }
+      applyTurnEvent(timeline.value, evt)
       await scrollBottom()
     }
   } catch (e) {
@@ -1453,30 +1129,19 @@ async function sendUserMessage(msg, agentHint = '', {
         // 超出 Token 配额 → 显示升级弹窗，而不是报错
         quotaExceededPlan.value = e.currentPlan
         showQuotaModal.value = true
-        // 移除空的 assistant bubble
-        commitAssistant({ content: '', streaming: false, stepsCollapsed: true })
       } else {
         const errorMsg = String(e?.message || '')
         if (errorMsg.includes('401')) {
           signOut()
           router.push({ name: 'auth' })
         } else {
-          commitAssistant({
-            content: t('chat.requestFailed', { msg: errorMsg }),
-          })
+          appendLocalErrorTurn(t('chat.requestFailed', { msg: errorMsg }))
         }
       }
     }
   } finally {
     stopQuotaPolling()
     streamAbortController.value = null
-    const cur = messages.value[replyIndex]
-    commitAssistant({
-      streaming: false,
-      stepsCollapsed: true,
-      renderedHtml: renderMarkdown(cur?.content || ''),
-    })
-    streamingMsg.value = null
     loading.value = false
     await loadPlanSummary()
     await loadSessions()
@@ -1533,34 +1198,6 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
     const hasData = uploadedDataMeta.length > 0
     if (!hasImages && !hasData) return
 
-    const caption = text || undefined
-    if (hasImages && !hasData) {
-      messages.value.push({
-        id: `${Date.now()}-u`,
-        role: 'user',
-        type: 'image',
-        images: uploadedImages,
-        ...(caption ? { caption } : {}),
-      })
-    } else if (!hasImages && hasData) {
-      messages.value.push({
-        id: `${Date.now()}-u`,
-        role: 'user',
-        type: 'data',
-        dataAttachments: uploadedDataMeta,
-        ...(caption ? { caption } : {}),
-      })
-    } else {
-      messages.value.push({
-        id: `${Date.now()}-u`,
-        role: 'user',
-        type: 'composite',
-        images: uploadedImages,
-        dataAttachments: uploadedDataMeta,
-        ...(caption ? { caption } : {}),
-      })
-    }
-    await scrollBottom()
     ensureChatRoute()
 
     let apiText = text

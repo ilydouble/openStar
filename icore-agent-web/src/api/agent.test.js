@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
-import { chatStream } from './agent.js'
+import { chatEventStream, chatStream } from './agent.js'
 
 const originalFetch = globalThis.fetch
 
@@ -52,6 +52,36 @@ test('chatStream converts turn item deltas into token events', async () => {
   const events = await collect(chatStream('Hi', 'session-1'))
 
   assert.equal(events.map((event) => event.text).join(''), 'Hello')
+})
+
+test('chatEventStream yields backend typed events without projection', async () => {
+  mockChatStreamResponse([
+    sse({ type: 'turn_started', session_id: 'session-1', turn_id: 'turn-1' }),
+    sse({
+      type: 'item_delta',
+      session_id: 'session-1',
+      turn_id: 'turn-1',
+      item_id: 'assistant-1',
+      delta: { text: 'Hel' },
+    }),
+    sse({
+      type: 'turn_aborted',
+      session_id: 'session-1',
+      turn_id: 'turn-1',
+      reply: '',
+    }),
+    'data: [DONE]\n\n',
+  ])
+
+  const events = await collect(chatEventStream('Hi', 'session-1'))
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'turn_started',
+    'item_delta',
+    'turn_aborted',
+  ])
+  assert.equal(events[1].item_id, 'assistant-1')
+  assert.equal(events[1].delta.text, 'Hel')
 })
 
 test('chatStream falls back to completed assistant item text when no deltas arrive', async () => {

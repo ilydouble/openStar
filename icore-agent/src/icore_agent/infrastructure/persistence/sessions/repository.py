@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.session import SessionItem
-from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 
-from .models import ChatSession, ChatSessionItem, ChatTurn
+from .models import ChatSession, ChatSessionEvent, ChatSessionItem, ChatTurn
 
 _HEADLINE_OPTS = "MaxFragments=1, MaxWords=20, MinWords=6, StartSel=<mark>, StopSel=</mark>"
 _SEARCH_LANG = "english"
@@ -243,6 +243,37 @@ class SqlAlchemyChatHistoryRepository:
         self._session.flush()
         return session_item
 
+    def append_turn_event(
+        self,
+        row: ChatSession,
+        turn: ChatTurn,
+        event: TurnEvent,
+    ) -> ChatSessionEvent:
+        """Append one public turn-stream event for replay and debugging."""
+        existing = self._session.execute(
+            select(ChatSessionEvent).where(
+                ChatSessionEvent.turn_id == turn.id,
+                ChatSessionEvent.public_id == event.event_id,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+        event_row = ChatSessionEvent(
+            session_id=row.id,
+            turn_id=turn.id,
+            public_id=event.event_id,
+            run_id=event.run_id,
+            sequence=int(event.seq or self._next_turn_event_sequence(turn.id)),
+            event_type=_enum_value(event.kind),
+            item_public_id=event.item_id,
+            payload=event.to_payload(),
+            created_at=event.created_at,
+        )
+        self._session.add(event_row)
+        row.updated_at = int(time.time())
+        self._session.flush()
+        return event_row
+
     def complete_turn(
         self,
         turn: ChatTurn,
@@ -436,6 +467,16 @@ class SqlAlchemyChatHistoryRepository:
         result = self._session.execute(
             select(func.max(ChatSessionItem.sequence)).where(
                 ChatSessionItem.turn_id == turn_id
+            )
+        )
+        current = result.scalar_one_or_none()
+        return int(current or 0) + 1
+
+    def _next_turn_event_sequence(self, turn_id: int) -> int:
+        """Return the next event sequence number for one turn."""
+        result = self._session.execute(
+            select(func.max(ChatSessionEvent.sequence)).where(
+                ChatSessionEvent.turn_id == turn_id
             )
         )
         current = result.scalar_one_or_none()

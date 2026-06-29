@@ -99,7 +99,11 @@ class TurnLifecycle:
         if event.item is not None:
             self.turn.upsert_item(event.item)
         if event.kind is TurnEventKind.ITEM_DELTA and event.delta:
-            self.reply += str(event.delta.get("text") or "")
+            self.reply += str(
+                event.delta.get("text_append")
+                or event.delta.get("text")
+                or "",
+            )
         elif (
             event.kind is TurnEventKind.ITEM_COMPLETED
             and isinstance(event.item, AgentMessageItem)

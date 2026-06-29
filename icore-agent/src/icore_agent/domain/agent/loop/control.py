@@ -18,6 +18,10 @@ class AgentLoopControl(Protocol):
         """Drain runtime steering input for the current turn."""
         ...
 
+    def run_id(self) -> str | None:
+        """Return the active runtime run id when one exists."""
+        ...
+
 
 class NoopAgentLoopControl:
     """Default loop control used when no runtime shell is installed."""
@@ -29,3 +33,7 @@ class NoopAgentLoopControl:
     async def drain_steering(self) -> list[UserMessageItem]:
         """Return no steering input."""
         return []
+
+    def run_id(self) -> str | None:
+        """Return no run id because no runtime shell is installed."""
+        return None

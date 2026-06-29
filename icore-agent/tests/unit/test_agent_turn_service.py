@@ -212,7 +212,7 @@ async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
         usage_service=FakeUsageService(),
     )
 
-    event_stream = await service.stream(_command(stream=True))
+    event_stream = await service.stream(_command(stream=True, file_uuids=("f1",)))
     events = []
     async for event in event_stream:
         events.append(event)
@@ -222,22 +222,37 @@ async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
     assert [event.kind for event in events] == [
         TurnEventKind.TURN_STARTED,
         TurnEventKind.ITEM_COMPLETED,
+        TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_DELTA,
         TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.TURN_COMPLETED,
     ]
+    assert any(
+        event.item is not None and event.item.type == "context"
+        for event in events
+    )
     assert "".join(
-        event.delta["text"]
+        event.delta["text_append"]
         for event in events
         if event.kind is TurnEventKind.ITEM_DELTA
     ) == "Hi"
+    assert all(event.seq is not None for event in events)
+    assert all(event.run_id for event in events)
+    assert len({
+        event.event_id
+        for event in events
+    }) == len(events)
     assert any(
         call[0] == "upsert"
         and call[3] == "agent_message"
         and call[4].text == "Hi"
         for call in history.calls
     )
+    event_calls = [call for call in history.calls if call[0] == "append-event"]
+    assert [call[4] for call in event_calls] == [
+        event.kind.value for event in events
+    ]
 
 
 @pytest.mark.asyncio
@@ -468,6 +483,26 @@ class FakeHistory:
             model,
             usage,
             provider,
+        ))
+
+    def append_turn_event(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        turn_id: str,
+        event,
+    ) -> None:
+        """Record append-only turn event persistence."""
+        self.calls.append((
+            "append-event",
+            public_id,
+            user_id,
+            turn_id,
+            event.kind.value,
+            event.seq,
+            event.event_id,
+            event.run_id,
         ))
 
     def load_messages(self, public_id: str, user_id: str) -> list[dict[str, Any]]:

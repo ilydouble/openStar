@@ -7,13 +7,20 @@ from typing import Any
 
 import litellm
 
-from icore_agent.domain.agent.loop import ModelStepResult, ModelTextDelta
+from icore_agent.domain.agent.loop import (
+    ModelStepResult,
+    ModelTextDelta,
+    ModelToolCallCompleted,
+    ModelToolCallDelta,
+    ModelToolCallStarted,
+)
 from icore_agent.config import settings
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
     ToolCallItem,
+    ToolCallStatus,
     ToolFunction,
 )
 
@@ -184,14 +191,43 @@ async def _stream_step_events(
         if text_delta:
             content_parts.append(text_delta)
             yield ModelTextDelta(text=text_delta)
-        _merge_tool_call_deltas(tool_call_states, _delta_tool_calls(delta))
+        for raw_tool_delta in _delta_tool_calls(delta):
+            index = int(_get(raw_tool_delta, "index") or 0)
+            is_new = index not in tool_call_states
+            _merge_tool_call_deltas(tool_call_states, [raw_tool_delta])
+            state = tool_call_states[index]
+            item_id = _tool_call_item_id(state, index)
+            state["item_id"] = item_id
+            function = _get(raw_tool_delta, "function") or {}
+            arguments_delta = _get(function, "arguments")
+            if is_new:
+                yield ModelToolCallStarted(
+                    item_id=item_id,
+                    provider_tool_call_id=_tool_call_id(state),
+                    index=index,
+                    name=_tool_call_name(state),
+                )
+            if arguments_delta is not None:
+                yield ModelToolCallDelta(
+                    item_id=item_id,
+                    provider_tool_call_id=_tool_call_id(state),
+                    index=index,
+                    name=_tool_call_name(state),
+                    arguments_delta=str(arguments_delta),
+                )
 
     content = "".join(content_parts)
     tool_calls = [
-        _tool_call_item(state)
+        _tool_call_item(state, item_id=str(state.get("item_id") or ""))
         for _index, state in sorted(tool_call_states.items())
         if _tool_call_has_content(state)
     ]
+    for tool_call in tool_calls:
+        yield ModelToolCallCompleted(
+            tool_call=tool_call.model_copy(update={
+                "status": ToolCallStatus.READY,
+            }),
+        )
     yield ModelStepResult(
         assistant_item=AgentMessageItem(
             text=content,
@@ -267,6 +303,7 @@ def _merge_tool_call_deltas(
         state = states.setdefault(
             index,
             {
+                "index": index,
                 "id": "",
                 "type": "function",
                 "function": {"name": "", "arguments": ""},
@@ -308,11 +345,14 @@ def _message_tool_calls(message: Any) -> list[Any]:
     return list(calls)
 
 
-def _tool_call_item(tool_call: Any) -> ToolCallItem:
+def _tool_call_item(tool_call: Any, *, item_id: str | None = None) -> ToolCallItem:
     """Convert one provider tool call into a domain ToolCallItem."""
     arguments_text = _tool_call_arguments_text(tool_call)
+    kwargs = {"id": item_id} if item_id else {}
     return ToolCallItem(
+        **kwargs,
         provider_tool_call_id=_tool_call_id(tool_call),
+        index=_tool_call_index(tool_call),
         function=ToolFunction(
             name=_tool_call_name(tool_call),
             arguments_text=arguments_text,
@@ -324,6 +364,19 @@ def _tool_call_item(tool_call: Any) -> ToolCallItem:
 def _tool_call_id(tool_call: Any) -> str:
     """Extract a stable provider tool-call id."""
     return str(_get(tool_call, "id") or "")
+
+
+def _tool_call_item_id(tool_call: Any, index: int) -> str:
+    """Return a stable domain item id for a streamed provider tool call."""
+    return str(_get(tool_call, "item_id") or _tool_call_id(tool_call) or f"tool-call-{index}")
+
+
+def _tool_call_index(tool_call: Any) -> int | None:
+    """Extract the provider tool-call index when available."""
+    value = _get(tool_call, "index")
+    if value is None:
+        return None
+    return int(value)
 
 
 def _tool_call_name(tool_call: Any) -> str:

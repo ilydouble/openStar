@@ -124,3 +124,50 @@ class ChatSessionItem(Base):
 
     session: Mapped[ChatSession] = relationship()
     turn: Mapped[ChatTurn] = relationship(back_populates="items")
+
+
+class ChatSessionEvent(Base):
+    """Append-only turn event record for stream replay and debugging."""
+
+    __tablename__ = "session_events"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "public_id",
+                         name="uq_session_events_turn_public_id"),
+        UniqueConstraint("turn_id", "sequence",
+                         name="uq_session_events_turn_sequence"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        RowIDType, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        RowIDType,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_id: Mapped[int] = mapped_column(
+        RowIDType,
+        ForeignKey("turns.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    public_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    item_public_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JsonObject,
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    session: Mapped[ChatSession] = relationship()
+    turn: Mapped[ChatTurn] = relationship()

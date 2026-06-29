@@ -24,14 +24,14 @@ test('chatStream converts turn item deltas into token events', async () => {
       session_id: 'session-1',
       turn_id: 'turn-1',
       item_id: 'assistant-1',
-      delta: { text: 'Hel' },
+      delta: { text_append: 'Hel' },
     }),
     sse({
       type: 'item_delta',
       session_id: 'session-1',
       turn_id: 'turn-1',
       item_id: 'assistant-1',
-      delta: { text: 'lo' },
+      delta: { text_append: 'lo' },
     }),
     sse({
       type: 'item_completed',
@@ -62,7 +62,7 @@ test('chatEventStream yields backend typed events without projection', async () 
       session_id: 'session-1',
       turn_id: 'turn-1',
       item_id: 'assistant-1',
-      delta: { text: 'Hel' },
+      delta: { text_append: 'Hel' },
     }),
     sse({
       type: 'turn_aborted',
@@ -81,7 +81,7 @@ test('chatEventStream yields backend typed events without projection', async () 
     'turn_aborted',
   ])
   assert.equal(events[1].item_id, 'assistant-1')
-  assert.equal(events[1].delta.text, 'Hel')
+  assert.equal(events[1].delta.text_append, 'Hel')
 })
 
 test('chatStream falls back to completed assistant item text when no deltas arrive', async () => {

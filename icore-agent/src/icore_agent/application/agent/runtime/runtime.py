@@ -65,6 +65,10 @@ class AgentRunControl:
         )
         return [_steering_item(item) for item in queued]
 
+    def run_id(self) -> str | None:
+        """Return the active run id bound to this control object."""
+        return self._local_run.record.run_id
+
 
 class AgentRuntime:
     """Own active run state, cancellation, steering, and idle coordination."""

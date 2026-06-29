@@ -30,4 +30,48 @@ class ModelTextDelta:
     text: str
 
 
-ModelStreamEvent = ModelTextDelta | ModelStepResult
+@dataclass(frozen=True, slots=True)
+class ModelToolCallStarted:
+    """Provider began streaming one tool call."""
+
+    item_id: str
+    provider_tool_call_id: str | None = None
+    index: int | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ModelToolCallDelta:
+    """One streamed tool-call argument delta from the provider."""
+
+    item_id: str
+    arguments_delta: str
+    provider_tool_call_id: str | None = None
+    index: int | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ModelToolCallCompleted:
+    """Provider finished streaming one tool call."""
+
+    tool_call: ToolCallItem
+
+
+@dataclass(frozen=True, slots=True)
+class ModelStreamWarning:
+    """Non-terminal warning emitted while consuming a provider stream."""
+
+    code: str
+    message: str
+    retryable: bool = False
+
+
+ModelStreamEvent = (
+    ModelTextDelta
+    | ModelToolCallStarted
+    | ModelToolCallDelta
+    | ModelToolCallCompleted
+    | ModelStreamWarning
+    | ModelStepResult
+)

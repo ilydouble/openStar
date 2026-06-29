@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.domain.agent.session import SessionItem, UserMessageItem
-from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
@@ -92,6 +92,25 @@ class AgentSessionService:
             if turn is None:
                 raise LookupError("Turn not found")
             repo.upsert_session_item(row, turn, item)
+
+    def append_turn_event(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        turn_id: str,
+        event: TurnEvent,
+    ) -> None:
+        """Append one typed turn event for replay and debugging."""
+        with sync_session_scope() as session:
+            repo = SqlAlchemyChatHistoryRepository(session)
+            row = repo.get_session_by_public_id(public_id)
+            if row is None or row.deleted_at is not None or row.user_id != user_id:
+                raise LookupError("Session not found")
+            turn = repo.get_turn(row, turn_id)
+            if turn is None:
+                raise LookupError("Turn not found")
+            repo.append_turn_event(row, turn, event)
 
     def complete_turn(
         self,

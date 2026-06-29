@@ -72,14 +72,14 @@ test('applyTurnEvent builds turns, appends deltas, and preserves failed items', 
     session_id: 'session-1',
     turn_id: 'turn-1',
     item_id: 'assistant-1',
-    delta: { text: 'Hel' },
+    delta: { text_append: 'Hel' },
   })
   applyTurnEvent(timeline, {
     type: 'item_delta',
     session_id: 'session-1',
     turn_id: 'turn-1',
     item_id: 'assistant-1',
-    delta: { text: 'lo' },
+    delta: { text_append: 'lo' },
   })
   applyTurnEvent(timeline, {
     type: 'turn_failed',
@@ -91,6 +91,72 @@ test('applyTurnEvent builds turns, appends deltas, and preserves failed items', 
   assert.equal(timeline.turns[0].status, 'failed')
   assert.equal(timeline.turns[0].error.message, 'model unavailable')
   assert.equal(timeline.turns[0].items[0].payload.text, 'Hello')
+})
+
+test('applyTurnEvent replaces terminal turns and appends tool-call arguments', () => {
+  const timeline = hydrateSessionTimeline({ session_id: 'session-1', turns: [], attachments: [] })
+
+  applyTurnEvent(timeline, { type: 'turn_started', session_id: 'session-1', turn_id: 'turn-1' })
+  applyTurnEvent(timeline, {
+    type: 'item_started',
+    session_id: 'session-1',
+    turn_id: 'turn-1',
+    item_id: 'tool-1',
+    item: {
+      id: 'tool-1',
+      type: 'tool_call',
+      status: 'streaming',
+      function: { name: 'number_comparator', arguments_text: '' },
+    },
+  })
+  applyTurnEvent(timeline, {
+    type: 'item_delta',
+    session_id: 'session-1',
+    turn_id: 'turn-1',
+    item_id: 'tool-1',
+    item_type: 'tool_call',
+    delta: {
+      arguments_append: '{"left":',
+      name: 'number_comparator',
+      provider_tool_call_id: 'provider-tool-1',
+      index: 0,
+    },
+  })
+  applyTurnEvent(timeline, {
+    type: 'item_delta',
+    session_id: 'session-1',
+    turn_id: 'turn-1',
+    item_id: 'tool-1',
+    item_type: 'tool_call',
+    delta: { arguments_append: '2,"right":1}' },
+  })
+  assert.equal(
+    timeline.turns[0].items[0].payload.function.arguments_text,
+    '{"left":2,"right":1}',
+  )
+  applyTurnEvent(timeline, {
+    type: 'turn_completed',
+    session_id: 'session-1',
+    turn_id: 'turn-1',
+    turn: {
+      turn_id: 'turn-1',
+      status: 'completed',
+      model: 'test-model',
+      provider: 'test-provider',
+      usage: { total_tokens: 3 },
+      items: [{
+        id: 'assistant-1',
+        type: 'agent_message',
+        status: 'completed',
+        text: 'Done',
+      }],
+    },
+  })
+
+  assert.equal(timeline.turns[0].status, 'completed')
+  assert.equal(timeline.turns[0].model, 'test-model')
+  assert.equal(timeline.turns[0].items.length, 1)
+  assert.equal(timeline.turns[0].items[0].payload.text, 'Done')
 })
 
 test('timelineToChatRows renders user attachments and hides context items by default', () => {

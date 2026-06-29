@@ -224,7 +224,7 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
     } else if (type === 'done') {
       return
     } else if (type === 'item_delta') {
-      const text = String(parsed.delta?.text ?? '')
+      const text = String(parsed.delta?.text_append ?? parsed.delta?.text ?? '')
       for (const ev of yieldTokenChunks(text)) {
         receivedAssistantText = true
         yield ev

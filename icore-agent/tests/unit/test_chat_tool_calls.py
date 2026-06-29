@@ -19,8 +19,9 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.models import (
+    ChatSessionEvent,
     ChatSessionItem,
     ChatTurn,
 )
@@ -171,6 +172,46 @@ def test_repository_persists_turn_context_user_item_and_usage() -> None:
     assert stored_items[0].payload["content"] == "Older summary"
     assert stored_items[1].payload["content"][0]["text"] == "Hello"
     assert stored_items[1].payload["metadata"] == {"file_uuids": ["file-1"]}
+
+
+def test_repository_appends_turn_events_for_replay_without_replacing_items() -> None:
+    """Turn events should be append-only replay/debug records beside items."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repo = SqlAlchemyChatHistoryRepository(session)
+        chat_session = repo.create_session(
+            "session-public-id",
+            "user-public-id",
+            title="Events",
+        )
+        turn = Turn(session_id="session-public-id", id="turn-1")
+        persisted_turn = repo.create_turn(chat_session, turn)
+        event = TurnEvent(
+            kind=TurnEventKind.ITEM_DELTA,
+            session_id="session-public-id",
+            turn_id="turn-1",
+            item_id="assistant-1",
+            delta={"text_append": "Hi"},
+            event_id="event-1",
+            seq=3,
+            run_id="run-1",
+        )
+
+        repo.append_turn_event(chat_session, persisted_turn, event)
+        session.commit()
+
+        stored_event = session.execute(select(ChatSessionEvent)).scalar_one()
+        stored_items = session.execute(select(ChatSessionItem)).scalars().all()
+
+    assert stored_items == []
+    assert stored_event.public_id == "event-1"
+    assert stored_event.run_id == "run-1"
+    assert stored_event.sequence == 3
+    assert stored_event.event_type == "item_delta"
+    assert stored_event.item_public_id == "assistant-1"
+    assert stored_event.payload["delta"] == {"text_append": "Hi"}
 
 
 def test_repository_projects_completed_turn_items_to_chat_history() -> None:

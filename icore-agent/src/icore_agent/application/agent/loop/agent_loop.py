@@ -11,12 +11,18 @@ from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
     ToolCallItem,
+    ToolCallStatus,
+    ToolFunction,
 )
 from icore_agent.domain.agent.loop import (
     AgentLoopControl,
     ModelClient,
+    ModelStreamWarning,
     ModelStepResult,
     ModelTextDelta,
+    ModelToolCallCompleted,
+    ModelToolCallDelta,
+    ModelToolCallStarted,
     NoopAgentLoopControl,
     PromptContextManager,
     ToolRuntimePort,
@@ -97,7 +103,48 @@ class AgentLoop:
                                 session_id=request.session_id,
                                 turn_id=request.turn_id,
                                 item_id=started_assistant.id,
-                                delta={"text": stream_event.text},
+                                item_type="agent_message",
+                                delta={"text_append": stream_event.text},
+                            )
+                            continue
+                        if isinstance(stream_event, ModelToolCallStarted):
+                            tool_call = _streaming_tool_call(stream_event)
+                            request.turn.upsert_item(tool_call)
+                            yield TurnEvent.item_started(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item=tool_call,
+                            )
+                            continue
+                        if isinstance(stream_event, ModelToolCallDelta):
+                            yield TurnEvent.item_delta(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item_id=stream_event.item_id,
+                                item_type="tool_call",
+                                delta={
+                                    "arguments_append": stream_event.arguments_delta,
+                                    "name": stream_event.name,
+                                    "provider_tool_call_id": stream_event.provider_tool_call_id,
+                                    "index": stream_event.index,
+                                },
+                            )
+                            continue
+                        if isinstance(stream_event, ModelToolCallCompleted):
+                            request.turn.upsert_item(stream_event.tool_call)
+                            yield TurnEvent.item_completed(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item=stream_event.tool_call,
+                            )
+                            continue
+                        if isinstance(stream_event, ModelStreamWarning):
+                            yield TurnEvent.stream_warning(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                code=stream_event.code,
+                                message=stream_event.message,
+                                retryable=stream_event.retryable,
                             )
                             continue
                         step = stream_event
@@ -154,7 +201,8 @@ class AgentLoop:
                         session_id=request.session_id,
                         turn_id=request.turn_id,
                         item_id=assistant_item.id,
-                        delta={"text": delta},
+                        item_type="agent_message",
+                        delta={"text_append": delta},
                     )
                 yield TurnEvent.item_completed(
                     session_id=request.session_id,
@@ -250,8 +298,23 @@ def _completed_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
 def _running_tool_call(item: ToolCallItem) -> ToolCallItem:
     """Return a tool-call item ready to execute in the current turn."""
     return item.model_copy(update={
-        "status": item.status,
+        "status": ToolCallStatus.RUNNING,
         "created_at": item.created_at,
         "started_at": item.started_at or datetime.now(UTC),
         "completed_at": None,
     })
+
+
+def _streaming_tool_call(event: ModelToolCallStarted) -> ToolCallItem:
+    """Build a timeline item for a provider-streaming tool call."""
+    return ToolCallItem(
+        id=event.item_id,
+        status=ToolCallStatus.STREAMING,
+        provider_tool_call_id=event.provider_tool_call_id,
+        index=event.index,
+        function=ToolFunction(
+            name=event.name,
+            arguments_text="",
+        ),
+        started_at=datetime.now(UTC),
+    )

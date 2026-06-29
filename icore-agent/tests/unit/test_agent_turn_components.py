@@ -48,7 +48,7 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
         session_id="session-1",
         turn_id=lifecycle.turn.id,
         item_id="assistant-1",
-        delta={"text": "Hel"},
+        delta={"text_append": "Hel"},
     ))
     lifecycle.apply_agent_event(TurnEvent.item_completed(
         session_id="session-1",

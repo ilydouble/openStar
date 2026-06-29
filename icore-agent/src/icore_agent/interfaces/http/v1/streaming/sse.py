@@ -9,7 +9,13 @@ from contextlib import suppress
 
 from fastapi.responses import StreamingResponse
 
-from icore_agent.domain.agent.turn import TurnEvent, TurnEventKind
+from icore_agent.domain.agent.turn import (
+    Turn,
+    TurnError,
+    TurnEvent,
+    TurnEventKind,
+    TurnStatus,
+)
 
 SSE_HEARTBEAT_SEC = 15
 _TERMINAL_EVENTS = {
@@ -48,6 +54,7 @@ async def sse_frames(
             await queue.put(sentinel)
 
     producer = asyncio.create_task(_produce_events())
+    started_event: TurnEvent | None = None
     try:
         while True:
             try:
@@ -61,8 +68,33 @@ async def sse_frames(
             if item is sentinel:
                 break
             if isinstance(item, Exception):
-                raise item
+                if started_event is None:
+                    raise item
+                failed = TurnEvent.turn_failed(
+                    session_id=started_event.session_id,
+                    turn_id=started_event.turn_id,
+                    error=TurnError(
+                        message=str(item),
+                        code=type(item).__name__,
+                    ),
+                    turn=Turn(
+                        id=started_event.turn_id,
+                        session_id=started_event.session_id,
+                        status=TurnStatus.FAILED,
+                        error=TurnError(
+                            message=str(item),
+                            code=type(item).__name__,
+                        ),
+                    ),
+                ).with_envelope(
+                    seq=int(started_event.seq or 0) + 1,
+                    run_id=started_event.run_id,
+                )
+                yield encode_sse_event(failed)
+                break
             event = item
+            if event.kind is TurnEventKind.TURN_STARTED:
+                started_event = event
             yield encode_sse_event(event)
             if event.kind in _TERMINAL_EVENTS:
                 break

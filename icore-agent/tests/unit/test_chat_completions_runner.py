@@ -19,6 +19,12 @@ from icore_agent.domain.agent.session import (
     UserMessageItem,
 )
 from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
+from icore_agent.domain.agent.loop import (
+    ModelStepResult,
+    ModelToolCallCompleted,
+    ModelToolCallDelta,
+    ModelToolCallStarted,
+)
 from icore_agent.infrastructure.agent.chat_completions import (
     ChatCompletionsModelClient,
     render_chat_completions_messages,
@@ -146,6 +152,87 @@ async def test_chat_completions_model_client_collects_streaming_deltas(
         "completion_tokens": 1,
         "total_tokens": 3,
     }
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_model_client_streams_tool_call_deltas(
+    monkeypatch,
+) -> None:
+    """Streaming tool-call chunks should be exposed before the final result."""
+
+    async def fake_completion(**kwargs: Any) -> Any:
+        async def chunks() -> Any:
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "id": "provider-tool-1",
+                            "type": "function",
+                            "function": {
+                                "name": "number_comparator",
+                                "arguments": '{"left":',
+                            },
+                        }],
+                    },
+                    "finish_reason": None,
+                }],
+            }
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "function": {
+                                "arguments": '2,"right":1}',
+                            },
+                        }],
+                    },
+                    "finish_reason": "tool_calls",
+                }],
+            }
+
+        return chunks()
+
+    monkeypatch.setattr(
+        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
+        fake_completion,
+    )
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
+        client_args={},
+        params={},
+    )
+
+    events = [
+        event
+        async for event in client.stream(_envelope(_tool_definition()))
+    ]
+
+    assert isinstance(events[0], ModelToolCallStarted)
+    assert events[0].provider_tool_call_id == "provider-tool-1"
+    assert events[0].name == "number_comparator"
+    assert [
+        event.arguments_delta
+        for event in events
+        if isinstance(event, ModelToolCallDelta)
+    ] == ['{"left":', '2,"right":1}']
+    completed = next(
+        event
+        for event in events
+        if isinstance(event, ModelToolCallCompleted)
+    )
+    assert completed.tool_call.provider_tool_call_id == "provider-tool-1"
+    assert completed.tool_call.function.arguments_json == {
+        "left": 2,
+        "right": 1,
+    }
+    final = events[-1]
+    assert isinstance(final, ModelStepResult)
+    assert final.tool_calls[0].provider_tool_call_id == "provider-tool-1"
+    assert final.stop_reason == "tool_calls"
 
 
 def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> None:

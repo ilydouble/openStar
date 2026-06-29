@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from icore_agent.application.agent.loop.agent_loop import (
     AgentLoop,
@@ -48,7 +49,14 @@ class AgentTurnExecutor:
         control: AgentLoopControl | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run a prepared command through one agent turn lifecycle."""
-        yield lifecycle.started_event()
+        sequencer = _TurnEventSequencer(
+            run_id=control.run_id() if control is not None else None,
+        )
+        started_event = sequencer.apply(lifecycle.started_event())
+        self._persistence.persist_event(command, started_event)
+        yield started_event
+        user_event = sequencer.apply(user_event)
+        self._persistence.persist_event(command, user_event)
         yield user_event
 
         request = self._runner_factory.build_loop_request(
@@ -71,10 +79,13 @@ class AgentTurnExecutor:
                 turn_id=lifecycle.turn.id,
                 item=context_item,
             )
+            context_event = sequencer.apply(context_event)
             lifecycle.apply_agent_event(context_event)
             self._persistence.persist_event(command, context_event)
+            yield context_event
         try:
             async for event in self._agent_loop.run(request):
+                event = sequencer.apply(event)
                 lifecycle.apply_agent_event(event)
                 self._persistence.persist_event(command, event)
                 yield event
@@ -91,7 +102,9 @@ class AgentTurnExecutor:
                 duration_ms=final.duration_ms,
                 **usage_metadata,
             )
-            yield final.event
+            final_event = sequencer.apply(final.event)
+            self._persistence.persist_event(command, final_event)
+            yield final_event
             return
         except AgentLoopError as exc:
             error = TurnError(message=str(exc), code=type(exc).__name__)
@@ -107,7 +120,9 @@ class AgentTurnExecutor:
                 duration_ms=final.duration_ms,
                 **usage_metadata,
             )
-            yield final.event
+            final_event = sequencer.apply(final.event)
+            self._persistence.persist_event(command, final_event)
+            yield final_event
             return
 
         session_compressed = await self._transcript.append_memory_pair(
@@ -131,7 +146,9 @@ class AgentTurnExecutor:
             duration_ms=final.duration_ms,
             **usage_metadata,
         )
-        yield final.event
+        final_event = sequencer.apply(final.event)
+        self._persistence.persist_event(command, final_event)
+        yield final_event
 
 
 def _apply_turn_usage(
@@ -142,3 +159,19 @@ def _apply_turn_usage(
     lifecycle.turn.model = usage_metadata.get("model")
     lifecycle.turn.provider = usage_metadata.get("provider")
     lifecycle.turn.usage = usage_metadata.get("usage")
+
+
+@dataclass(slots=True)
+class _TurnEventSequencer:
+    """Assign turn-local stream envelope metadata in emission order."""
+
+    run_id: str | None
+    next_seq: int = 0
+
+    def apply(self, event: TurnEvent) -> TurnEvent:
+        """Return an event with monotonic sequence and runtime run id."""
+        self.next_seq += 1
+        return event.with_envelope(
+            seq=self.next_seq,
+            run_id=self.run_id,
+        )

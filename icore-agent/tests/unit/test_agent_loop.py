@@ -14,6 +14,9 @@ from icore_agent.application.agent.loop import (
     AgentLoopRequest,
 )
 from icore_agent.domain.agent.loop import (
+    ModelToolCallCompleted,
+    ModelToolCallDelta,
+    ModelToolCallStarted,
     ModelTextDelta,
     ModelStepResult,
 )
@@ -138,11 +141,58 @@ async def test_agent_loop_emits_model_streaming_deltas_before_completion() -> No
         TurnEventKind.ITEM_COMPLETED,
     ]
     assert [event.delta for event in events if event.delta] == [
-        {"text": "Hel"},
-        {"text": "lo"},
+        {"text_append": "Hel"},
+        {"text_append": "lo"},
     ]
     assert events[-1].item.text == "Hello"
     assert events[1].item_id == events[0].item.id
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_exposes_streaming_tool_call_deltas() -> None:
+    """AgentLoop should project provider tool-call chunks into item deltas."""
+    turn = Turn(session_id="session-1")
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=StreamingToolCallModelClient(),
+        tool_runtime=CompletingToolRuntime(),
+    )
+
+    events = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+    tool_events = [
+        event
+        for event in events
+        if event.item_id == "tool-item-1"
+        or (event.item is not None and event.item.id == "tool-item-1")
+    ]
+
+    assert [event.kind for event in tool_events] == [
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_COMPLETED,
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_COMPLETED,
+    ]
+    assert tool_events[0].item.status == ToolCallStatus.STREAMING
+    assert tool_events[1].delta == {
+        "arguments_append": '{"left":',
+        "name": "number_comparator",
+        "provider_tool_call_id": "provider-tool-1",
+        "index": 0,
+    }
+    assert tool_events[2].delta == {
+        "arguments_append": '2,"right":1}',
+        "name": "number_comparator",
+        "provider_tool_call_id": "provider-tool-1",
+        "index": 0,
+    }
+    assert tool_events[3].item.status == ToolCallStatus.READY
+    assert tool_events[4].item.status == ToolCallStatus.RUNNING
+    assert tool_events[-1].item.status == ToolCallStatus.COMPLETED
 
 
 @pytest.mark.asyncio
@@ -221,6 +271,81 @@ class StreamingModelClient:
         yield ModelTextDelta(text="lo")
         yield ModelStepResult(
             assistant_item=AgentMessageItem(text="Hello"),
+        )
+
+
+class StreamingToolCallModelClient:
+    """Model client fake that streams a tool call before returning a step."""
+
+    def __init__(self) -> None:
+        """Create the fake with one tool-call round."""
+        self._calls = 0
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Fail if AgentLoop falls back to non-streaming sampling."""
+        _ = envelope
+        raise AssertionError("AgentLoop should use stream() when available")
+
+    async def stream(self, envelope: PromptEnvelope):
+        """Yield tool-call stream events followed by a final model step."""
+        _ = envelope
+        self._calls += 1
+        if self._calls > 1:
+            yield ModelTextDelta(text="Done")
+            yield ModelStepResult(
+                assistant_item=AgentMessageItem(text="Done"),
+                stop_reason="stop",
+            )
+            return
+        yield ModelToolCallStarted(
+            item_id="tool-item-1",
+            provider_tool_call_id="provider-tool-1",
+            index=0,
+            name="number_comparator",
+        )
+        yield ModelToolCallDelta(
+            item_id="tool-item-1",
+            provider_tool_call_id="provider-tool-1",
+            index=0,
+            name="number_comparator",
+            arguments_delta='{"left":',
+        )
+        yield ModelToolCallDelta(
+            item_id="tool-item-1",
+            provider_tool_call_id="provider-tool-1",
+            index=0,
+            name="number_comparator",
+            arguments_delta='2,"right":1}',
+        )
+        yield ModelToolCallCompleted(
+            tool_call=ToolCallItem(
+                id="tool-item-1",
+                provider_tool_call_id="provider-tool-1",
+                index=0,
+                status=ToolCallStatus.READY,
+                function=ToolFunction(
+                    name="number_comparator",
+                    arguments_text='{"left":2,"right":1}',
+                    arguments_json={"left": 2, "right": 1},
+                ),
+            ),
+        )
+        yield ModelStepResult(
+            assistant_item=AgentMessageItem(text=""),
+            tool_calls=[
+                ToolCallItem(
+                    id="tool-item-1",
+                    provider_tool_call_id="provider-tool-1",
+                    index=0,
+                    status=ToolCallStatus.READY,
+                    function=ToolFunction(
+                        name="number_comparator",
+                        arguments_text='{"left":2,"right":1}',
+                        arguments_json={"left": 2, "right": 1},
+                    ),
+                ),
+            ],
+            stop_reason="tool_calls",
         )
 
 

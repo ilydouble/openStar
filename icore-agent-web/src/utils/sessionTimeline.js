@@ -202,16 +202,55 @@ function appendTimelineItemDelta(turn, event) {
   const itemId = String(event.item_id || '').trim()
   if (!itemId) return
   let item = turn.items.find((existing) => existing.itemId === itemId)
+  const eventItemType = String(event.item_type || '').trim()
   if (!item) {
-    item = {
-      itemId,
-      type: 'agent_message',
-      status: 'in_progress',
-      payload: { id: itemId, type: 'agent_message', status: 'in_progress', text: '' },
+    if (eventItemType === 'tool_call') {
+      item = {
+        itemId,
+        type: 'tool_call',
+        status: 'streaming',
+        payload: {
+          id: itemId,
+          type: 'tool_call',
+          status: 'streaming',
+          provider_tool_call_id: event.delta?.provider_tool_call_id || null,
+          index: event.delta?.index ?? null,
+          function: {
+            name: event.delta?.name || null,
+            arguments_text: '',
+            arguments_json: null,
+          },
+        },
+      }
+    } else {
+      item = {
+        itemId,
+        type: 'agent_message',
+        status: 'in_progress',
+        payload: { id: itemId, type: 'agent_message', status: 'in_progress', text: '' },
+      }
     }
     turn.items.push(item)
   }
-  const text = String(event.delta?.text || '')
+  if (item.type === 'tool_call' || eventItemType === 'tool_call') {
+    const append = String(event.delta?.arguments_append || '')
+    const fn = item.payload?.function && typeof item.payload.function === 'object'
+      ? item.payload.function
+      : {}
+    item.payload = {
+      ...item.payload,
+      provider_tool_call_id:
+        event.delta?.provider_tool_call_id ?? item.payload?.provider_tool_call_id ?? null,
+      index: event.delta?.index ?? item.payload?.index ?? null,
+      function: {
+        ...fn,
+        name: event.delta?.name ?? fn.name ?? null,
+        arguments_text: String(fn.arguments_text || '') + append,
+      },
+    }
+    return
+  }
+  const text = String(event.delta?.text_append ?? event.delta?.text ?? '')
   if (text) {
     item.payload = {
       ...item.payload,

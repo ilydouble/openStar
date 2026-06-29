@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
 from icore_agent.domain.agent.prompt import PromptEnvelope
@@ -31,11 +32,28 @@ class ModelStepResult:
     raw_payload: Any | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ModelTextDelta:
+    """One streamed assistant text delta from the model provider."""
+
+    text: str
+
+
+ModelStreamEvent = ModelTextDelta | ModelStepResult
+
+
 class ModelClient(Protocol):
     """Application-facing model client that samples one PromptEnvelope."""
 
     async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
         """Return one model step without executing any requested tools."""
+        ...
+
+    async def stream(
+        self,
+        envelope: PromptEnvelope,
+    ) -> AsyncIterator[ModelStreamEvent]:
+        """Yield model text deltas and one final sampling result."""
         ...
 
 

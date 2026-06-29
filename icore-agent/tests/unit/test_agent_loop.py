@@ -12,6 +12,7 @@ from icore_agent.application.agent.loop import (
     AgentLoopAborted,
     AgentLoopError,
     AgentLoopRequest,
+    ModelTextDelta,
     ModelStepResult,
 )
 from icore_agent.domain.agent.prompt import PromptEnvelope
@@ -114,6 +115,35 @@ async def test_agent_loop_drains_steering_before_next_model_sample() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_loop_emits_model_streaming_deltas_before_completion() -> None:
+    """AgentLoop should expose streaming model text as item_delta events."""
+    turn = Turn(session_id="session-1")
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=StreamingModelClient(),
+        tool_runtime=CompletingToolRuntime(),
+    )
+
+    events = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+
+    assert [event.kind for event in events] == [
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_COMPLETED,
+    ]
+    assert [event.delta for event in events if event.delta] == [
+        {"text": "Hel"},
+        {"text": "lo"},
+    ]
+    assert events[-1].item.text == "Hello"
+    assert events[1].item_id == events[0].item.id
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_fails_when_tool_round_limit_is_exceeded() -> None:
     """AgentLoop should fail fast when the model keeps requesting tools."""
     turn = Turn(session_id="session-1")
@@ -172,6 +202,24 @@ class ScriptedModelClient:
             ],
         )
         return self._steps.pop(0)
+
+
+class StreamingModelClient:
+    """Model client fake that streams text before returning the final step."""
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Fail if AgentLoop falls back to non-streaming sampling."""
+        _ = envelope
+        raise AssertionError("AgentLoop should use stream() when available")
+
+    async def stream(self, envelope: PromptEnvelope):
+        """Yield text deltas followed by the final model step."""
+        _ = envelope
+        yield ModelTextDelta(text="Hel")
+        yield ModelTextDelta(text="lo")
+        yield ModelStepResult(
+            assistant_item=AgentMessageItem(text="Hello"),
+        )
 
 
 @dataclass

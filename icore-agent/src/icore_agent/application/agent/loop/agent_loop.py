@@ -18,6 +18,8 @@ from icore_agent.shared.logging.app_logger import get_logger
 from .types import (
     AgentLoopControl,
     ModelClient,
+    ModelStepResult,
+    ModelTextDelta,
     NoopAgentLoopControl,
     PromptContextManager,
     ToolRuntimePort,
@@ -73,32 +75,93 @@ class AgentLoop:
                 tools=request.tool_runtime.visible_tools(),
             )
             try:
-                step = await request.model_client.sample(envelope)
+                stream = getattr(request.model_client, "stream", None)
+                if callable(stream):
+                    step = None
+                    started_assistant = AgentMessageItem(
+                        text="",
+                        status=SessionItemStatus.IN_PROGRESS,
+                    )
+                    request.turn.upsert_item(started_assistant)
+                    yield TurnEvent.item_started(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=started_assistant,
+                    )
+                    streamed_text = ""
+                    async for stream_event in stream(envelope):
+                        if isinstance(stream_event, ModelTextDelta):
+                            if not stream_event.text:
+                                continue
+                            streamed_text += stream_event.text
+                            yield TurnEvent.item_delta(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item_id=started_assistant.id,
+                                delta={"text": stream_event.text},
+                            )
+                            continue
+                        step = stream_event
+                    if step is None:
+                        step = ModelStepResult(
+                            assistant_item=AgentMessageItem(
+                                text=streamed_text,
+                            ),
+                        )
+                    assistant_item = _completed_assistant_item(
+                        step.assistant_item.model_copy(update={
+                            "id": started_assistant.id,
+                            "text": step.assistant_item.text
+                            or streamed_text,
+                        }),
+                    )
+                    step = ModelStepResult(
+                        assistant_item=assistant_item,
+                        tool_calls=step.tool_calls,
+                        deltas=[],
+                        usage=step.usage,
+                        model=step.model,
+                        provider=step.provider,
+                        stop_reason=step.stop_reason,
+                        raw_response_id=step.raw_response_id,
+                        raw_payload=step.raw_payload,
+                    )
+                    request.turn.upsert_item(assistant_item)
+                    yield TurnEvent.item_completed(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=assistant_item,
+                    )
+                else:
+                    step = await request.model_client.sample(envelope)
             except Exception as exc:
                 log.error("agent_model_step_failed", error=str(exc))
                 raise AgentLoopError(str(exc)) from exc
 
-            started_assistant = _started_assistant_item(step.assistant_item)
-            assistant_item = _completed_assistant_item(step.assistant_item)
-            request.turn.upsert_item(started_assistant)
-            yield TurnEvent.item_started(
-                session_id=request.session_id,
-                turn_id=request.turn_id,
-                item=started_assistant,
-            )
-            request.turn.upsert_item(assistant_item)
-            for delta in step.deltas:
-                yield TurnEvent.item_delta(
+            if not callable(stream):
+                started_assistant = _started_assistant_item(
+                    step.assistant_item)
+                assistant_item = _completed_assistant_item(
+                    step.assistant_item)
+                request.turn.upsert_item(started_assistant)
+                yield TurnEvent.item_started(
                     session_id=request.session_id,
                     turn_id=request.turn_id,
-                    item_id=assistant_item.id,
-                    delta={"text": delta},
+                    item=started_assistant,
                 )
-            yield TurnEvent.item_completed(
-                session_id=request.session_id,
-                turn_id=request.turn_id,
-                item=assistant_item,
-            )
+                request.turn.upsert_item(assistant_item)
+                for delta in step.deltas:
+                    yield TurnEvent.item_delta(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item_id=assistant_item.id,
+                        delta={"text": delta},
+                    )
+                yield TurnEvent.item_completed(
+                    session_id=request.session_id,
+                    turn_id=request.turn_id,
+                    item=assistant_item,
+                )
 
             if step.stop_reason in {"error", "aborted"}:
                 if step.stop_reason == "aborted":

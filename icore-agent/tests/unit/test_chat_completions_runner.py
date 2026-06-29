@@ -92,6 +92,62 @@ async def test_chat_completions_model_client_samples_once_without_running_tools(
     }
 
 
+@pytest.mark.asyncio
+async def test_chat_completions_model_client_collects_streaming_deltas(
+    monkeypatch,
+) -> None:
+    """Model client should request LiteLLM streaming and expose text deltas."""
+    calls: list[dict[str, Any]] = []
+
+    async def fake_completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+
+        async def chunks() -> Any:
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"content": "Hel"},
+                    "finish_reason": None,
+                }],
+            }
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"content": "lo"},
+                    "finish_reason": "stop",
+                }],
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "total_tokens": 3,
+                },
+            }
+
+        return chunks()
+
+    monkeypatch.setattr(
+        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
+        fake_completion,
+    )
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
+        client_args={},
+        params={},
+    )
+
+    result = await client.sample(_envelope(_tool_definition()))
+
+    assert calls[0]["stream"] is True
+    assert result.deltas == ["Hel", "lo"]
+    assert result.assistant_item.text == "Hello"
+    assert result.stop_reason == "stop"
+    assert result.usage == {
+        "prompt_tokens": 2,
+        "completion_tokens": 1,
+        "total_tokens": 3,
+    }
+
+
 def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> None:
     """Renderer should convert current-turn tool state only at the provider boundary."""
     tool_definition = _tool_definition()

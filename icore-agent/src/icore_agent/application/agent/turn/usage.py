@@ -7,6 +7,7 @@ from typing import Any
 from icore_agent.application.agent.loop import (
     ModelClient,
     ModelStepResult,
+    ModelTextDelta,
 )
 from icore_agent.application.usage.recording import (
     begin_turn_usage_capture,
@@ -101,6 +102,32 @@ class TurnUsageRecorder:
                 try:
                     result = await model_client.sample(envelope)
                     return result
+                finally:
+                    recorder._record_sample_usage(
+                        command,
+                        envelope=envelope,
+                        result=result,
+                    )
+                    end_turn_usage_capture(capture_token)
+                    clear_runtime_user(runtime_token)
+
+            async def stream(self, envelope: PromptEnvelope):
+                """Stream the wrapped model and record usage from the final step."""
+                capture_token = begin_turn_usage_capture()
+                runtime_token = set_runtime_user(command.user)
+                result: ModelStepResult | None = None
+                try:
+                    stream = getattr(model_client, "stream", None)
+                    if not callable(stream):
+                        result = await model_client.sample(envelope)
+                        for delta in result.deltas:
+                            yield ModelTextDelta(text=delta)
+                        yield result
+                        return
+                    async for event in stream(envelope):
+                        if isinstance(event, ModelStepResult):
+                            result = event
+                        yield event
                 finally:
                     recorder._record_sample_usage(
                         command,

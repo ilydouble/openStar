@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,
+  isVisibleTimelineItem,
   timelineToChatRows,
   upsertTimelineItem,
 } from './sessionTimeline.js'
@@ -144,4 +145,22 @@ test('timelineToChatRows renders user attachments and hides context items by def
   assert.equal(rows[0].images.length, 1)
   assert.equal(rows[0].dataAttachments.length, 1)
   assert.equal(rows[0].caption, 'Analyze these')
+})
+
+test('isVisibleTimelineItem hides empty assistant text placeholders', () => {
+  assert.equal(isVisibleTimelineItem({
+    type: 'agent_message',
+    status: 'in_progress',
+    payload: { text: '' },
+  }), false)
+  assert.equal(isVisibleTimelineItem({
+    type: 'agent_message',
+    status: 'completed',
+    payload: { text: '  ' },
+  }), false)
+  assert.equal(isVisibleTimelineItem({
+    type: 'agent_message',
+    status: 'in_progress',
+    payload: { text: 'Hel' },
+  }), true)
 })

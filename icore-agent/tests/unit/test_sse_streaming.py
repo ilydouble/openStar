@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 import pytest
 
 from icore_agent.domain.agent.session import AgentMessageItem
@@ -84,6 +86,31 @@ async def test_sse_frames_stops_on_aborted_turn() -> None:
 
     assert frames == [
         'data: {"type": "turn_aborted", "session_id": "session-1", "turn_id": "turn-1", "reply": "partial"}\n\n',
+        "data: [DONE]\n\n",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sse_frames_consumes_event_source_in_one_context() -> None:
+    """SSE iteration should not reset ContextVar tokens across tasks."""
+    usage_events = ContextVar("turn_usage_events", default=None)
+
+    async def _context_events():
+        token = usage_events.set([])
+        try:
+            yield TurnEvent.item_delta(
+                session_id="session-1",
+                turn_id="turn-1",
+                item_id="item-1",
+                delta={"text": "ok"},
+            )
+        finally:
+            usage_events.reset(token)
+
+    frames = [frame async for frame in sse_frames(_context_events())]
+
+    assert frames == [
+        'data: {"type": "item_delta", "session_id": "session-1", "turn_id": "turn-1", "item_id": "item-1", "delta": {"text": "ok"}}\n\n',
         "data: [DONE]\n\n",
     ]
 

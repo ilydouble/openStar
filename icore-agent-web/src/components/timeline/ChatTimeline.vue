@@ -33,6 +33,7 @@
 <script setup>
 import { computed } from 'vue'
 import TurnGroup from './TurnGroup.vue'
+import { isVisibleTimelineItem } from '../../utils/sessionTimeline.js'
 
 const props = defineProps({
   timeline: { type: Object, required: true },
@@ -47,7 +48,9 @@ defineEmits(['open-document'])
 
 const visibleTurns = computed(() =>
   (props.timeline?.turns || []).filter((turn) =>
-    (turn.items || []).some((item) => props.showContext || item.type !== 'context'),
+    (turn.items || []).some((item) =>
+      isVisibleTimelineItem(item, { showContext: props.showContext }),
+    ),
   ),
 )
 const resolvedAttachments = computed(() =>

@@ -49,6 +49,16 @@ export function hydrateSessionTimeline(state = {}) {
   }
 }
 
+/** Return whether a timeline item should be rendered in the normal chat view. */
+export function isVisibleTimelineItem(item, options = {}) {
+  if (!item || typeof item !== 'object') return false
+  if (item.type === 'context') return Boolean(options.showContext)
+  if (item.type === 'agent_message') {
+    return Boolean(String(item.payload?.text || '').trim())
+  }
+  return true
+}
+
 /** Insert or replace one item in a turn by stable item id. */
 export function upsertTimelineItem(turn, itemInput) {
   if (!turn || !Array.isArray(turn.items)) return null

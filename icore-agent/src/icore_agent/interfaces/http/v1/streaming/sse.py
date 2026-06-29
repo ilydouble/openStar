@@ -5,12 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import suppress
 
 from fastapi.responses import StreamingResponse
 
 from icore_agent.domain.agent.turn import TurnEvent, TurnEventKind
 
 SSE_HEARTBEAT_SEC = 15
+_TERMINAL_EVENTS = {
+    TurnEventKind.TURN_COMPLETED,
+    TurnEventKind.TURN_FAILED,
+    TurnEventKind.TURN_ABORTED,
+}
 
 
 def encode_sse_event(event: TurnEvent) -> str:
@@ -25,31 +31,46 @@ async def sse_frames(
     heartbeat_sec: int = SSE_HEARTBEAT_SEC,
 ) -> AsyncIterator[str]:
     """Convert application events into SSE frames with transport heartbeats."""
-    iterator = events.__aiter__()
-    pending: asyncio.Task[TurnEvent] | None = asyncio.create_task(
-        iterator.__anext__()
-    )
+    sentinel = object()
+    queue: asyncio.Queue[TurnEvent | Exception | object] = asyncio.Queue(
+        maxsize=1)
+
+    async def _produce_events() -> None:
+        """Consume the application stream in one task to preserve ContextVars."""
+        try:
+            async for event in events:
+                await queue.put(event)
+                if event.kind in _TERMINAL_EVENTS:
+                    break
+        except Exception as exc:
+            await queue.put(exc)
+        finally:
+            await queue.put(sentinel)
+
+    producer = asyncio.create_task(_produce_events())
     try:
-        while pending is not None:
-            done, _ = await asyncio.wait({pending}, timeout=heartbeat_sec)
-            if not done:
+        while True:
+            try:
+                item = await asyncio.wait_for(
+                    queue.get(),
+                    timeout=heartbeat_sec,
+                )
+            except asyncio.TimeoutError:
                 yield ": keep-alive\n\n"
                 continue
-            try:
-                event = pending.result()
-            except StopAsyncIteration:
+            if item is sentinel:
                 break
+            if isinstance(item, Exception):
+                raise item
+            event = item
             yield encode_sse_event(event)
-            if event.kind in {
-                TurnEventKind.TURN_COMPLETED,
-                TurnEventKind.TURN_FAILED,
-                TurnEventKind.TURN_ABORTED,
-            }:
+            if event.kind in _TERMINAL_EVENTS:
                 break
-            pending = asyncio.create_task(iterator.__anext__())
     finally:
-        if pending is not None and not pending.done():
-            pending.cancel()
+        if not producer.done():
+            producer.cancel()
+        with suppress(asyncio.CancelledError):
+            await producer
     yield "data: [DONE]\n\n"
 
 

@@ -28,6 +28,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineItem from './TimelineItem.vue'
+import { isVisibleTimelineItem } from '../../utils/sessionTimeline.js'
 
 const props = defineProps({
   turn: { type: Object, required: true },
@@ -41,7 +42,9 @@ defineEmits(['open-document'])
 
 const { t } = useI18n()
 const visibleItems = computed(() =>
-  (props.turn.items || []).filter((item) => props.showContext || item.type !== 'context'),
+  (props.turn.items || []).filter((item) =>
+    isVisibleTimelineItem(item, { showContext: props.showContext }),
+  ),
 )
 const errorText = computed(() =>
   String(props.turn.error?.message || props.turn.error?.code || t('chat.requestFailed', { msg: 'Agent turn failed' })),

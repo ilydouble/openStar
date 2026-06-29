@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 from icore_agent.application.agent.context import (
     ConversationMemory,
@@ -17,14 +18,15 @@ from icore_agent.application.agent.loop.types import (
 from icore_agent.application.agent.turn import (
     AgentTurnExecutor,
     AgentTurnRunnerFactory,
+    TurnLifecycle,
     TurnPersistence,
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
+from icore_agent.domain.agent.session import UserMessageItem
 from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -77,18 +79,19 @@ class AgentTurnService:
                 user_memory_service=user_memory_service,
             ),
             usage=self._usage,
-            tool_projection_factory=lambda: TurnToolProjection(agent_session),
         )
 
     async def run(self, command: AgentTurnCommand) -> Turn:
         """Execute one non-streaming agent turn."""
         self._usage.check_task_quota(command)
-        await self._prepare_turn(command)
+        lifecycle, user_event = await self._prepare_turn(command)
         context = await self._load_context(command)
         self._usage.record_attachment_quota(command, context)
         async for event in self._executor.run(
             command=command,
             context=context,
+            lifecycle=lifecycle,
+            user_event=user_event,
         ):
             if event.kind is TurnEventKind.TURN_COMPLETED:
                 if event.turn is None:
@@ -106,41 +109,49 @@ class AgentTurnService:
     ) -> AsyncIterator[TurnEvent]:
         """Prepare one streaming agent turn and return its event stream."""
         self._usage.check_task_quota(command)
-        await self._prepare_turn(command)
+        lifecycle, user_event = await self._prepare_turn(command)
         context = await self._load_context(command)
         self._usage.record_attachment_quota(command, context)
         return self._executor.run(
             command=command,
             context=context,
+            lifecycle=lifecycle,
+            user_event=user_event,
         )
 
     async def _prepare_turn(
         self,
         command: AgentTurnCommand,
-    ) -> None:
-        """Persist the user-visible request and record turn request metadata."""
+    ) -> tuple[TurnLifecycle, TurnEvent]:
+        """Create the turn boundary and persist its initial user item."""
         file_uuids = dedupe_file_uuids(command.file_uuids)
+        usage_metadata = self._usage.turn_usage()
+        lifecycle = TurnLifecycle.start(
+            session_id=command.session_id,
+            model=usage_metadata["model"],
+            provider=usage_metadata["provider"],
+        )
+        metadata = _build_user_item_metadata(
+            file_uuids=file_uuids,
+            display_caption=command.display_caption,
+            template_id=command.template_id,
+        )
+        user_event = lifecycle.user_message_event(
+            command.message,
+            metadata=metadata,
+        )
         if not command.incognito:
             self._agent_session.ensure_owned_session(
                 command.session_id,
                 command.user_id,
                 title=command.message.strip()[:255],
             )
-            metadata = None
-            if file_uuids:
-                metadata = {"file_uuids": list(file_uuids)}
-                caption = (command.display_caption or "").strip()
-                if caption:
-                    metadata["display_caption"] = caption
-            template_id = (command.template_id or "").strip()
-            if template_id:
-                metadata = metadata or {}
-                metadata["template_id"] = template_id
-            self._agent_session.save_user_message(
+            self._agent_session.start_turn(
                 command.session_id,
                 command.user_id,
-                command.message,
-                metadata=metadata,
+                turn=lifecycle.turn,
+                user_item=_require_user_item(user_event),
+                title=command.message.strip()[:255],
             )
         intent = classify_turn_intent(command.agent_message or command.message)
         log.info(
@@ -150,6 +161,7 @@ class AgentTurnService:
             incognito=command.incognito,
             intent=intent.value,
         )
+        return lifecycle, user_event
 
     async def _load_context(self, command: AgentTurnCommand):
         """Load prompt context for one prepared command."""
@@ -164,3 +176,29 @@ class AgentTurnService:
             conversation_memory=self._conversation_memory,
             user_memory_service=self._user_memory_service,
         )
+
+
+def _build_user_item_metadata(
+    *,
+    file_uuids: tuple[str, ...],
+    display_caption: str | None,
+    template_id: str | None,
+) -> dict[str, Any]:
+    """Build persisted metadata for the current turn's UserMessageItem."""
+    metadata: dict[str, Any] = {}
+    if file_uuids:
+        metadata["file_uuids"] = list(file_uuids)
+        caption = (display_caption or "").strip()
+        if caption:
+            metadata["display_caption"] = caption
+    template = (template_id or "").strip()
+    if template:
+        metadata["template_id"] = template
+    return metadata
+
+
+def _require_user_item(event: TurnEvent) -> UserMessageItem:
+    """Return the user item from a prepared user-message event."""
+    if isinstance(event.item, UserMessageItem):
+        return event.item
+    raise RuntimeError("prepared turn did not create a user message item")

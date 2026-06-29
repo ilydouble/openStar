@@ -595,7 +595,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert not (agent_tool_dir / "callback_context.py").exists()
     assert not (agent_tool_dir / "event_bridge.py").exists()
     assert not (agent_tool_dir / "payloads.py").exists()
-    assert (agent_tool_dir / "projection.py").is_file()
+    assert not (agent_tool_dir / "projection.py").exists()
     assert (strands_dir / "__init__.py").is_file()
     assert (strands_dir / "agent_factory.py").is_file()
     assert (strands_dir / "model_factory.py").is_file()
@@ -647,23 +647,26 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert 'TOOL = "tool"' in roles
 
 
-def test_llm_tool_calls_migration_aligns_with_chat_history_ids():
-    """Keep tool-call persistence aligned with existing sessions/messages identifiers."""
+def test_agent_session_migrations_use_turns_and_session_items_as_canonical_truth():
+    """Keep agent session persistence centered on turns/session_items only."""
+    chat_migration = (
+        AGENT_ROOT / "alembic" / "versions" / "0004_create_chat_sessions.py"
+    ).read_text(encoding="utf-8")
     migration = (
         AGENT_ROOT / "alembic" / "versions" / "0007_create_llm_tool_calls.py"
     ).read_text(encoding="utf-8")
+    turn_migration = (
+        AGENT_ROOT / "alembic" / "versions" / "0011_create_turns_and_session_items.py"
+    ).read_text(encoding="utf-8")
 
-    assert "llm_tool_calls" in migration
-    assert '"id", sa.BigInteger()' in migration
-    assert '"session_id", sa.BigInteger()' in migration
-    assert '"assistant_message_id", sa.BigInteger()' in migration
-    assert '"tool_message_id", sa.BigInteger()' in migration
-    assert "fk_llm_tool_calls_session_id_sessions" in migration
-    assert "fk_llm_tool_calls_assistant_message_id_messages" in migration
-    assert "fk_llm_tool_calls_tool_message_id_messages" in migration
-    assert "session_public_id" not in migration
-    assert "conversation_id" not in migration
-    assert "UUID" not in migration
+    assert '"sessions"' in chat_migration
+    assert '"messages"' not in chat_migration
+    assert "llm_tool_calls" not in migration
+    assert '"turns"' in turn_migration
+    assert '"session_items"' in turn_migration
+    assert '"model"' in turn_migration
+    assert '"provider"' in turn_migration
+    assert '"usage"' in turn_migration
 
 
 def test_number_comparator_is_registered_with_orchestrator_tools():
@@ -806,9 +809,11 @@ def test_agent_session_schema_uses_explicit_payload_models():
         / "session.py"
     ).read_text(encoding="utf-8")
 
-    assert "class SessionMessageItem" in schema
+    assert "class SessionTurnItem" in schema
+    assert "class SessionTimelineItem" in schema
     assert "class SessionAttachmentItem" in schema
-    assert "messages: list[SessionMessageItem]" in schema
+    assert "turns: list[SessionTurnItem]" in schema
+    assert "messages:" not in schema
     assert "attachments: list[SessionAttachmentItem]" in schema
     assert "list[dict]" not in schema
 

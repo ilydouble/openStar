@@ -1,28 +1,24 @@
-"""SQLAlchemy repository for persisted chat sessions and messages."""
+"""SQLAlchemy repository for canonical agent sessions, turns, and items."""
 
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.session import SessionItem
 from icore_agent.domain.agent.turn import Turn, TurnError, TurnStatus
 
-from .models import (
-    ChatMessage,
-    ChatSession,
-    ChatSessionItem,
-    ChatTurn,
-    LlmToolCall,
-)
+from .models import ChatSession, ChatSessionItem, ChatTurn
 
 _HEADLINE_OPTS = "MaxFragments=1, MaxWords=20, MinWords=6, StartSel=<mark>, StopSel=</mark>"
 _SEARCH_LANG = "english"
 _TITLE_RANK_BOOST = 2.0
+_SEARCHABLE_ITEM_TYPES = ("user_message", "agent_message")
 
 _SESSION_SEARCH_QUERY_CTE = f"""
     WITH query AS (
@@ -32,17 +28,20 @@ _SESSION_SEARCH_QUERY_CTE = f"""
     )
 """
 
+_SESSION_ITEM_TEXT_SQL = "si.payload::text"
+
 _SESSION_SEARCH_MATCH_SQL = f"""
     (
         to_tsvector('{_SEARCH_LANG}', s.title) @@ q.tsq
         OR s.title ILIKE '%' || q.raw_text || '%'
         OR EXISTS (
             SELECT 1
-            FROM messages m
-            WHERE m.session_id = s.id
+            FROM session_items si
+            WHERE si.session_id = s.id
+              AND si.item_type IN ('user_message', 'agent_message')
               AND (
-                  to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
-                  OR m.content ILIKE '%' || q.raw_text || '%'
+                  to_tsvector('{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}) @@ q.tsq
+                  OR {_SESSION_ITEM_TEXT_SQL} ILIKE '%' || q.raw_text || '%'
               )
         )
     )
@@ -59,22 +58,23 @@ _SESSION_SEARCH_TITLE_SCORE_SQL = f"""
     )
 """
 
-_SESSION_SEARCH_MESSAGE_SCORE_SQL = f"""
+_SESSION_SEARCH_ITEM_SCORE_SQL = f"""
     COALESCE(
         (
             SELECT MAX(
-                COALESCE(ts_rank(to_tsvector('{_SEARCH_LANG}', m.content), q.tsq), 0)
-                + COALESCE(similarity(m.content, q.raw_text), 0)
+                COALESCE(ts_rank(to_tsvector('{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}), q.tsq), 0)
+                + COALESCE(similarity({_SESSION_ITEM_TEXT_SQL}, q.raw_text), 0)
                 + CASE
-                    WHEN m.content ILIKE '%' || q.raw_text || '%' THEN 0.05
+                    WHEN {_SESSION_ITEM_TEXT_SQL} ILIKE '%' || q.raw_text || '%' THEN 0.05
                     ELSE 0
                   END
             )
-            FROM messages m
-            WHERE m.session_id = s.id
+            FROM session_items si
+            WHERE si.session_id = s.id
+              AND si.item_type IN ('user_message', 'agent_message')
               AND (
-                  to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
-                  OR m.content ILIKE '%' || q.raw_text || '%'
+                  to_tsvector('{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}) @@ q.tsq
+                  OR {_SESSION_ITEM_TEXT_SQL} ILIKE '%' || q.raw_text || '%'
               )
         ),
         0
@@ -85,20 +85,22 @@ _SESSION_SEARCH_SNIPPET_SQL = f"""
     COALESCE(
         (
             SELECT ts_headline(
-                '{_SEARCH_LANG}', m.content, q.tsq, :headline_opts
+                '{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}, q.tsq, :headline_opts
             )
-            FROM messages m
-            WHERE m.session_id = s.id
-              AND to_tsvector('{_SEARCH_LANG}', m.content) @@ q.tsq
-            ORDER BY ts_rank(to_tsvector('{_SEARCH_LANG}', m.content), q.tsq) DESC
+            FROM session_items si
+            WHERE si.session_id = s.id
+              AND si.item_type IN ('user_message', 'agent_message')
+              AND to_tsvector('{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}) @@ q.tsq
+            ORDER BY ts_rank(to_tsvector('{_SEARCH_LANG}', {_SESSION_ITEM_TEXT_SQL}), q.tsq) DESC
             LIMIT 1
         ),
         (
-            SELECT left(m.content, 200)
-            FROM messages m
-            WHERE m.session_id = s.id
-              AND m.content ILIKE '%' || q.raw_text || '%'
-            ORDER BY similarity(m.content, q.raw_text) DESC
+            SELECT left({_SESSION_ITEM_TEXT_SQL}, 200)
+            FROM session_items si
+            WHERE si.session_id = s.id
+              AND si.item_type IN ('user_message', 'agent_message')
+              AND {_SESSION_ITEM_TEXT_SQL} ILIKE '%' || q.raw_text || '%'
+            ORDER BY similarity({_SESSION_ITEM_TEXT_SQL}, q.raw_text) DESC
             LIMIT 1
         ),
         ts_headline('{_SEARCH_LANG}', s.title, q.tsq, :headline_opts),
@@ -109,13 +111,13 @@ _SESSION_SEARCH_SNIPPET_SQL = f"""
 _SESSION_SEARCH_RANK_SQL = f"""
     GREATEST(
         ({_SESSION_SEARCH_TITLE_SCORE_SQL}) * {_TITLE_RANK_BOOST},
-        ({_SESSION_SEARCH_MESSAGE_SCORE_SQL})
+        ({_SESSION_SEARCH_ITEM_SCORE_SQL})
     )
 """
 
 
 class SqlAlchemyChatHistoryRepository:
-    """Persist and load chat sessions through a SQLAlchemy session."""
+    """Persist and load canonical agent session timeline state."""
 
     def __init__(self, session: Session) -> None:
         """Bind the repository to one transactional SQLAlchemy session."""
@@ -159,54 +161,11 @@ class SqlAlchemyChatHistoryRepository:
         self._session.flush()
 
     def soft_delete_session(self, row: ChatSession) -> None:
-        """Mark one session as deleted without removing message history."""
+        """Mark one session as deleted without removing timeline history."""
         now = int(time.time())
         row.deleted_at = now
         row.updated_at = now
         self._session.flush()
-
-    def append_message(
-        self,
-        row: ChatSession,
-        *,
-        role: str,
-        content: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> ChatMessage:
-        """Append one message to a session with the next sequence number."""
-        next_sequence = self._next_sequence(row.id)
-        now = int(time.time())
-        message = ChatMessage(
-            session_id=row.id,
-            role=role,
-            content=content,
-            sequence=next_sequence,
-            created_at=now,
-            message_metadata=dict(metadata or {}),
-        )
-        self._session.add(message)
-        row.updated_at = now
-        self._session.flush()
-        return message
-
-    def get_message(self, row: ChatSession, message_id: int) -> ChatMessage | None:
-        """Load one message row that belongs to a chat session."""
-        result = self._session.execute(
-            select(ChatMessage).where(
-                ChatMessage.id == message_id,
-                ChatMessage.session_id == row.id,
-            )
-        )
-        return result.scalar_one_or_none()
-
-    def list_messages(self, row: ChatSession) -> list[ChatMessage]:
-        """Return all messages for one session ordered by sequence."""
-        result = self._session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == row.id)
-            .order_by(ChatMessage.sequence.asc())
-        )
-        return list(result.scalars().all())
 
     def create_turn(self, row: ChatSession, turn: Turn) -> ChatTurn:
         """Persist one new execution turn for a session."""
@@ -225,8 +184,12 @@ class SqlAlchemyChatHistoryRepository:
             started_at=turn.started_at,
             completed_at=turn.completed_at,
             duration_ms=turn.duration_ms,
+            model=turn.model,
+            provider=turn.provider,
+            usage=turn.usage,
         )
         self._session.add(chat_turn)
+        row.updated_at = int(time.time())
         self._session.flush()
         return chat_turn
 
@@ -260,6 +223,7 @@ class SqlAlchemyChatHistoryRepository:
             existing.payload = payload
             existing.started_at = _item_started_at(item)
             existing.completed_at = _item_completed_at(item)
+            row.updated_at = int(time.time())
             self._session.flush()
             return existing
 
@@ -275,6 +239,7 @@ class SqlAlchemyChatHistoryRepository:
             completed_at=_item_completed_at(item),
         )
         self._session.add(session_item)
+        row.updated_at = int(time.time())
         self._session.flush()
         return session_item
 
@@ -284,150 +249,80 @@ class SqlAlchemyChatHistoryRepository:
         *,
         status: TurnStatus,
         error: TurnError | None,
-        completed_at,
+        completed_at: datetime,
         duration_ms: int | None,
+        model: str | None = None,
+        provider: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> ChatTurn:
-        """Persist the final state of one turn."""
+        """Persist the final state and model metadata of one turn."""
         turn.status = _enum_value(status)
         turn.error = error.model_dump(
             mode="json") if error is not None else None
         turn.completed_at = completed_at
         turn.duration_ms = duration_ms
+        turn.model = model
+        turn.provider = provider
+        turn.usage = usage
         self._session.flush()
         return turn
 
-    def start_tool_call(
-        self,
-        row: ChatSession,
-        *,
-        tool_call_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
-        tool_type: str = "function",
-        started_at: datetime | None = None,
-    ) -> LlmToolCall:
-        """Persist the start of one LLM tool invocation."""
-        existing = self.get_tool_call(row, tool_call_id)
-        now = datetime.now(UTC)
-        if existing is not None:
-            existing.tool_name = tool_name
-            existing.tool_type = tool_type
-            existing.arguments = dict(arguments)
-            existing.started_at = started_at or existing.started_at or now
-            self._session.flush()
-            return existing
-
-        tool_call = LlmToolCall(
-            session_id=row.id,
-            assistant_message_id=None,
-            tool_message_id=None,
-            tool_call_id=tool_call_id,
-            tool_type=tool_type,
-            tool_name=tool_name,
-            arguments=dict(arguments),
-            result=None,
-            status="running",
-            error_code=None,
-            error_message=None,
-            elapsed_ms=None,
-            created_at=now,
-            started_at=started_at or now,
-            finished_at=None,
-        )
-        self._session.add(tool_call)
-        self._session.flush()
-        return tool_call
-
-    def get_tool_call(
-        self,
-        row: ChatSession,
-        tool_call_id: str,
-    ) -> LlmToolCall | None:
-        """Load one tool call by Strands tool-use id within a session."""
+    def list_history_messages(self, row: ChatSession) -> list[dict[str, Any]]:
+        """Project completed turn user/assistant items into model-history messages."""
         result = self._session.execute(
-            select(LlmToolCall).where(
-                LlmToolCall.session_id == row.id,
-                LlmToolCall.tool_call_id == tool_call_id,
-            )
-        )
-        return result.scalar_one_or_none()
-
-    def finish_tool_call(
-        self,
-        tool_call: LlmToolCall,
-        *,
-        status: str,
-        result: dict[str, Any] | None,
-        error_code: str | None,
-        error_message: str | None,
-        elapsed_ms: int | None,
-        finished_at: datetime | None = None,
-        tool_message: ChatMessage | None = None,
-        tool_message_id: int | None = None,
-    ) -> LlmToolCall:
-        """Persist the completed result for one tool invocation."""
-        tool_call.status = status
-        tool_call.result = result
-        tool_call.error_code = error_code
-        tool_call.error_message = error_message
-        tool_call.elapsed_ms = elapsed_ms
-        tool_call.finished_at = finished_at or datetime.now(UTC)
-        if tool_message is not None:
-            tool_call.tool_message_id = tool_message.id
-        elif tool_message_id is not None:
-            tool_call.tool_message_id = tool_message_id
-        self._session.flush()
-        return tool_call
-
-    def link_tool_calls_to_assistant(
-        self,
-        row: ChatSession,
-        *,
-        tool_call_ids: tuple[str, ...],
-        assistant_message: ChatMessage,
-    ) -> None:
-        """Attach completed tool-call records to the final assistant message."""
-        if not tool_call_ids:
-            return
-        self._session.execute(
-            update(LlmToolCall)
+            select(ChatSessionItem)
+            .join(ChatTurn, ChatSessionItem.turn_id == ChatTurn.id)
             .where(
-                LlmToolCall.session_id == row.id,
-                LlmToolCall.tool_call_id.in_(tool_call_ids),
+                ChatSessionItem.session_id == row.id,
+                ChatTurn.status == TurnStatus.COMPLETED.value,
+                ChatSessionItem.item_type.in_(_SEARCHABLE_ITEM_TYPES),
             )
-            .values(assistant_message_id=assistant_message.id)
+            .order_by(ChatTurn.id.asc(), ChatSessionItem.sequence.asc())
         )
-        self._session.flush()
+        messages: list[dict[str, Any]] = []
+        for item in result.scalars().all():
+            message = _history_message_from_payload(item.payload)
+            if message is not None:
+                messages.append(message)
+        return messages
 
-    def list_tool_call_summaries_by_assistant_message(
-        self,
-        row: ChatSession,
-        *,
-        assistant_message_ids: tuple[int, ...],
-    ) -> dict[int, list[dict[str, Any]]]:
-        """Return frontend-safe tool-call summaries keyed by assistant message id."""
-        if not assistant_message_ids:
-            return {}
-        result = self._session.execute(
-            select(LlmToolCall)
-            .where(
-                LlmToolCall.session_id == row.id,
-                LlmToolCall.assistant_message_id.in_(assistant_message_ids),
-            )
-            .order_by(LlmToolCall.created_at.asc(), LlmToolCall.id.asc())
+    def list_session_timeline(self, row: ChatSession) -> list[dict[str, Any]]:
+        """Return canonical turns with ordered session item payloads."""
+        turns_result = self._session.execute(
+            select(ChatTurn)
+            .where(ChatTurn.session_id == row.id)
+            .order_by(ChatTurn.id.asc())
         )
-        summaries: dict[int, list[dict[str, Any]]] = {}
-        for tool_call in result.scalars().all():
-            if tool_call.assistant_message_id is None:
-                continue
-            summaries.setdefault(tool_call.assistant_message_id, []).append({
-                "tool_call_id": tool_call.tool_call_id,
-                "tool_name": tool_call.tool_name,
-                "status": tool_call.status,
-                "elapsed_ms": tool_call.elapsed_ms,
-                "created_at": tool_call.created_at.isoformat(),
-            })
-        return summaries
+        turns = list(turns_result.scalars().all())
+        if not turns:
+            return []
+        turn_ids = tuple(turn.id for turn in turns)
+        items_result = self._session.execute(
+            select(ChatSessionItem)
+            .where(ChatSessionItem.turn_id.in_(turn_ids))
+            .order_by(ChatSessionItem.turn_id.asc(), ChatSessionItem.sequence.asc())
+        )
+        items_by_turn: dict[int, list[ChatSessionItem]] = {}
+        for item in items_result.scalars().all():
+            items_by_turn.setdefault(item.turn_id, []).append(item)
+        return [
+            {
+                "turn_id": turn.public_id,
+                "status": turn.status,
+                "model": turn.model,
+                "provider": turn.provider,
+                "usage": turn.usage,
+                "error": turn.error,
+                "started_at": _datetime_to_iso(turn.started_at),
+                "completed_at": _datetime_to_iso(turn.completed_at),
+                "duration_ms": turn.duration_ms,
+                "items": [
+                    dict(item.payload)
+                    for item in items_by_turn.get(turn.id, [])
+                ],
+            }
+            for turn in turns
+        ]
 
     def list_sessions_for_user(
         self,
@@ -436,7 +331,7 @@ class SqlAlchemyChatHistoryRepository:
         limit: int,
         offset: int,
     ) -> tuple[list[tuple[ChatSession, int]], int]:
-        """Return paginated active sessions and message counts for one user."""
+        """Return paginated active sessions and turn counts for one user."""
         filters = (
             ChatSession.user_id == user_id,
             ChatSession.deleted_at.is_(None),
@@ -445,10 +340,10 @@ class SqlAlchemyChatHistoryRepository:
             select(func.count()).select_from(ChatSession).where(*filters)
         )
         total = int(total_result.scalar_one() or 0)
-        message_count = func.count(ChatMessage.id).label("message_count")
+        turn_count = func.count(ChatTurn.id).label("turn_count")
         rows_result = self._session.execute(
-            select(ChatSession, message_count)
-            .outerjoin(ChatMessage, ChatMessage.session_id == ChatSession.id)
+            select(ChatSession, turn_count)
+            .outerjoin(ChatTurn, ChatTurn.session_id == ChatSession.id)
             .where(*filters)
             .group_by(ChatSession.id)
             .order_by(ChatSession.updated_at.desc())
@@ -465,7 +360,7 @@ class SqlAlchemyChatHistoryRepository:
         limit: int,
         offset: int,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Search owned sessions by title and message content using FTS and trigrams."""
+        """Search owned sessions by title and canonical item payloads."""
         search_text = query.strip()
         if not search_text:
             return [], 0
@@ -536,16 +431,6 @@ class SqlAlchemyChatHistoryRepository:
         ]
         return rows, total
 
-    def _next_sequence(self, session_id: int) -> int:
-        """Return the next message sequence number for one session."""
-        result = self._session.execute(
-            select(func.max(ChatMessage.sequence)).where(
-                ChatMessage.session_id == session_id
-            )
-        )
-        current = result.scalar_one_or_none()
-        return int(current or 0) + 1
-
     def _next_turn_item_sequence(self, turn_id: int) -> int:
         """Return the next item sequence number for one turn."""
         result = self._session.execute(
@@ -570,3 +455,43 @@ def _item_started_at(item):
 def _item_completed_at(item):
     """Return the best completed timestamp from an item payload."""
     return getattr(item, "completed_at", None)
+
+
+def _datetime_to_iso(value: datetime | None) -> str | None:
+    """Return a JSON-friendly timestamp string for timeline responses."""
+    if value is None:
+        return None
+    return value.isoformat()
+
+
+def _history_message_from_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one user or assistant item payload into a role/content message."""
+    item_type = str(payload.get("type") or "")
+    if item_type == "user_message":
+        content = _user_message_text(payload)
+        role = ChatCompletionRole.USER.value
+    elif item_type == "agent_message":
+        content = str(payload.get("text") or "")
+        role = ChatCompletionRole.ASSISTANT.value
+    else:
+        return None
+    if not content:
+        return None
+    return {
+        "role": role,
+        "content": content,
+        "metadata": dict(payload.get("metadata") or {}),
+    }
+
+
+def _user_message_text(payload: dict[str, Any]) -> str:
+    """Return joined text blocks from a persisted UserMessageItem payload."""
+    blocks = payload.get("content") or []
+    if not isinstance(blocks, list):
+        return ""
+    texts = [
+        str(block.get("text") or "")
+        for block in blocks
+        if isinstance(block, dict) and block.get("text")
+    ]
+    return "\n".join(texts)

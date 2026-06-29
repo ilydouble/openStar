@@ -27,6 +27,17 @@ class TurnUsageRecorder:
     def __init__(self, usage_service: Any | None) -> None:
         """Create a usage recorder around the optional usage service."""
         self._usage_service = usage_service
+        self._model = settings.effective_model_id()
+        self._provider = _provider_from_model(self._model)
+        self._usage: dict[str, int] | None = None
+
+    def turn_usage(self) -> dict[str, Any]:
+        """Return model/provider/usage metadata captured for the current turn."""
+        return {
+            "model": self._model,
+            "provider": self._provider,
+            "usage": dict(self._usage) if self._usage is not None else None,
+        }
 
     def check_task_quota(self, command: Any) -> None:
         """Raise PermissionError if the user's monthly task quota is exhausted."""
@@ -85,7 +96,7 @@ class TurnUsageRecorder:
                     recorded = flush_turn_usage_capture(
                         user_id=command.user_id,
                         session_id=command.session_id,
-                        record_usage=self._usage_service.record_llm_usage,
+                        record_usage=self._record_llm_usage,
                     )
                     if recorded == 0 and result is not None:
                         self.record_estimated_turn_usage(
@@ -125,7 +136,7 @@ class TurnUsageRecorder:
         if total_tokens <= 0:
             return
         try:
-            self._usage_service.record_llm_usage(
+            self._record_llm_usage(
                 user_id=command.user_id,
                 session_id=command.session_id,
                 model=model,
@@ -139,6 +150,29 @@ class TurnUsageRecorder:
                 user_id=command.user_id,
                 session_id=command.session_id,
             )
+
+    def _record_llm_usage(self, **payload: Any) -> None:
+        """Record one LLM usage event and aggregate it for turn persistence."""
+        model = str(payload.get("model") or self._model)
+        self._model = model
+        self._provider = _provider_from_model(model)
+        prompt_tokens = int(payload.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(payload.get("completion_tokens", 0) or 0)
+        total_tokens = int(payload.get("total_tokens", 0) or 0)
+        if total_tokens <= 0:
+            total_tokens = prompt_tokens + completion_tokens
+        if total_tokens > 0:
+            current = self._usage or {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+            current["prompt_tokens"] += prompt_tokens
+            current["completion_tokens"] += completion_tokens
+            current["total_tokens"] += total_tokens
+            self._usage = current
+        if self._usage_service is not None:
+            self._usage_service.record_llm_usage(**payload)
 
     def _count_tokens(
         self,
@@ -183,3 +217,12 @@ def _get_token_counter():
         return None
     token_counter = litellm_token_counter
     return token_counter
+
+
+def _provider_from_model(model: str | None) -> str | None:
+    """Infer a provider label from LiteLLM-style model ids."""
+    value = str(model or "").strip()
+    if not value or "/" not in value:
+        return None
+    provider, _separator, _model_name = value.partition("/")
+    return provider or None

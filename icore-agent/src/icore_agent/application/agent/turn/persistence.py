@@ -71,6 +71,9 @@ class TurnPersistence:
         error: TurnError | None,
         completed_at: datetime,
         duration_ms: int | None,
+        model: str | None = None,
+        provider: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> None:
         """Persist final turn state without failing response delivery."""
         if command.incognito:
@@ -84,6 +87,9 @@ class TurnPersistence:
                 error=error,
                 completed_at=completed_at,
                 duration_ms=duration_ms,
+                model=model,
+                provider=provider,
+                usage=usage,
             )
         except (AttributeError, PermissionError, LookupError) as exc:
             log.warning(

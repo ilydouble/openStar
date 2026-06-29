@@ -368,7 +368,8 @@ def test_can_fetch_session_state(mock_memory, client: TestClient):
     payload = _api_data(resp)
     assert payload["session_id"] == "demo-session"
     assert payload["summary"] == "Summary text"
-    assert len(payload["messages"]) == 2
+    assert payload["turns"] == []
+    assert "messages" not in payload
     assert payload["attachments"] == []
 
 

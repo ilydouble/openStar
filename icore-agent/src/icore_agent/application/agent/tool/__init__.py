@@ -1,7 +1,3 @@
-"""Application-layer tool turn projection helpers."""
+"""Application-layer tool catalog package."""
 
-from .projection import TurnToolProjection
-
-__all__ = [
-    "TurnToolProjection",
-]
+__all__: list[str] = []

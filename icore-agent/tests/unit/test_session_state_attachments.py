@@ -9,6 +9,8 @@ from uuid import uuid4
 import pytest
 
 from icore_agent.application.agent import AgentSessionService, AgentTurnCommand, AgentTurnService
+from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from icore_agent.domain.agent.turn import Turn, TurnStatus
 from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.agent.handlers.session import (
@@ -36,9 +38,12 @@ def test_session_attachment_refs_include_pdf_as_data_mode() -> None:
     refs = _session_attachment_refs(
         [
             {
-                "role": "user",
-                "content": "Analyze this",
-                "metadata": {"file_uuids": [file_uuid]},
+                "items": [
+                    {
+                        "type": "user_message",
+                        "metadata": {"file_uuids": [file_uuid]},
+                    },
+                ],
             },
         ],
         user_id="user-public-id",
@@ -77,29 +82,51 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
 
     await service.run(command)
 
-    assert history.user_metadata == {
+    assert history.user_item_metadata == {
         "file_uuids": ["file-1"],
         "display_caption": "Hello please analysis these files",
         "template_id": "image",
     }
 
 
-def test_chat_history_preserves_display_caption_metadata() -> None:
-    """Display captions should round-trip through chat history persistence."""
+def test_chat_history_projects_display_caption_metadata() -> None:
+    """Display captions should round-trip through canonical user item persistence."""
     service = AgentSessionService()
     session_id = f"session-{uuid4()}"
     user_id = f"user-{uuid4()}"
     file_uuid = str(uuid4())
 
     service.ensure_owned_session(session_id, user_id, title="Analyze files")
-    service.save_user_message(
+    turn = Turn(session_id=session_id)
+    service.start_turn(
         session_id,
         user_id,
-        "Please answer based on the images and data files I uploaded.",
-        metadata={
-            "file_uuids": [file_uuid],
-            "display_caption": "Hello please analysis these files",
-        },
+        turn=turn,
+        user_item=UserMessageItem(
+            content=[
+                UserInput(
+                    type=UserInputType.TEXT,
+                    text="Please answer based on the images and data files I uploaded.",
+                ),
+            ],
+            metadata={
+                "file_uuids": [file_uuid],
+                "display_caption": "Hello please analysis these files",
+            },
+        ),
+        title="Analyze files",
+    )
+    service.complete_turn(
+        session_id,
+        user_id,
+        turn_id=turn.id,
+        status=TurnStatus.COMPLETED,
+        error=None,
+        completed_at=datetime.now(UTC),
+        duration_ms=1,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 1},
     )
 
     messages = service.load_messages(session_id, user_id)
@@ -120,29 +147,26 @@ def _auth_user() -> AuthenticatedUser:
 
 class _RecordingHistory:
     def __init__(self) -> None:
-        self.user_metadata: dict[str, Any] | None = None
+        self.user_item_metadata: dict[str, Any] | None = None
 
     def ensure_owned_session(self, public_id: str, user_id: str, *, title: str = "") -> None:
         return None
 
-    def save_user_message(
+    def start_turn(
         self,
         public_id: str,
         user_id: str,
-        content: str,
         *,
-        metadata: dict[str, Any] | None = None,
+        turn,
+        user_item: UserMessageItem,
+        title: str = "",
     ) -> None:
-        self.user_metadata = metadata
+        self.user_item_metadata = dict(user_item.metadata)
 
-    def save_assistant_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
+    def upsert_session_item(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    def complete_turn(self, *args: Any, **kwargs: Any) -> None:
         return None
 
     def load_messages(self, public_id: str, user_id: str) -> list[dict[str, Any]]:

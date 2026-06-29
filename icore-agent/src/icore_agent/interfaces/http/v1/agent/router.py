@@ -61,5 +61,5 @@ router.get(
 router.get(
     "/session/{session_id}",
     response_model=SessionStateResponse,
-    summary="Read recent messages for a session",
+    summary="Read canonical turns and items for a session",
 )(get_session_state)

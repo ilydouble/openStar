@@ -83,21 +83,3 @@ class TurnTranscriptRecorder:
                 session_id=command.session_id,
                 error=str(exc),
             )
-
-    def save_assistant_message(self, command: Any, reply: str) -> int | None:
-        """Persist assistant output without failing an already completed turn."""
-        if command.incognito:
-            return None
-        try:
-            return self._agent_session.save_assistant_message(
-                command.session_id,
-                command.user_id,
-                reply,
-            )
-        except (PermissionError, LookupError) as exc:
-            log.warning(
-                "assistant_message_persist_failed",
-                session_id=command.session_id,
-                error=str(exc),
-            )
-            return None

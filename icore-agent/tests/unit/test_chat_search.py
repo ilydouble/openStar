@@ -13,6 +13,13 @@ from icore_agent.application.agent.session import AgentSessionService
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     SessionItemStatus,
+    ToolCallItem,
+    ToolCallResult,
+    ToolCallStatus,
+    ToolFunction,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
 from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnStatus
 from icore_agent.domain.files import FileAsset
@@ -72,20 +79,38 @@ def test_session_search_sql_uses_english_fts_and_trigram_ranking() -> None:
     assert f"* {search_repo._TITLE_RANK_BOOST}" in search_repo._SESSION_SEARCH_RANK_SQL
 
 
-def test_chat_history_preserves_user_message_file_uuid_metadata() -> None:
-    """File UUID references should persist with the user message metadata."""
+def test_chat_history_projects_user_message_file_uuid_metadata() -> None:
+    """File UUID references should round-trip through canonical user items."""
     service = AgentSessionService()
     session_id = f"session-{uuid4()}"
     user_id = f"user-{uuid4()}"
     file_uuid = str(uuid4())
 
+    turn = Turn(session_id=session_id)
     service.ensure_owned_session(
         session_id, user_id, title="Use uploaded file")
-    service.save_user_message(
+    service.start_turn(
         session_id,
         user_id,
-        "Summarize this",
-        metadata={"file_uuids": [file_uuid]},
+        turn=turn,
+        user_item=UserMessageItem(
+            content=[UserInput(type=UserInputType.TEXT,
+                               text="Summarize this")],
+            metadata={"file_uuids": [file_uuid]},
+        ),
+        title="Use uploaded file",
+    )
+    service.complete_turn(
+        session_id,
+        user_id,
+        turn_id=turn.id,
+        status=TurnStatus.COMPLETED,
+        error=None,
+        completed_at=datetime.now(UTC),
+        duration_ms=10,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 1},
     )
 
     messages = service.load_messages(session_id, user_id)
@@ -99,7 +124,7 @@ def test_chat_history_preserves_user_message_file_uuid_metadata() -> None:
 
 
 def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
-    """Session state should rehydrate file asset references from message metadata."""
+    """Session state should rehydrate file asset references from user item metadata."""
     file_uuid = str(uuid4())
     image_uuid = str(uuid4())
     service = FakeFileService({
@@ -110,15 +135,19 @@ def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
     refs = _session_attachment_refs(
         [
             {
-                "role": "user",
-                "content": "Use files",
-                "metadata": {"file_uuids": [file_uuid, image_uuid, file_uuid]},
-            },
-            {
-                "role": "assistant",
-                "content": "Done",
-                "metadata": {},
-            },
+                "items": [
+                    {
+                        "type": "user_message",
+                        "metadata": {
+                            "file_uuids": [file_uuid, image_uuid, file_uuid],
+                        },
+                    },
+                    {
+                        "type": "agent_message",
+                        "text": "Done",
+                    },
+                ],
+            }
         ],
         user_id="user-public-id",
         file_service=service,
@@ -192,8 +221,8 @@ async def test_chat_non_streaming_returns_service_result() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_state_includes_tool_call_summaries_without_results(monkeypatch) -> None:
-    """Session state should expose tool-call badges without leaking result JSON."""
+async def test_session_state_returns_turns_and_session_items(monkeypatch) -> None:
+    """Session state should expose canonical turns and session item payloads."""
     monkeypatch.setattr(session_handlers, "memory", FakeMemory())
     chat_history = FakeSessionHistory()
 
@@ -204,22 +233,19 @@ async def test_session_state_includes_tool_call_summaries_without_results(monkey
         file_service=FakeFileService({}),
     )
 
-    assert [message.role for message in response.messages] == [
-        "user",
-        "assistant",
+    assert not hasattr(response, "messages")
+    assert len(response.turns) == 1
+    turn = response.turns[0]
+    assert turn.turn_id == "turn-1"
+    assert turn.model == "test-model"
+    assert [item.type for item in turn.items] == [
+        "user_message",
+        "tool_call",
+        "agent_message",
     ]
-    assistant = response.messages[1]
-    assert assistant.tool_calls is not None
-    assert [tool.model_dump() for tool in assistant.tool_calls] == [
-        {
-            "tool_call_id": "tool-1",
-            "tool_name": "web_search",
-            "status": "success",
-            "elapsed_ms": 12,
-            "created_at": "2026-05-22T11:00:00+00:00",
-        }
-    ]
-    assert "result" not in type(assistant.tool_calls[0]).model_fields
+    tool_item = turn.items[1]
+    assert tool_item.payload["function"]["name"] == "web_search"
+    assert tool_item.payload["result"]["structured_content"] == {"ok": True}
 
 
 class FakeAgentTurnService:
@@ -268,38 +294,55 @@ class FakeMemory:
 
 
 class FakeSessionHistory:
-    """Chat history fake that returns assistant tool-call summaries."""
+    """Session fake that returns canonical turns and items."""
 
     def assert_owned_session(self, public_id: str, user_id: str) -> None:
         """Accept the owned session check."""
 
-    def load_messages(
+    def load_session_timeline(
         self,
         public_id: str,
         user_id: str,
-        *,
-        include_tool_calls: bool = False,
     ) -> list[dict[str, Any]]:
-        """Return a small durable conversation with tool call summaries."""
-        assert include_tool_calls is True
+        """Return a small canonical timeline with one tool call."""
         return [
             {
-                "role": "user",
-                "content": "Search weather",
-                "metadata": {},
-            },
-            {
-                "role": "assistant",
-                "content": "It is 22C.",
-                "metadata": {},
-                "tool_calls": [
-                    {
-                        "tool_call_id": "tool-1",
-                        "tool_name": "web_search",
-                        "status": "success",
-                        "elapsed_ms": 12,
-                        "created_at": "2026-05-22T11:00:00+00:00",
-                    }
+                "turn_id": "turn-1",
+                "status": "completed",
+                "model": "test-model",
+                "provider": "test-provider",
+                "usage": {"total_tokens": 7},
+                "error": None,
+                "started_at": "2026-05-22T11:00:00+00:00",
+                "completed_at": "2026-05-22T11:00:01+00:00",
+                "duration_ms": 1000,
+                "items": [
+                    UserMessageItem(
+                        content=[
+                            UserInput(
+                                type=UserInputType.TEXT,
+                                text="Search weather",
+                            )
+                        ],
+                    ).model_dump(mode="json"),
+                    ToolCallItem(
+                        id="tool-item-1",
+                        provider_tool_call_id="tool-1",
+                        status=ToolCallStatus.COMPLETED,
+                        function=ToolFunction(
+                            name="web_search",
+                            arguments_json={"query": "weather"},
+                        ),
+                        result=ToolCallResult(
+                            content="ok",
+                            structured_content={"ok": True},
+                        ),
+                        duration_ms=12,
+                    ).model_dump(mode="json"),
+                    AgentMessageItem(
+                        status=SessionItemStatus.COMPLETED,
+                        text="It is 22C.",
+                    ).model_dump(mode="json"),
                 ],
             },
         ]

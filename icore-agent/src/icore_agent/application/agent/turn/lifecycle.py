@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from icore_agent.shared.time.utils import start_to_completed_duration_ms
 
 from icore_agent.domain.agent.session import (
@@ -45,12 +46,19 @@ class TurnLifecycle:
         cls,
         *,
         session_id: str,
+        model: str | None = None,
+        provider: str | None = None,
         started_at: datetime | None = None,
     ) -> TurnLifecycle:
         """Create a new in-progress turn lifecycle."""
         started = started_at or datetime.now(UTC)
         return cls(
-            turn=Turn(session_id=session_id, started_at=started),
+            turn=Turn(
+                session_id=session_id,
+                started_at=started,
+                model=model,
+                provider=provider,
+            ),
             started_at=started,
         )
 
@@ -61,7 +69,12 @@ class TurnLifecycle:
             turn_id=self.turn.id,
         )
 
-    def user_message_event(self, message: str) -> TurnEvent:
+    def user_message_event(
+        self,
+        message: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> TurnEvent:
         """Create and record the user-message item for this turn."""
         item = UserMessageItem(
             content=[
@@ -70,6 +83,7 @@ class TurnLifecycle:
                     text=message,
                 )
             ],
+            metadata=dict(metadata or {}),
             created_at=self.started_at,
             completed_at=self.started_at,
         )

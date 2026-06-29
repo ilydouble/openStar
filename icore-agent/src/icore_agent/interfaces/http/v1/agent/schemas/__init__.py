@@ -6,7 +6,8 @@ from .session import (
     SessionListResponse,
     SessionSearchResponse,
     SessionStateResponse,
-    SessionToolCallItem,
+    SessionTimelineItem,
+    SessionTurnItem,
 )
 from .transcribe import TranscribeResponse
 
@@ -18,6 +19,7 @@ __all__ = [
     "SessionListResponse",
     "SessionSearchResponse",
     "SessionStateResponse",
-    "SessionToolCallItem",
+    "SessionTimelineItem",
+    "SessionTurnItem",
     "TranscribeResponse",
 ]

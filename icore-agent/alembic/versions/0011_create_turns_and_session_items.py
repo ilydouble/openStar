@@ -29,6 +29,10 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("duration_ms", sa.Integer(), nullable=True),
+        sa.Column("model", sa.String(length=255), nullable=True),
+        sa.Column("provider", sa.String(length=120), nullable=True),
+        sa.Column("usage", postgresql.JSONB(
+            astext_type=sa.Text()), nullable=True),
         sa.ForeignKeyConstraint(
             ["session_id"],
             ["sessions.id"],
@@ -82,9 +86,34 @@ def upgrade() -> None:
     op.create_index("ix_session_items_session_id",
                     "session_items", ["session_id"])
     op.create_index("ix_session_items_turn_id", "session_items", ["turn_id"])
+    op.create_index(
+        "ix_session_items_session_item_type",
+        "session_items",
+        ["session_id", "item_type"],
+    )
+    op.execute(
+        """
+        CREATE INDEX ix_session_items_payload_fts
+        ON session_items
+        USING GIN (to_tsvector('english', payload::text))
+        WHERE item_type IN ('user_message', 'agent_message')
+        """
+    )
+    op.execute(
+        """
+        CREATE INDEX ix_session_items_payload_trgm
+        ON session_items
+        USING GIN ((payload::text) gin_trgm_ops)
+        WHERE item_type IN ('user_message', 'agent_message')
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute("DROP INDEX IF EXISTS ix_session_items_payload_trgm")
+    op.execute("DROP INDEX IF EXISTS ix_session_items_payload_fts")
+    op.drop_index("ix_session_items_session_item_type",
+                  table_name="session_items")
     op.drop_index("ix_session_items_turn_id", table_name="session_items")
     op.drop_index("ix_session_items_session_id", table_name="session_items")
     op.drop_table("session_items")

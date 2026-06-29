@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,6 +44,9 @@ class Turn(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     duration_ms: int | None = None
+    model: str | None = None
+    provider: str | None = None
+    usage: dict[str, Any] | None = None
 
     def upsert_item(self, session_item: SessionItem) -> None:
         """Insert or replace an item with the same id."""

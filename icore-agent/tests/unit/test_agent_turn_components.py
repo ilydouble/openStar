@@ -14,7 +14,6 @@ from icore_agent.application.agent.turn import (
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.application.agent.tool import TurnToolProjection
 from icore_agent.application.agent import AgentTurnCommand
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
@@ -91,6 +90,9 @@ def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
         error=None,
         completed_at=datetime.now(UTC),
         duration_ms=1,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 1},
     )
 
     assert history.calls == []
@@ -105,72 +107,12 @@ def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
         error=TurnError(message="boom"),
         completed_at=datetime.now(UTC),
         duration_ms=2,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 2},
     )
 
     assert history.calls == ["create", "upsert", "complete"]
-
-
-def test_turn_tool_projection_persists_tool_item_and_links_assistant() -> None:
-    """TurnToolProjection should project SessionItem tool calls into legacy tables."""
-    history = RecordingHistory()
-    projection = TurnToolProjection(history)
-    command = _command(stream=False)
-    tool_item = ToolCallItem(
-        id="item-tool-1",
-        provider_tool_call_id="provider-tool-1",
-        status=ToolCallStatus.COMPLETED,
-        function=ToolFunction(
-            name="web_search",
-            arguments_json={"q": "weather"},
-        ),
-        result=ToolCallResult(structured_content={"ok": True}),
-        duration_ms=42,
-    )
-
-    projection.persist_event(command, TurnEvent.item_started(
-        session_id="session-1",
-        turn_id="turn-1",
-        item=tool_item,
-    ))
-    projection.persist_event(command, TurnEvent.item_completed(
-        session_id="session-1",
-        turn_id="turn-1",
-        item=tool_item,
-    ))
-    projection.attach_to_assistant(command, assistant_message_id=99)
-
-    assert projection.tool_call_ids == ("provider-tool-1",)
-    assert history.calls == [
-        (
-            "tool-start",
-            "session-1",
-            "provider-tool-1",
-            "web_search",
-            {"q": "weather"},
-        ),
-        (
-            "tool-message",
-            "session-1",
-            "user-1",
-            '{"ok":true}',
-            {
-                "tool_call_id": "provider-tool-1",
-                "tool_name": "web_search",
-            },
-        ),
-        (
-            "tool-finish",
-            "session-1",
-            "provider-tool-1",
-            "success",
-            {"ok": True},
-            None,
-            None,
-            42,
-            42,
-        ),
-        ("tool-link", "session-1", ("provider-tool-1",), 99),
-    ]
 
 
 @pytest.mark.asyncio
@@ -186,11 +128,9 @@ async def test_turn_transcript_recorder_appends_memory_and_extracts_on_compressi
     )
     command = _command(stream=False)
 
-    assistant_id = recorder.save_assistant_message(command, "assistant reply")
     compressed = await recorder.append_memory_pair(command, "assistant reply")
     await recorder.maybe_extract_user_memory(command, compressed)
 
-    assert assistant_id == 99
     assert memory.appended == [
         ("session-1", "user", "Hello"),
         ("session-1", "assistant", "assistant reply"),
@@ -240,6 +180,15 @@ def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None
         "completion_tokens": 3,
         "total_tokens": 6,
     }]
+    assert recorder.turn_usage() == {
+        "model": "test-model",
+        "provider": None,
+        "usage": {
+            "prompt_tokens": 3,
+            "completion_tokens": 3,
+            "total_tokens": 6,
+        },
+    }
 
 
 def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
@@ -306,93 +255,11 @@ class FailingHistory:
 
 
 class RecordingHistory:
-    """History fake for transcript and tool projection tests."""
+    """History fake for transcript tests."""
 
     def __init__(self) -> None:
         """Create the fake."""
         self.calls: list[tuple] = []
-
-    def save_assistant_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record assistant message persistence."""
-        self.calls.append(("assistant", public_id, user_id, content, metadata))
-        return 99
-
-    def save_tool_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record tool message persistence."""
-        self.calls.append(("tool-message", public_id,
-                          user_id, content, metadata))
-        return 42
-
-    def start_tool_call(
-        self,
-        public_id: str,
-        *,
-        tool_call_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> None:
-        """Record tool-call start."""
-        self.calls.append((
-            "tool-start",
-            public_id,
-            tool_call_id,
-            tool_name,
-            arguments,
-        ))
-
-    def finish_tool_call(
-        self,
-        public_id: str,
-        *,
-        tool_call_id: str,
-        status: str,
-        result: dict[str, Any] | None,
-        error_code: str | None,
-        error_message: str | None,
-        elapsed_ms: int | None,
-        tool_message_id: int | None,
-    ) -> None:
-        """Record tool-call finish."""
-        self.calls.append((
-            "tool-finish",
-            public_id,
-            tool_call_id,
-            status,
-            result,
-            error_code,
-            error_message,
-            elapsed_ms,
-            tool_message_id,
-        ))
-
-    def attach_tool_calls_to_assistant(
-        self,
-        public_id: str,
-        *,
-        tool_call_ids: tuple[str, ...],
-        assistant_message_id: int,
-    ) -> None:
-        """Record tool-call to assistant linking."""
-        self.calls.append((
-            "tool-link",
-            public_id,
-            tool_call_ids,
-            assistant_message_id,
-        ))
 
 
 class CompressingMemory:

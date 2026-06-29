@@ -16,7 +16,7 @@ email-validator==2.3.0
 
 # ── LLM routing ───────────────────────────────
 litellm==1.83.8
-openai==1.68.2
+openai==2.24.0
 
 # ── HTTP client ───────────────────────────────
 httpx==0.28.1

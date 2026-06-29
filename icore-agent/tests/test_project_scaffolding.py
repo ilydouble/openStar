@@ -539,6 +539,17 @@ def test_email_validator_dependency_is_declared_for_emailstr_models():
     assert "email-validator==" in requirements
 
 
+def test_litellm_and_openai_dependency_pins_are_compatible():
+    """Keep Docker's requirements install compatible with LiteLLM's SDK pin."""
+    pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    requirements = (
+        AGENT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert "litellm==1.83.8" in requirements
+    assert "openai==2.24.0" in requirements
+    assert '"openai>=2.24.0"' in pyproject
+
+
 def test_python_backend_uses_clean_architecture_layers():
     """Keep Python backend code grouped by abstraction layer, not mixed top-level folders."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"

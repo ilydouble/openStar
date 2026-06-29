@@ -76,6 +76,7 @@ class LLMSettings(DomainSettings):
     max_retries: int = Field(3, ge=0, le=10)
     agent_max_tokens: int = 8192
     agent_temperature: float = Field(0.1, ge=0.0, le=1.0)
+    agent_model_supports_vision: bool = False
     zai_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""

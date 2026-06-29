@@ -490,8 +490,13 @@ class StubContext:
     ]
     has_attachments = True
 
-    def to_context_items(self) -> list[ContextItem]:
-        """Return context items in the new application AgentContext shape."""
+    def to_context_items(
+        self,
+        *,
+        include_image_refs: bool = True,
+    ) -> list[ContextItem]:
+        """Return context items in the domain AgentContext shape."""
+        _ = include_image_refs
         return [
             ContextItem(kind="session_summary", content="summary"),
             ContextItem(kind="user_memory", content="remember"),
@@ -504,6 +509,16 @@ class StubContext:
                 ),
             ),
         ]
+
+    def to_current_user_inputs(
+        self,
+        user_text: str,
+        *,
+        include_image_inputs: bool,
+    ) -> list[UserInput]:
+        """Return current user input blocks in the domain AgentContext shape."""
+        _ = include_image_inputs
+        return [UserInput(type=UserInputType.TEXT, text=user_text)]
 
 
 class FakeToolBridge:

@@ -37,7 +37,7 @@ def render_chat_completions_messages(
     )
     messages.append({
         "role": ChatCompletionRole.USER.value,
-        "content": envelope.current_user_item.to_text(),
+        "content": _render_current_user_content(envelope.current_user_item),
     })
     return messages
 
@@ -58,6 +58,24 @@ def _render_history_message(item: PromptHistoryItem) -> dict[str, Any]:
         "role": ChatCompletionRole.USER.value,
         "content": item.to_text(),
     }
+
+
+def _render_current_user_content(item: Any) -> str | list[dict[str, Any]]:
+    """Render the current user item as text or multimodal Chat Completions content."""
+    blocks: list[dict[str, Any]] = []
+    has_image = False
+    for block in item.content:
+        if block.text:
+            blocks.append({"type": "text", "text": block.text})
+        if block.image_url:
+            has_image = True
+            blocks.append({
+                "type": "image_url",
+                "image_url": {"url": block.image_url},
+            })
+    if has_image:
+        return blocks
+    return item.to_text()
 
 
 def _history_item_text(item: PromptHistoryItem) -> str:

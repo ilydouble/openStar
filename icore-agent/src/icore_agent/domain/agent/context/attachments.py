@@ -6,7 +6,11 @@ from dataclasses import dataclass
 import json
 from typing import Any
 
-from icore_agent.domain.agent.session import ContextItem
+from icore_agent.domain.agent.session import (
+    ContextItem,
+    UserInput,
+    UserInputType,
+)
 
 
 def _json_value(value: Any) -> str:
@@ -33,6 +37,24 @@ class AgentImageAttachment:
                 f"ref={_json_value(self.ref)}"
             ),
         )
+
+    def to_user_inputs(self) -> list[UserInput]:
+        """Return multimodal current-user input blocks for this image."""
+        return [
+            UserInput(
+                type=UserInputType.TEXT,
+                text=(
+                    "Attached image available to the model: "
+                    f"filename={_json_value(self.filename)} "
+                    f"uuid={_json_value(self.file_uuid)}"
+                ),
+            ),
+            UserInput(
+                type=UserInputType.IMAGE,
+                image_file_uuid=self.file_uuid,
+                image_url=self.ref,
+            ),
+        ]
 
 
 @dataclass(frozen=True, slots=True)

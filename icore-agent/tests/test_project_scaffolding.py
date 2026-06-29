@@ -770,12 +770,13 @@ def test_chat_orchestration_lives_in_application_layer():
     assert "def to_text" in (
         session_items_dir / "user_message_item.py"
     ).read_text(encoding="utf-8")
-    assert (application_agent_context_dir / "agent_context.py").is_file()
+    assert not (application_agent_context_dir / "agent_context.py").exists()
+    assert (domain_context_dir / "agent_context.py").is_file()
     assert "class AgentContext" in (
-        application_agent_context_dir / "agent_context.py"
+        domain_context_dir / "agent_context.py"
     ).read_text(encoding="utf-8")
-    assert "class AgentContext" not in (
-        domain_context_dir / "loaded_context.py"
+    assert "def build_prompt_envelope" in (
+        domain_context_dir / "agent_context.py"
     ).read_text(encoding="utf-8")
 
 

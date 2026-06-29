@@ -7,18 +7,22 @@ from typing import Any
 
 import pytest
 
-import icore_agent.application.agent.context as agent_context
+import icore_agent.application.agent.context as app_context
+import icore_agent.domain.agent.context as agent_context
+from icore_agent.domain.agent.prompt import build_base_instructions
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     ContextItem,
+    UserInputType,
     UserMessageItem,
 )
+from icore_agent.domain.agent.tool import ToolChoice
 from icore_agent.domain.files.models import FileAsset
 
 
 def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
     """File UUID normalization should keep the first occurrence of each UUID."""
-    assert agent_context.dedupe_file_uuids(
+    assert app_context.dedupe_file_uuids(
         (" a ", "b", "a", "", "b")) == ("a", "b")
 
 
@@ -34,7 +38,7 @@ def _history_texts(items: list[UserMessageItem | AgentMessageItem]) -> list[tupl
 
 
 def test_agent_context_builds_context_items_from_runtime_materials() -> None:
-    """Application AgentContext should own runtime-to-ContextItem assembly."""
+    """Domain AgentContext should own pure runtime-to-ContextItem assembly."""
     context = agent_context.AgentContext(
         summary="Earlier summary",
         history_items=[],
@@ -74,10 +78,88 @@ def test_agent_context_builds_context_items_from_runtime_materials() -> None:
     assert "Use read_uploaded_file" in items[3].content
 
 
+def test_build_prompt_envelope_uses_image_inputs_when_main_model_supports_vision() -> None:
+    """Vision-capable prompts should put image attachments on current user input."""
+    context = agent_context.AgentContext(
+        summary="Earlier summary",
+        history_items=[],
+        has_rag=False,
+        image_attachments=[
+            agent_context.AgentImageAttachment(
+                filename="chart.png",
+                ref="https://files.example/img-1",
+                file_uuid="img-1",
+            ),
+        ],
+        file_attachments=[
+            agent_context.AgentFileAttachment(
+                filename="notes.txt",
+                file_uuid="file-1",
+            ),
+        ],
+    )
+
+    envelope = agent_context.build_prompt_envelope(
+        base_instructions=build_base_instructions(),
+        context=context,
+        user_text="Summarize the attachment",
+        tools=[],
+        tool_choice=ToolChoice.AUTO,
+        include_image_inputs=True,
+    )
+
+    assert [item.kind for item in envelope.context_items] == [
+        "session_summary",
+        "file_attachment",
+    ]
+    assert [block.type for block in envelope.current_user_item.content] == [
+        UserInputType.TEXT.value,
+        UserInputType.TEXT.value,
+        UserInputType.IMAGE.value,
+    ]
+    assert envelope.current_user_item.content[1].text == (
+        'Attached image available to the model: filename="chart.png" uuid="img-1"'
+    )
+    assert envelope.current_user_item.content[2].image_file_uuid == "img-1"
+    assert envelope.current_user_item.content[2].image_url == "https://files.example/img-1"
+
+
+def test_build_prompt_envelope_keeps_image_refs_as_context_without_vision() -> None:
+    """Non-vision prompts should leave images as metadata-only context refs."""
+    context = agent_context.AgentContext(
+        summary=None,
+        history_items=[],
+        has_rag=False,
+        image_attachments=[
+            agent_context.AgentImageAttachment(
+                filename="chart.png",
+                ref="https://files.example/img-1",
+                file_uuid="img-1",
+            ),
+        ],
+        file_attachments=[],
+    )
+
+    envelope = agent_context.build_prompt_envelope(
+        base_instructions="Base policy",
+        context=context,
+        user_text="What is in this image?",
+        tools=[],
+        include_image_inputs=False,
+    )
+
+    assert [item.kind for item in envelope.context_items] == [
+        "image_attachment",
+    ]
+    assert [block.type for block in envelope.current_user_item.content] == [
+        UserInputType.TEXT.value,
+    ]
+
+
 @pytest.mark.asyncio
 async def test_load_agent_context_prefers_cached_history() -> None:
     """Cached conversation history should be converted to model-visible items."""
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -106,7 +188,7 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
         {"role": "assistant", "content": "Persisted answer"},
     ])
 
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -132,7 +214,7 @@ async def test_load_agent_context_excludes_current_user_message_from_fallback_hi
         {"role": "user", "content": "Hello"},
     ])
 
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -157,7 +239,7 @@ async def test_load_agent_context_skips_history_fallback_and_memory_prompt_in_in
     ])
     memory_service = FakeUserMemoryService("remember this")
 
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -185,7 +267,7 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
     }
     file_service = FakeFileService(assets)
 
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=("txt-1", "img-1", "csv-1", "pdf-1", "txt-1"),
         user_id="user-1",
@@ -220,7 +302,7 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
 @pytest.mark.asyncio
 async def test_load_agent_context_returns_empty_context_when_cache_load_fails() -> None:
     """Conversation cache failures should leave the turn runnable with no context."""
-    context = await agent_context.load_agent_context(
+    context = await app_context.load_agent_context(
         session_id="session-1",
         file_uuids=("txt-1",),
         user_id="user-1",

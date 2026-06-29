@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from icore_agent.config import settings
+from icore_agent.domain.agent.context import (
+    AgentContext,
+    build_prompt_envelope,
+)
 from icore_agent.domain.agent.prompt import (
     PromptEnvelope,
     build_base_instructions,
-)
-from icore_agent.application.agent.context.agent_context import AgentContext
-from icore_agent.domain.agent.session import (
-    UserInput,
-    UserInputType,
-    UserMessageItem,
 )
 from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
 
@@ -24,18 +23,11 @@ def build_agent_prompt_envelope(
     tool_definitions: list[ToolDefinition],
 ) -> PromptEnvelope:
     """Build the model-visible prompt envelope for one agent turn."""
-    return PromptEnvelope(
+    return build_prompt_envelope(
         base_instructions=build_base_instructions(),
-        context_items=context.to_context_items(),
-        history_items=context.history_items,
-        current_user_item=UserMessageItem(
-            content=[
-                UserInput(
-                    type=UserInputType.TEXT,
-                    text=command.agent_message or command.message,
-                ),
-            ],
-        ),
+        context=context,
+        user_text=command.agent_message or command.message,
         tools=tool_definitions,
         tool_choice=ToolChoice.AUTO,
+        include_image_inputs=settings.agent_model_supports_vision,
     )

@@ -143,3 +143,31 @@ def test_prompt_envelope_escapes_context_wrapper_content() -> None:
             "A &lt; B &amp; &quot;quoted&quot;</context>"
         ),
     }
+
+
+def test_prompt_envelope_renders_current_user_images_as_multimodal_content() -> None:
+    """Current user image inputs should render as Chat Completions image content."""
+    envelope = PromptEnvelope(
+        base_instructions="Base policy",
+        current_user_item=UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="Describe this chart"),
+            UserInput(
+                type=UserInputType.IMAGE,
+                image_file_uuid="img-1",
+                image_url="https://files.example/img-1",
+            ),
+        ]),
+    )
+
+    messages = render_chat_completions_messages(envelope)
+
+    assert messages[-1] == {
+        "role": ChatCompletionRole.USER.value,
+        "content": [
+            {"type": "text", "text": "Describe this chart"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://files.example/img-1"},
+            },
+        ],
+    }

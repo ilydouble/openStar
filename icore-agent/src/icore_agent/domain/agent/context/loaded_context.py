@@ -1,1 +1,1 @@
-"""Legacy module kept empty after AgentContext moved to application."""
+"""Legacy module kept empty after AgentContext moved to agent_context."""

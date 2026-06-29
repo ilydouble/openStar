@@ -26,6 +26,7 @@ class UserInput(BaseModel):
     type: UserInputType
     text: str | None = None
     image_file_uuid: str | None = None
+    image_url: str | None = None
 
 
 class UserMessageItem(SessionItemBase):

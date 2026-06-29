@@ -5,8 +5,9 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from icore_agent.application.agent import AgentTurnCommand, AgentTurnService
+from icore_agent.application.agent import AgentTurnService
 from icore_agent.application.agent.runtime import AgentRunConflict
+from icore_agent.domain.agent.turn import AgentTurnCommand
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_agent_turn_service, get_current_user

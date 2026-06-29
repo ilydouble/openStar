@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent import AgentTurnCommand
+from icore_agent.domain.agent.turn import AgentTurnCommand
 from icore_agent.application.agent.runtime import (
     AgentRunConflict,
     AgentRunNotActive,

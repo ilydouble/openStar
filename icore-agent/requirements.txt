@@ -3,10 +3,6 @@
 # Install: pip install -r requirements.txt
 # Dev tools: pip install -e ".[dev]"
 
-# ── Strands Agents SDK ────────────────────────
-strands-agents==1.35.0
-strands-agents-tools==0.4.1
-
 # ── Web framework ─────────────────────────────
 fastapi==0.115.12
 uvicorn[standard]==0.38.0

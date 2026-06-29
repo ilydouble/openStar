@@ -7,7 +7,7 @@ from typing import Any
 
 import litellm
 
-from icore_agent.application.agent.loop import ModelStepResult, ModelTextDelta
+from icore_agent.domain.agent.loop import ModelStepResult, ModelTextDelta
 from icore_agent.config import settings
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (

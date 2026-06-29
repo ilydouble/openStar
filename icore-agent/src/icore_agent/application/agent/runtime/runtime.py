@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from icore_agent.application.agent.commands import AgentTurnCommand
+from icore_agent.domain.agent.turn import AgentTurnCommand
 from icore_agent.domain.agent.session import (
     UserInput,
     UserInputType,

@@ -165,7 +165,7 @@ class LLMSettings(DomainSettings):
         temperature: float | None,
         extra_params: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
-        """Resolve model request parameters for LiteLLM and Strands."""
+        """Resolve model request parameters for LiteLLM."""
         params: dict[str, Any] = {}
         if max_tokens is not None:
             params["max_tokens"] = max_tokens

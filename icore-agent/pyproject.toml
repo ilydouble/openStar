@@ -5,13 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "icore-agent"
 version = "0.1.0"
-description = "iCore Agent Platform — Strands Agents + mini-SWE-agent"
+description = "iCore Agent Platform — self-built agent runtime + mini-SWE-agent"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
-    # Strands Agents SDK (open-source, model-agnostic)
-    "strands-agents>=0.1.0",
-    "strands-agents-tools>=0.4.0",
     # Web framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",

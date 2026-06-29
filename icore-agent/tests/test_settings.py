@@ -6,7 +6,7 @@ from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runt
 
 
 def test_resolve_litellm_config_splits_zai_client_args_and_params(monkeypatch):
-    """Z.AI credentials should be resolved into client_args for Strands."""
+    """Z.AI credentials should be resolved into LiteLLM client_args."""
     monkeypatch.setenv("MODEL_ID", "zai/glm-4.7")
     monkeypatch.setenv("ZAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
     monkeypatch.setenv("ZAI_API_KEY", "zai-key")

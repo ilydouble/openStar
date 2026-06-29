@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import AgentMessageItem
 from icore_agent.main import app

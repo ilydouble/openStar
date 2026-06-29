@@ -1,4 +1,4 @@
-"""Application commands for agent turn workflows."""
+"""Domain command model for one authenticated agent turn."""
 
 from __future__ import annotations
 

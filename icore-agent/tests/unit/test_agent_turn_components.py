@@ -14,8 +14,8 @@ from icore_agent.application.agent.turn import (
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.application.agent import AgentTurnCommand
-from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.domain.agent.turn import AgentTurnCommand
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,

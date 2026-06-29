@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.application.agent.loop import (
+from icore_agent.domain.agent.loop import (
     ModelClient,
     ModelStepResult,
     ModelTextDelta,

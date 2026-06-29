@@ -12,6 +12,8 @@ from icore_agent.application.agent.loop import (
     AgentLoopAborted,
     AgentLoopError,
     AgentLoopRequest,
+)
+from icore_agent.domain.agent.loop import (
     ModelTextDelta,
     ModelStepResult,
 )

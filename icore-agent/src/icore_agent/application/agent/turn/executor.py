@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from icore_agent.application.agent.loop import AgentLoopControl
 from icore_agent.application.agent.loop.agent_loop import (
     AgentLoop,
     AgentLoopAborted,
     AgentLoopError,
 )
+from icore_agent.domain.agent.loop import AgentLoopControl
 from icore_agent.domain.agent.turn import TurnError, TurnEvent
 
 from .lifecycle import TurnLifecycle

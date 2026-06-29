@@ -10,8 +10,8 @@ from icore_agent.application.agent.context import (
     dedupe_file_uuids,
     load_agent_context,
 )
+from icore_agent.domain.agent.loop import ModelClient
 from icore_agent.application.agent.loop.agent_loop import AgentLoop
-from icore_agent.application.agent.loop import ModelClient
 from icore_agent.application.agent.runtime import (
     AgentRunControl,
     AgentRunControlResult,
@@ -30,10 +30,14 @@ from icore_agent.application.files import FileAssetService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
 from icore_agent.domain.agent.session import UserMessageItem
-from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind
+from icore_agent.domain.agent.turn import (
+    AgentTurnCommand,
+    Turn,
+    TurnEvent,
+    TurnEventKind,
+)
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ..commands import AgentTurnCommand
 from ..session import AgentSessionService
 from .routing import classify_turn_intent
 

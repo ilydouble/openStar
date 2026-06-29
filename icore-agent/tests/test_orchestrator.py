@@ -20,17 +20,11 @@ from icore_agent.application.agent.tool.catalog import (
 from icore_agent.config import ResolvedLiteLLMConfig
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
-    UserInput,
-    UserInputType,
-    UserMessageItem,
 )
-from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.infrastructure.agent.chat_completions import (
     ChatCompletionsModelClient,
     create_chat_completions_model_client,
-)
-from icore_agent.infrastructure.agent.strands.agent_factory import (
-    create_strands_orchestrator,
 )
 from icore_agent.main import app
 from .test_account_flow import ASGISyncTestClient
@@ -205,34 +199,6 @@ def test_create_chat_completions_model_client_uses_resolved_model(mock_settings)
         max_tokens=123,
         temperature=0.2,
     )
-
-
-@patch("icore_agent.infrastructure.agent.strands.model_factory.LiteLLMModel")
-@patch("icore_agent.infrastructure.agent.strands.agent_factory.Agent")
-def test_create_strands_orchestrator_accepts_prompt_envelope(mock_agent_cls, _mock_model_cls):
-    """Legacy Strands factory should still satisfy the prepared-runner protocol."""
-    mock_agent = MagicMock(return_value="strands reply")
-    mock_agent.messages = []
-    mock_agent.callback_handler = None
-    mock_agent_cls.return_value = mock_agent
-    envelope = PromptEnvelope(
-        base_instructions="Base policy",
-        current_user_item=UserMessageItem(content=[
-            UserInput(type=UserInputType.TEXT, text="Hello"),
-        ]),
-    )
-
-    runner = create_strands_orchestrator(
-        prompt_envelope=envelope,
-        tool_definitions=[],
-    )
-    reply = runner(envelope)
-
-    assert reply == "strands reply"
-    _, agent_kwargs = mock_agent_cls.call_args
-    assert agent_kwargs["system_prompt"] == "Base policy"
-    assert mock_agent.messages == []
-    mock_agent.assert_called_once_with("Hello")
 
 
 def test_orchestrator_prompt_builder_uses_only_base_and_tool_rules():

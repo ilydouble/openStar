@@ -6,15 +6,12 @@ from collections.abc import Callable
 from typing import Any
 
 from icore_agent.application.agent.context import AgentPromptContextManager
-from icore_agent.application.agent.loop import (
-    AgentLoopControl,
-    AgentLoopRequest,
-    ModelClient,
-)
+from icore_agent.application.agent.loop import AgentLoopRequest
 from icore_agent.application.agent.tool import ToolRuntime
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
+from icore_agent.domain.agent.loop import AgentLoopControl, ModelClient
 from icore_agent.domain.agent.turn import Turn
 
 ModelClientFactory = Callable[..., ModelClient]

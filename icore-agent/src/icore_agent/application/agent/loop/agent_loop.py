@@ -12,10 +12,7 @@ from icore_agent.domain.agent.session import (
     SessionItemStatus,
     ToolCallItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnEvent
-from icore_agent.shared.logging.app_logger import get_logger
-
-from .types import (
+from icore_agent.domain.agent.loop import (
     AgentLoopControl,
     ModelClient,
     ModelStepResult,
@@ -24,6 +21,8 @@ from .types import (
     PromptContextManager,
     ToolRuntimePort,
 )
+from icore_agent.domain.agent.turn import Turn, TurnEvent
+from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 

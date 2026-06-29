@@ -8,12 +8,11 @@ from typing import Any
 import pytest
 
 from icore_agent.application.agent import (
-    AgentTurnCommand,
     AgentTurnService,
     AgentIntent,
     classify_turn_intent,
 )
-from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.application.agent.context import dedupe_file_uuids
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
@@ -24,7 +23,12 @@ from icore_agent.domain.agent.session import (
     UserMessageItem,
 )
 from icore_agent.domain.files.models import FileAsset
-from icore_agent.domain.agent.turn import Turn, TurnEventKind, TurnStatus
+from icore_agent.domain.agent.turn import (
+    AgentTurnCommand,
+    Turn,
+    TurnEventKind,
+    TurnStatus,
+)
 from icore_agent.domain.user import AuthenticatedUser
 
 

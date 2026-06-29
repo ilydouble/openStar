@@ -500,7 +500,6 @@ def test_agent_chat_handler_stays_http_adapter_only():
         "create_orchestrator",
         "infrastructure.memory",
         "set_runtime_user",
-        "set_parent_callback",
         "data: [DONE]",
         "text/event-stream",
     }
@@ -516,7 +515,7 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
         "agent" / "handlers" / "chat.py"
     ).read_text(encoding="utf-8")
     command = (
-        package_dir / "application" / "agent" / "commands.py"
+        package_dir / "domain" / "agent" / "turn" / "turn_command.py"
     ).read_text(encoding="utf-8")
     dependencies = (
         package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
@@ -538,14 +537,18 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
         encoding="utf-8"
     )
     agent_context_dir = agent_dir / "context"
+    agent_domain_loop_dir = package_dir / "domain" / "agent" / "loop"
     agent_domain_context_dir = package_dir / "domain" / "agent" / "context"
     agent_domain_prompt_dir = package_dir / "domain" / "agent" / "prompt"
+    agent_domain_turn_dir = package_dir / "domain" / "agent" / "turn"
     agent_prompt_dir = agent_dir / "prompt"
     agent_turn_dir = agent_dir / "turn"
     agent_session_dir = agent_dir / "session"
     agent_runner_dir = agent_dir / "runner"
     agent_tool_dir = agent_dir / "tool"
-    strands_dir = package_dir / "infrastructure" / "agent" / "strands"
+    legacy_vendor = "str" + "ands"
+    legacy_vendor_title = "Str" + "ands"
+    legacy_vendor_dir = package_dir / "infrastructure" / "agent" / legacy_vendor
     chat_completions_dir = (
         package_dir / "infrastructure" / "agent" / "chat_completions"
     )
@@ -571,6 +574,14 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_domain_prompt_dir / "__init__.py").is_file()
     assert (agent_domain_prompt_dir / "prompt_envelope.py").is_file()
     assert (agent_domain_prompt_dir / "system_prompt.py").is_file()
+    assert (agent_domain_loop_dir / "__init__.py").is_file()
+    assert (agent_domain_loop_dir / "model_step.py").is_file()
+    assert (agent_domain_loop_dir / "model_client.py").is_file()
+    assert (agent_domain_loop_dir / "context_manager.py").is_file()
+    assert (agent_domain_loop_dir / "tool_runtime.py").is_file()
+    assert (agent_domain_loop_dir / "control.py").is_file()
+    assert (agent_domain_turn_dir / "turn_command.py").is_file()
+    assert not (agent_dir / "commands.py").exists()
     assert (agent_prompt_dir / "__init__.py").is_file()
     assert (agent_prompt_dir / "assembler.py").is_file()
     assert not list((agent_dir / "sys_prompt").glob("**/*.py"))
@@ -578,7 +589,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_context_dir / "attachments.py").is_file()
     assert (agent_context_dir / "history.py").is_file()
     assert (agent_context_dir / "memory.py").is_file()
-    assert (agent_dir / "loop" / "types.py").is_file()
+    assert not (agent_dir / "loop" / "types.py").exists()
     assert (agent_turn_dir / "__init__.py").is_file()
     assert (agent_turn_dir / "executor.py").is_file()
     assert (agent_turn_dir / "lifecycle.py").is_file()
@@ -590,21 +601,13 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (agent_turn_dir / "routing.py").is_file()
     assert (agent_session_dir / "__init__.py").is_file()
     assert (agent_session_dir / "service.py").is_file()
-    assert (agent_runner_dir / "__init__.py").is_file()
-    assert not (agent_runner_dir / "orchestrator.py").exists()
-    assert not (agent_runner_dir / "model_factory.py").exists()
+    assert not agent_runner_dir.exists()
     assert (agent_tool_dir / "__init__.py").is_file()
     assert not (agent_tool_dir / "callback_context.py").exists()
     assert not (agent_tool_dir / "event_bridge.py").exists()
     assert not (agent_tool_dir / "payloads.py").exists()
     assert not (agent_tool_dir / "projection.py").exists()
-    assert (strands_dir / "__init__.py").is_file()
-    assert (strands_dir / "agent_factory.py").is_file()
-    assert (strands_dir / "model_factory.py").is_file()
-    assert (strands_dir / "tool_adapter.py").is_file()
-    assert (strands_dir / "event_bridge.py").is_file()
-    assert (strands_dir / "payloads.py").is_file()
-    assert (strands_dir / "callback_context.py").is_file()
+    assert not legacy_vendor_dir.exists()
     assert (chat_completions_dir / "__init__.py").is_file()
     assert (chat_completions_dir / "runner.py").is_file()
     assert (chat_completions_dir / "renderer.py").is_file()
@@ -612,7 +615,7 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert not (chat_completions_dir / "payloads.py").exists()
     assert not (agent_turn_dir / "tool_projection.py").exists()
     assert not (package_dir / "application" /
-                "agent" / "strands_bridge.py").exists()
+                "agent" / f"{legacy_vendor}_bridge.py").exists()
     assert not (package_dir / "application" /
                 "agent" / "tool_payloads.py").exists()
     forbidden_import = "from " + "application.chat"
@@ -627,25 +630,29 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "def classify_turn_intent" in routing
     assert not (agent_dir / "results.py").exists()
     assert "AgentTurnResult" not in agent_init
-    assert "StrandsToolEventBridge" not in agent_init
+    assert f"{legacy_vendor_title}ToolEventBridge" not in agent_init
+    assert "AgentTurnCommand" not in agent_init
     assert not (package_dir / "domain" / "chat").exists()
     assert "class AgentHint" not in routing
     assert "agent_hint" not in routing
     assert "enable_tools" not in routing
     assert "class AgentSessionService" in session_service
     assert "AgentTurnExecutor" in turn_service
-    assert "ModelClient" in agent_init
-    assert "ModelStepResult" in agent_init
-    assert "PromptContextManager" in agent_init
     assert "ToolRuntime" in agent_init
-    assert "ToolRuntimePort" in agent_init
+    assert "ModelClient" not in agent_init
+    assert "ModelStepResult" not in agent_init
+    assert "PromptContextManager" not in agent_init
+    assert "ToolRuntimePort" not in agent_init
     assert not (agent_dir / "async_bridge.py").exists()
     assert "AgentLoopRequest" not in turn_service
-    assert "StrandsToolEventBridge" not in turn_service
+    assert f"{legacy_vendor_title}ToolEventBridge" not in turn_service
     assert "begin_turn_usage_capture" not in turn_service
     assert "_safe_persist_event" not in turn_service
     for path in agent_dir.rglob("*.py"):
-        assert "from strands" not in path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+        assert f"from {legacy_vendor}" not in text
+        assert "application.agent.loop." + "types" not in text
+        assert "application.agent." + "commands" not in text
     assert "class ChatCompletionRole(str, Enum)" in roles
     assert 'TOOL = "tool"' in roles
 
@@ -674,10 +681,7 @@ def test_agent_session_migrations_use_turns_and_session_items_as_canonical_truth
 
 def test_number_comparator_is_registered_with_orchestrator_tools():
     """The orchestrator should expose the deterministic number comparison tool."""
-    agent_factory = (
-        AGENT_ROOT / "src" / "icore_agent" /
-        "infrastructure" / "agent" / "strands" / "agent_factory.py"
-    ).read_text(encoding="utf-8")
+    legacy_vendor = "str" + "ands"
     catalog_init = (
         AGENT_ROOT / "src" / "icore_agent" /
         "application" / "agent" / "tool" / "catalog" / "__init__.py"
@@ -686,14 +690,9 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
         AGENT_ROOT / "src" / "icore_agent" /
         "domain" / "agent" / "tool" / "tool_definition.py"
     ).read_text(encoding="utf-8")
-    tool_adapter = (
-        AGENT_ROOT / "src" / "icore_agent" /
-        "infrastructure" / "agent" / "strands" / "tool_adapter.py"
-    ).read_text(encoding="utf-8")
 
-    assert "build_orchestrator_tool_definitions" in agent_factory
-    assert "make_agent_tool" in agent_factory
     assert "build_orchestrator_tools" not in catalog_init
+    assert "build_orchestrator_tool_definitions" in catalog_init
     assert "number_comparator" in catalog_init
     assert "orchestrator_tool_names" not in catalog_init
     assert "class ToolDefinition" in tool_definition
@@ -702,11 +701,8 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
         AGENT_ROOT / "src" / "icore_agent" /
         "application" / "agent" / "tool" / "tool_definition.py"
     ).exists()
-    assert "class AgentTool" in tool_adapter
-    assert "strands.types._events" not in tool_definition
+    assert f"{legacy_vendor}.types._events" not in tool_definition
     assert "ToolResultEvent" not in tool_definition
-    assert "ToolResultEvent" not in tool_adapter
-    assert "strands.types.tools" in tool_adapter
     assert "prompt_snippet" in catalog_init
     assert "research_agent_tool" not in catalog_init
     assert "data_agent_tool" not in catalog_init
@@ -714,14 +710,18 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
 
 def test_chat_orchestration_lives_in_application_layer():
     """Keep chat runtime thin while agent owns prompts and tool catalog."""
+    legacy_vendor = "str" + "ands"
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     chat_dir = package_dir / "application" / "chat"
     agent_dir = package_dir / "application" / "agent"
-    agent_factory = (
-        package_dir / "infrastructure" / "agent" / "strands" / "agent_factory.py"
+    dependencies = (
+        package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
     ).read_text(
         encoding="utf-8"
     )
+    chat_completions_runner = (
+        package_dir / "infrastructure" / "agent" / "chat_completions" / "runner.py"
+    ).read_text(encoding="utf-8")
     domain_prompt = (
         package_dir / "domain" / "agent" / "prompt" / "system_prompt.py"
     ).read_text(encoding="utf-8")
@@ -747,12 +747,13 @@ def test_chat_orchestration_lives_in_application_layer():
     assert chat_sources == []
     assert (catalog_dir / "web_search.py").is_file()
     assert (agent_dir / "sequential" / "agent.py").is_file()
-    assert "ModuleNotFoundError" not in agent_factory
-    assert "_Fallback" not in agent_factory
-    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in agent_factory
-    assert "sub-agent" not in agent_factory
-    assert "build_base_instructions" in agent_factory
-    assert "build_system_prompt" not in agent_factory
+    assert "create_chat_completions_model_client" in dependencies
+    assert f"create_{legacy_vendor}_orchestrator" not in dependencies
+    assert "ModuleNotFoundError" not in chat_completions_runner
+    assert "_Fallback" not in chat_completions_runner
+    assert "ORCHESTRATOR_SYSTEM_PROMPT_BASE" not in chat_completions_runner
+    assert "sub-agent" not in chat_completions_runner
+    assert "build_system_prompt" not in chat_completions_runner
     assert "class BuildSystemPromptOptions" not in domain_prompt
     assert "class SystemPrompt" not in domain_prompt
     assert "class PromptSource" not in domain_prompt

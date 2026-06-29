@@ -3,7 +3,7 @@
 # ruff: noqa: E402,I001
 # autopep8: off
 
-# Split dotenv files must be loaded before LiteLLM/Strands import time.
+# Split dotenv files must be loaded before LiteLLM import time.
 from .config.dotenv import load_domain_dotenvs
 
 load_domain_dotenvs()
@@ -109,8 +109,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "iCore Agent Platform — multi-agent orchestration powered by "
-            "AWS Strands Agents SDK and mini-SWE-agent sequential executor."
+            "iCore Agent Platform — self-built agent runtime with "
+            "mini-SWE-agent sequential executor."
         ),
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,

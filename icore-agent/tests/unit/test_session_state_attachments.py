@@ -8,15 +8,15 @@ from uuid import uuid4
 
 import pytest
 
-from icore_agent.application.agent import AgentSessionService, AgentTurnCommand, AgentTurnService
-from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.application.agent import AgentSessionService, AgentTurnService
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     UserInput,
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnStatus
+from icore_agent.domain.agent.turn import AgentTurnCommand, Turn, TurnStatus
 from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.interfaces.http.v1.agent.handlers.session import (

@@ -1,165 +1,170 @@
-"""Tests for the direct Chat Completions agent runner."""
+"""Tests for the direct Chat Completions model client."""
 
 from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
 from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.tool import (
-    ToolChoice,
-    ToolDefinition,
-    ToolExecutionContext,
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    ToolCallItem,
+    ToolCallResult,
+    ToolCallStatus,
+    ToolFunction,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
+from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
 from icore_agent.infrastructure.agent.chat_completions import (
-    ChatCompletionsRunner,
-    ChatCompletionsToolEventBridge,
+    ChatCompletionsModelClient,
+    render_chat_completions_messages,
 )
 
 
-def test_chat_completions_runner_executes_tool_call_and_continues(monkeypatch) -> None:
-    """Runner should execute model-requested tools and continue to a final answer."""
+@pytest.mark.asyncio
+async def test_chat_completions_model_client_samples_once_without_running_tools(
+    monkeypatch,
+) -> None:
+    """Model client should return assistant/tool-call items from one provider call."""
     calls: list[dict[str, Any]] = []
 
-    def fake_completion(**kwargs: Any) -> dict[str, Any]:
+    async def fake_completion(**kwargs: Any) -> dict[str, Any]:
         calls.append(kwargs)
-        if len(calls) == 1:
-            return {
-                "choices": [{
-                    "message": {
-                        "content": None,
-                        "tool_calls": [{
-                            "id": "tool-1",
-                            "type": "function",
-                            "function": {
-                                "name": "number_comparator",
-                                "arguments": '{"left": 2, "right": 1}',
-                            },
-                        }],
-                    }
-                }],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            }
         return {
+            "id": "response-1",
             "choices": [{
-                "message": {"content": "2 is greater than 1."}
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "tool-1",
+                        "type": "function",
+                        "function": {
+                            "name": "number_comparator",
+                            "arguments": '{"left": 2, "right": 1}',
+                        },
+                    }],
+                },
+                "finish_reason": "tool_calls",
             }],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            "usage": {
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+                "total_tokens": 2,
+            },
         }
 
     monkeypatch.setattr(
-        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.completion",
+        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
         fake_completion,
     )
-    bridge = RecordingToolBridge()
-    tool_definition = ToolDefinition(
-        name="number_comparator",
-        label="Number comparator",
-        description="Compare numbers.",
-        parameters={"type": "object"},
-        execute=_compare_numbers,
-    )
-    runner = ChatCompletionsRunner(
-        model_id="test-model",
+    tool_definition = _tool_definition()
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
         client_args={},
         params={},
-        tool_definitions=[tool_definition],
-        tool_bridge=bridge,
     )
-    envelope = PromptEnvelope(
+
+    result = await client.sample(_envelope(tool_definition))
+
+    assert len(calls) == 1
+    assert calls[0]["tools"][0]["function"]["name"] == "number_comparator"
+    assert calls[0]["tool_choice"] == "auto"
+    assert result.assistant_item.text == ""
+    assert result.stop_reason == "tool_calls"
+    assert result.model == "test-provider/test-model"
+    assert result.provider == "test-provider"
+    assert result.usage == {
+        "prompt_tokens": 1,
+        "completion_tokens": 1,
+        "total_tokens": 2,
+    }
+    assert [call.provider_tool_call_id for call in result.tool_calls] == [
+        "tool-1",
+    ]
+    assert result.tool_calls[0].function.name == "number_comparator"
+    assert result.tool_calls[0].function.arguments_json == {
+        "left": 2,
+        "right": 1,
+    }
+
+
+def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> None:
+    """Renderer should convert current-turn tool state only at the provider boundary."""
+    tool_definition = _tool_definition()
+    tool_call = ToolCallItem(
+        provider_tool_call_id="tool-1",
+        function=ToolFunction(
+            name="number_comparator",
+            arguments_text='{"left":2,"right":1}',
+            arguments_json={"left": 2, "right": 1},
+        ),
+        status=ToolCallStatus.COMPLETED,
+        result=ToolCallResult(content='{"comparison":"greater"}'),
+    )
+    envelope = _envelope(
+        tool_definition,
+        turn_items=[
+            AgentMessageItem(text=""),
+            tool_call,
+        ],
+    )
+
+    messages = render_chat_completions_messages(envelope)
+
+    assert messages[-2] == {
+        "role": ChatCompletionRole.ASSISTANT.value,
+        "content": None,
+        "tool_calls": [{
+            "id": "tool-1",
+            "type": "function",
+            "function": {
+                "name": "number_comparator",
+                "arguments": '{"left":2,"right":1}',
+            },
+        }],
+    }
+    assert messages[-1] == {
+        "role": ChatCompletionRole.TOOL.value,
+        "tool_call_id": "tool-1",
+        "name": "number_comparator",
+        "content": '{"comparison":"greater"}',
+    }
+
+
+def _envelope(
+    tool_definition: ToolDefinition,
+    *,
+    turn_items: list[AgentMessageItem | ToolCallItem] | None = None,
+) -> PromptEnvelope:
+    """Build a prompt envelope for chat completions model-client tests."""
+    return PromptEnvelope(
         base_instructions="Base policy",
         context_items=[],
         history_items=[],
         current_user_item=UserMessageItem(content=[
             UserInput(type=UserInputType.TEXT, text="Which is larger?"),
         ]),
+        turn_items=list(turn_items or []),
         tools=[tool_definition],
         tool_choice=ToolChoice.AUTO,
     )
 
-    reply = runner(envelope)
 
-    assert reply == "2 is greater than 1."
-    assert calls[0]["tools"][0]["function"]["name"] == "number_comparator"
-    assert calls[0]["tool_choice"] == "auto"
-    assert calls[1]["messages"][-1] == {
-        "role": ChatCompletionRole.TOOL.value,
-        "tool_call_id": "tool-1",
-        "name": "number_comparator",
-        "content": '{"comparison": "greater"}',
-    }
-    assert bridge.started == [{
-        "toolUseId": "tool-1",
-        "name": "number_comparator",
-        "input": {"left": 2, "right": 1},
-    }]
-    assert bridge.finished[0][1]["status"] == "success"
-
-
-def test_chat_completions_tool_event_bridge_emits_turn_events() -> None:
-    """Tool event bridge should convert direct tool payloads into turn events."""
-    bridge = ChatCompletionsToolEventBridge(
-        session_id="session-1",
-        turn_id="turn-1",
+def _tool_definition() -> ToolDefinition:
+    """Return a deterministic number-comparator tool definition."""
+    return ToolDefinition(
+        name="number_comparator",
+        label="Number comparator",
+        description="Compare numbers.",
+        parameters={"type": "object"},
+        execute=_compare_numbers,
     )
-    events: list[Any] = []
-
-    with bridge.bound_to(
-        emit=events.append,
-        emit_assistant_delta=lambda _token: None,
-    ):
-        tool_use = {
-            "toolUseId": "tool-1",
-            "name": "number_comparator",
-            "input": {"left": 2, "right": 1},
-        }
-        bridge.record_start(tool_use)
-        bridge.record_finish(
-            tool_use,
-            {
-                "toolUseId": "tool-1",
-                "status": "success",
-                "content": [{"text": '{"comparison":"greater"}'}],
-            },
-            exception=None,
-        )
-
-    assert len(events) == 2
-    assert events[0].turn_id == "turn-1"
-    assert events[0].item.provider_tool_call_id == "tool-1"
-    assert events[0].item.function.name == "number_comparator"
-    assert events[1].item.result.content == '{"comparison":"greater"}'
 
 
-def _compare_numbers(
-    _tool_call_id: str,
-    params: dict[str, Any],
-    _context: ToolExecutionContext,
-) -> dict[str, str]:
+def _compare_numbers(*_: Any) -> dict[str, str]:
     """Return a deterministic comparison result."""
-    return {"comparison": "greater" if params["left"] > params["right"] else "other"}
-
-
-class RecordingToolBridge:
-    """Tool bridge fake that records normalized tool events."""
-
-    def __init__(self) -> None:
-        """Create the fake bridge."""
-        self.started: list[dict[str, Any]] = []
-        self.finished: list[tuple[dict[str, Any],
-                                  dict[str, Any], Exception | None]] = []
-
-    def record_start(self, tool_use: dict[str, Any]) -> None:
-        """Record one tool start."""
-        self.started.append(tool_use)
-
-    def record_finish(
-        self,
-        tool_use: dict[str, Any],
-        result: dict[str, Any],
-        *,
-        exception: Exception | None,
-    ) -> None:
-        """Record one tool completion."""
-        self.finished.append((tool_use, result, exception))
+    return {"comparison": "greater"}

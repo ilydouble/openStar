@@ -20,8 +20,7 @@ from icore_agent.infrastructure.control_plane import (
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
 from icore_agent.infrastructure.agent.chat_completions import (
-    create_chat_completions_runner,
-    create_chat_completions_tool_event_bridge,
+    create_chat_completions_model_client,
 )
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
@@ -141,8 +140,7 @@ def get_agent_turn_service() -> AgentTurnService:
         agent_session=agent_session_service,
         file_service=file_asset_service,
         conversation_memory=memory,
-        orchestrator_factory=create_chat_completions_runner,
-        tool_bridge_factory=create_chat_completions_tool_event_bridge,
+        model_client_factory=create_chat_completions_model_client,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
     )

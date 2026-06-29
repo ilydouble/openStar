@@ -1,3 +1,5 @@
-"""Application-layer tool catalog package."""
+"""Application-layer tool catalog and runtime package."""
 
-__all__: list[str] = []
+from .runtime import ToolRuntime
+
+__all__ = ["ToolRuntime"]

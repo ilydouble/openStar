@@ -9,7 +9,13 @@ from uuid import uuid4
 import pytest
 
 from icore_agent.application.agent import AgentSessionService, AgentTurnCommand, AgentTurnService
-from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from icore_agent.application.agent.loop import ModelStepResult
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
+)
 from icore_agent.domain.agent.turn import Turn, TurnStatus
 from icore_agent.domain.files.models import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
@@ -63,8 +69,7 @@ async def test_chat_turn_persists_display_caption_with_file_uuids() -> None:
         agent_session=history,
         file_service=_FakeFileService({}),
         conversation_memory=_NoopMemory(),
-        orchestrator_factory=_StaticOrchestratorFactory("ok"),
-        tool_bridge_factory=_NoopToolBridge,
+        model_client_factory=_StaticModelClientFactory("ok"),
         usage_service=_NoopUsageService(),
     )
     command = AgentTurnCommand(
@@ -181,20 +186,27 @@ class _NoopMemory:
         return False
 
 
-class _StaticOrchestratorFactory:
+class _StaticModelClientFactory:
+    """Model-client factory fake that returns a fixed assistant message."""
+
     def __init__(self, reply: str) -> None:
+        """Create a static model-client factory."""
         self._reply = reply
 
     def __call__(self, **kwargs):
+        """Return a static model client for attachment tests."""
+        _ = kwargs
         reply = self._reply
 
-        class _Agent:
-            def __call__(self, prompt_envelope) -> str:
+        class _ModelClient:
+            async def sample(self, prompt_envelope) -> ModelStepResult:
                 """Return the configured reply for any prompt envelope."""
                 _ = prompt_envelope
-                return reply
+                return ModelStepResult(
+                    assistant_item=AgentMessageItem(text=reply),
+                )
 
-        return _Agent()
+        return _ModelClient()
 
 
 class _NoopUsageService:
@@ -212,29 +224,6 @@ class _NoopUsageService:
 
     def record_llm_usage(self, **payload: Any) -> None:
         """Accept LLM usage recording without persisting anything."""
-
-
-class _NoopToolBridge:
-    """No-op bridge for attachment-focused turn tests."""
-
-    def __init__(self, *, session_id: str, turn_id: str) -> None:
-        self.session_id = session_id
-        self.turn_id = turn_id
-
-    def on_callback(self, **kwargs: Any) -> None:
-        """Ignore fake runner callbacks."""
-
-    def bound_to(self, **kwargs: Any):
-        """Return a no-op context manager."""
-
-        class _Context:
-            def __enter__(self) -> None:
-                return None
-
-            def __exit__(self, exc_type, exc, traceback) -> None:
-                return None
-
-        return _Context()
 
 
 class _FakeFileService:

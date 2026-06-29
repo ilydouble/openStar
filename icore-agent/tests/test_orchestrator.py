@@ -19,13 +19,15 @@ from icore_agent.application.agent.tool.catalog import (
 )
 from icore_agent.config import ResolvedLiteLLMConfig
 from icore_agent.domain.agent.session import (
+    AgentMessageItem,
     UserInput,
     UserInputType,
     UserMessageItem,
 )
+from icore_agent.application.agent.loop import ModelStepResult
 from icore_agent.infrastructure.agent.chat_completions import (
-    ChatCompletionsRunner,
-    create_chat_completions_runner,
+    ChatCompletionsModelClient,
+    create_chat_completions_model_client,
 )
 from icore_agent.infrastructure.agent.strands.agent_factory import (
     create_strands_orchestrator,
@@ -57,6 +59,21 @@ def _api_data(resp):
     return payload["data"]
 
 
+class _StaticModelClient:
+    """Model client fake that returns a configured assistant reply."""
+
+    def __init__(self, reply: str) -> None:
+        """Create a static reply model client."""
+        self._reply = reply
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Return the configured assistant reply for any prompt."""
+        _ = envelope
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(text=self._reply),
+        )
+
+
 # ── Health endpoints ───────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
@@ -75,14 +92,14 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.dependencies.create_chat_completions_runner")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_chat_completions_model_client")
 @patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
 
-    mock_agent = MagicMock(return_value="Hello from iCore Agent!")
-    mock_create_orch.return_value = mock_agent
+    mock_create_orch.return_value = _StaticModelClient(
+        "Hello from iCore Agent!")
 
     resp = client.post(
         "/api/v1/agent/chat",
@@ -164,8 +181,8 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
 @patch("icore_agent.infrastructure.agent.chat_completions.runner.settings")
-def test_create_chat_completions_runner_uses_resolved_model(mock_settings):
-    """Chat Completions runner should use resolved LiteLLM settings."""
+def test_create_chat_completions_model_client_uses_resolved_model(mock_settings):
+    """Chat Completions model client should use resolved LiteLLM settings."""
     mock_settings.effective_model_id.return_value = "test-model"
     mock_settings.agent_max_tokens = 123
     mock_settings.agent_temperature = 0.2
@@ -175,15 +192,12 @@ def test_create_chat_completions_runner_uses_resolved_model(mock_settings):
         params={"max_tokens": 123, "temperature": 0.2},
     )
 
-    runner = create_chat_completions_runner(
+    model_client = create_chat_completions_model_client(
         session_id="session-1",
         user_id="user-1",
-        tool_definitions=build_orchestrator_tool_definitions(
-            session_id="session-1",
-        ),
     )
 
-    assert isinstance(runner, ChatCompletionsRunner)
+    assert isinstance(model_client, ChatCompletionsModelClient)
     mock_settings.resolve_litellm_config.assert_called_once_with(
         model_id="test-model",
         user_id="user-1",

@@ -7,10 +7,13 @@ from icore_agent.application.agent.loop.agent_loop import (
     AgentLoopRequest,
 )
 from icore_agent.application.agent.loop.types import (
-    AgentToolEventBridge,
-    PreparedAgentRunner,
+    ModelClient,
+    ModelStepResult,
+    PromptContextManager,
+    ToolRuntimePort,
 )
 from icore_agent.application.agent.session import AgentSessionService
+from icore_agent.application.agent.tool import ToolRuntime
 from .turn.routing import AgentIntent, classify_turn_intent
 from .turn.service import AgentTurnService
 
@@ -20,9 +23,12 @@ __all__ = [
     "AgentLoopRequest",
     "AgentIntent",
     "AgentSessionService",
-    "AgentToolEventBridge",
-    "PreparedAgentRunner",
     "AgentTurnCommand",
     "AgentTurnService",
+    "ModelClient",
+    "ModelStepResult",
+    "PromptContextManager",
+    "ToolRuntime",
+    "ToolRuntimePort",
     "classify_turn_intent",
 ]

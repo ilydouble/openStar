@@ -1,39 +1,33 @@
-"""Prepared-runner construction for agent turns."""
+"""Agent loop request construction for agent turns."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
-from icore_agent.application.agent.loop.agent_loop import AgentLoopRequest
-from icore_agent.application.agent.loop.types import (
-    AgentToolEventBridge,
-    PreparedAgentRunner,
-)
-from icore_agent.application.agent.prompt import build_agent_prompt_envelope
+from icore_agent.application.agent.context import AgentPromptContextManager
+from icore_agent.application.agent.loop import AgentLoopRequest, ModelClient
+from icore_agent.application.agent.tool import ToolRuntime
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.tool import ToolDefinition
+from icore_agent.domain.agent.turn import Turn
 
-OrchestratorFactory = Callable[..., PreparedAgentRunner]
-ToolEventBridgeFactory = Callable[..., AgentToolEventBridge]
+ModelClientFactory = Callable[..., ModelClient]
+ModelClientWrapper = Callable[[ModelClient], ModelClient]
 
 
 class AgentTurnRunnerFactory:
-    """Build provider-specific runners while exposing an agent-turn request."""
+    """Build application loop requests while hiding concrete adapters."""
 
     def __init__(
         self,
-        orchestrator_factory: OrchestratorFactory,
+        model_client_factory: ModelClientFactory,
         *,
-        tool_bridge_factory: ToolEventBridgeFactory,
         file_service: Any | None = None,
     ) -> None:
-        """Create a runner factory from the existing orchestrator factory."""
-        self._orchestrator_factory = orchestrator_factory
-        self._tool_bridge_factory = tool_bridge_factory
+        """Create a loop-request factory with a model-client factory."""
+        self._model_client_factory = model_client_factory
         self._file_service = file_service
 
     def build_loop_request(
@@ -41,54 +35,29 @@ class AgentTurnRunnerFactory:
         *,
         command: Any,
         context: Any,
-        turn_id: str,
-        invoke: Callable[[PreparedAgentRunner, PromptEnvelope], Any] | None,
+        turn: Turn,
+        model_client_wrapper: ModelClientWrapper | None = None,
     ) -> AgentLoopRequest:
         """Build an AgentLoopRequest for one turn."""
-        tool_bridge = self._tool_bridge_factory(
-            session_id=command.session_id,
-            turn_id=turn_id,
-        )
         tool_definitions = build_orchestrator_tool_definitions(
             session_id=command.session_id,
             user_id=command.user_id,
             file_service=self._file_service,
         )
-        prompt_envelope = build_agent_prompt_envelope(
-            command=command,
-            context=context,
-            tool_definitions=tool_definitions,
+        model_client = self._model_client_factory(
+            session_id=command.session_id,
+            user_id=command.user_id,
         )
-        runner = self.build_runner(
-            command=command,
-            prompt_envelope=prompt_envelope,
-            tool_definitions=tool_definitions,
-            tool_bridge=tool_bridge,
-        )
+        if model_client_wrapper is not None:
+            model_client = model_client_wrapper(model_client)
         return AgentLoopRequest(
             session_id=command.session_id,
-            turn_id=turn_id,
-            prompt_envelope=prompt_envelope,
-            runner=runner,
-            tool_bridge=tool_bridge,
-            invoke=invoke,
+            turn_id=turn.id,
+            turn=turn,
+            context_manager=AgentPromptContextManager(
+                command=command,
+                context=context,
+            ),
+            model_client=model_client,
+            tool_runtime=ToolRuntime(tool_definitions),
         )
-
-    def build_runner(
-        self,
-        *,
-        command: Any,
-        prompt_envelope: PromptEnvelope,
-        tool_definitions: list[ToolDefinition],
-        tool_bridge: AgentToolEventBridge,
-    ) -> PreparedAgentRunner:
-        """Create one prepared runner for AgentLoop."""
-        orchestrator = self._orchestrator_factory(
-            callback_handler=tool_bridge.on_callback,
-            session_id=command.session_id,
-            hooks=[tool_bridge],
-            user_id=command.user_id,
-            prompt_envelope=prompt_envelope,
-            tool_definitions=tool_definitions,
-        )
-        return cast(PreparedAgentRunner, orchestrator)

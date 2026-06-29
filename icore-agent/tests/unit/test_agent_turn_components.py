@@ -15,6 +15,7 @@ from icore_agent.application.agent.turn import (
     TurnUsageRecorder,
 )
 from icore_agent.application.agent import AgentTurnCommand
+from icore_agent.application.agent.loop import ModelStepResult
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
@@ -28,7 +29,7 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import TurnError, TurnEvent, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -143,7 +144,7 @@ async def test_turn_transcript_recorder_appends_memory_and_extracts_on_compressi
     }]
 
 
-def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None:
+def test_turn_usage_recorder_handles_quota_and_model_usage(monkeypatch) -> None:
     """TurnUsageRecorder should keep quota and LLM usage capture out of the service."""
     usage = RecordingUsageService()
     recorder = TurnUsageRecorder(usage)
@@ -192,43 +193,45 @@ def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None
 
 
 def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
-    """AgentTurnRunnerFactory should hide concrete runner construction details."""
-    factory = RecordingOrchestratorFactory()
+    """AgentTurnRunnerFactory should hide concrete model/tool construction details."""
+    factory = RecordingModelClientFactory()
     runner_factory = AgentTurnRunnerFactory(
         factory,
-        tool_bridge_factory=FakeToolBridge,
     )
     command = _command(stream=False)
     context = StubContext()
     request = runner_factory.build_loop_request(
         command=command,
         context=context,
-        turn_id="turn-1",
-        invoke=lambda runner, prompt_envelope: runner(prompt_envelope),
+        turn=Turn(session_id="session-1", id="turn-1"),
+    )
+    prompt_envelope = request.context_manager.build_prompt(
+        turn=request.turn,
+        session_items=[],
+        tools=request.tool_runtime.visible_tools(),
     )
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
-    assert request.prompt_envelope.current_user_item.content[0].text == "Hello"
+    assert prompt_envelope.current_user_item.content[0].text == "Hello"
     attachment_context = "\n".join(
         item.content
-        for item in request.prompt_envelope.context_items
+        for item in prompt_envelope.context_items
         if item.kind == "file_attachment"
     )
     assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
     assert "read_uploaded_file" in attachment_context
-    assert request.runner is factory.runner
-    assert request.prompt_envelope.history_items[0].content[0].text == "old"
-    assert request.prompt_envelope.tools
-    assert isinstance(request.tool_bridge, FakeToolBridge)
+    assert request.model_client is factory.client
+    assert prompt_envelope.history_items[0].content[0].text == "old"
+    assert prompt_envelope.tools
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
     assert "attachments_text" not in factory.calls[0]
     assert "data_attachments" not in factory.calls[0]
     assert "file_service" not in factory.calls[0]
-    assert factory.calls[0]["prompt_envelope"] is request.prompt_envelope
-    assert factory.calls[0]["tool_definitions"]
-    assert len(factory.calls[0]["hooks"]) == 1
+    assert "prompt_envelope" not in factory.calls[0]
+    assert "tool_definitions" not in factory.calls[0]
+    assert "hooks" not in factory.calls[0]
 
 
 class FailingHistory:
@@ -388,30 +391,6 @@ class StubContext:
         return [UserInput(type=UserInputType.TEXT, text=user_text)]
 
 
-class FakeToolBridge:
-    """Tool bridge fake for runner factory tests."""
-
-    def __init__(self, *, session_id: str, turn_id: str) -> None:
-        """Create the fake bridge."""
-        self.session_id = session_id
-        self.turn_id = turn_id
-
-    def on_callback(self, **kwargs: Any) -> None:
-        """Accept provider callbacks."""
-
-    def bound_to(self, **kwargs: Any):
-        """Return a no-op context manager."""
-
-        class _Context:
-            def __enter__(self) -> None:
-                return None
-
-            def __exit__(self, exc_type, exc, traceback) -> None:
-                return None
-
-        return _Context()
-
-
 class StubSettings:
     """Settings fake with a stable model id."""
 
@@ -420,8 +399,8 @@ class StubSettings:
         return "test-model"
 
 
-class RecordingRunner:
-    """Prepared agent fake."""
+class RecordingModelClient:
+    """Model client fake."""
 
     prompt_envelopes: list[PromptEnvelope]
 
@@ -429,24 +408,31 @@ class RecordingRunner:
         """Create the fake."""
         self.prompt_envelopes = []
 
-    def __call__(self, prompt_envelope: PromptEnvelope) -> str:
-        """Return a fixed reply."""
+    async def sample(self, prompt_envelope: PromptEnvelope) -> ModelStepResult:
+        """Record a prompt and return a fixed model step."""
         self.prompt_envelopes.append(prompt_envelope)
-        return f"reply to {prompt_envelope.current_user_item.content[0].text}"
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(
+                text=(
+                    "reply to "
+                    f"{prompt_envelope.current_user_item.content[0].text}"
+                ),
+            ),
+        )
 
 
-class RecordingOrchestratorFactory:
-    """Orchestrator factory fake."""
+class RecordingModelClientFactory:
+    """Model-client factory fake."""
 
     def __init__(self) -> None:
         """Create the fake."""
         self.calls: list[dict[str, Any]] = []
-        self.runner = RecordingRunner()
+        self.client = RecordingModelClient()
 
-    def __call__(self, **kwargs: Any) -> RecordingRunner:
+    def __call__(self, **kwargs: Any) -> RecordingModelClient:
         """Record construction kwargs."""
         self.calls.append(kwargs)
-        return self.runner
+        return self.client
 
 
 def _command(

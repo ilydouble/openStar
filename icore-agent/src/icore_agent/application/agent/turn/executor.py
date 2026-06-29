@@ -48,10 +48,17 @@ class AgentTurnExecutor:
         request = self._runner_factory.build_loop_request(
             command=command,
             context=context,
-            turn_id=lifecycle.turn.id,
-            invoke=self._usage.invoke_with_usage(command),
+            turn=lifecycle.turn,
+            model_client_wrapper=lambda model_client: (
+                self._usage.wrap_model_client(command, model_client)
+            ),
         )
-        for context_item in request.prompt_envelope.context_items:
+        initial_envelope = request.context_manager.build_prompt(
+            turn=lifecycle.turn,
+            session_items=list(lifecycle.turn.items),
+            tools=request.tool_runtime.visible_tools(),
+        )
+        for context_item in initial_envelope.context_items:
             context_event = TurnEvent.item_completed(
                 session_id=command.session_id,
                 turn_id=lifecycle.turn.id,

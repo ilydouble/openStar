@@ -1,4 +1,4 @@
-"""Minimal prepared-agent loop wrapper."""
+"""Application-owned model/tool loop for one agent turn."""
 
 from __future__ import annotations
 
@@ -6,133 +6,154 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from icore_agent.domain.agent.session import AgentMessageItem, SessionItemStatus
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.turn import TurnEvent
+
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    SessionItemStatus,
+    ToolCallItem,
+)
+from icore_agent.domain.agent.turn import Turn, TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger
 
-from icore_agent.application.agent.async_bridge import (
-    AgentInvoker,
-    QueueItem,
-    patch_runner_callback,
-    put_threadsafe,
-    start_agent_worker,
-)
-from .types import AgentToolEventBridge, PreparedAgentRunner
+from .types import ModelClient, PromptContextManager, ToolRuntimePort
 
 log = get_logger(__name__)
 
+_DEFAULT_MAX_TOOL_ROUNDS = 8
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(slots=True)
 class AgentLoopRequest:
-    """Inputs needed to run one prepared agent turn."""
+    """Inputs needed to run one application-level agent loop."""
 
     session_id: str
     turn_id: str
-    prompt_envelope: PromptEnvelope
-    runner: PreparedAgentRunner
-    tool_bridge: AgentToolEventBridge
-    invoke: AgentInvoker | None = None
+    turn: Turn
+    context_manager: PromptContextManager
+    model_client: ModelClient
+    tool_runtime: ToolRuntimePort
+    max_tool_rounds: int = _DEFAULT_MAX_TOOL_ROUNDS
 
 
 class AgentLoopError(Exception):
-    """Raised when the prepared agent run fails."""
+    """Raised when the application agent loop cannot continue."""
 
 
 class AgentLoop:
-    """Run a prepared agent and emit item-level turn events."""
+    """Run the model-tool loop and emit item-level turn events."""
 
     def __init__(self, *, wall_budget_sec: int) -> None:
         """Create a loop with a hard wall-clock budget."""
         self._wall_budget_sec = wall_budget_sec
 
     async def run(self, request: AgentLoopRequest) -> AsyncIterator[TurnEvent]:
-        """Run one prepared agent request and stream domain events."""
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[QueueItem] = asyncio.Queue()
-        assistant_item = AgentMessageItem()
-        assistant_text: list[str] = []
-
-        yield TurnEvent.item_started(
-            session_id=request.session_id,
-            turn_id=request.turn_id,
-            item=assistant_item,
-        )
-
-        def emit_assistant_delta(token: str) -> None:
-            put_threadsafe(
-                loop=loop,
-                queue=queue,
-                kind="assistant_delta",
-                payload=token,
+        """Run model sampling and tool execution until the assistant stops."""
+        start = asyncio.get_running_loop().time()
+        tool_rounds = 0
+        while True:
+            self._raise_if_over_budget(start)
+            envelope = request.context_manager.build_prompt(
+                turn=request.turn,
+                session_items=list(request.turn.items),
+                tools=request.tool_runtime.visible_tools(),
             )
+            try:
+                step = await request.model_client.sample(envelope)
+            except Exception as exc:
+                log.error("agent_model_step_failed", error=str(exc))
+                raise AgentLoopError(str(exc)) from exc
 
-        with patch_runner_callback(request.runner, request.tool_bridge.on_callback):
-            start_agent_worker(
-                loop=loop,
-                queue=queue,
-                runner=request.runner,
-                prompt_envelope=request.prompt_envelope,
-                tool_bridge=request.tool_bridge,
-                emit_assistant_delta=emit_assistant_delta,
-                invoke=request.invoke,
+            started_assistant = _started_assistant_item(step.assistant_item)
+            assistant_item = _completed_assistant_item(step.assistant_item)
+            request.turn.upsert_item(started_assistant)
+            yield TurnEvent.item_started(
+                session_id=request.session_id,
+                turn_id=request.turn_id,
+                item=started_assistant,
             )
-            caught_error = None
-            start = loop.time()
-            while True:
-                if loop.time() - start > self._wall_budget_sec:
-                    caught_error = TimeoutError(
-                        f"Agent run exceeded {self._wall_budget_sec}s budget"
-                    )
-                    break
-                try:
-                    kind, payload = await asyncio.wait_for(
-                        queue.get(),
-                        timeout=1,
-                    )
-                except TimeoutError:
-                    continue
-
-                if kind == "assistant_delta":
-                    text = str(payload)
-                    assistant_text.append(text)
-                    yield TurnEvent.item_delta(
-                        session_id=request.session_id,
-                        turn_id=request.turn_id,
-                        item_id=assistant_item.id,
-                        delta={"text": text},
-                    )
-                elif kind == "event":
-                    yield payload
-                elif kind == "result":
-                    if not assistant_text:
-                        assistant_text.append(str(payload))
-                elif kind == "error":
-                    caught_error = payload
-                elif kind == "done":
-                    break
-
-        reply = "".join(assistant_text)
-        if caught_error is None:
+            request.turn.upsert_item(assistant_item)
+            for delta in step.deltas:
+                yield TurnEvent.item_delta(
+                    session_id=request.session_id,
+                    turn_id=request.turn_id,
+                    item_id=assistant_item.id,
+                    delta={"text": delta},
+                )
             yield TurnEvent.item_completed(
                 session_id=request.session_id,
                 turn_id=request.turn_id,
-                item=assistant_item.model_copy(update={
-                    "status": SessionItemStatus.COMPLETED,
-                    "text": reply,
-                    "completed_at": datetime.now(UTC),
-                }),
+                item=assistant_item,
             )
-            return
 
-        yield TurnEvent.item_completed(
-            session_id=request.session_id,
-            turn_id=request.turn_id,
-            item=assistant_item.model_copy(update={
-                "status": SessionItemStatus.FAILED,
-                "text": reply,
-                "completed_at": datetime.now(UTC),
-            }),
+            if step.stop_reason in {"error", "aborted"}:
+                raise AgentLoopError(
+                    f"model step stopped with {step.stop_reason}",
+                )
+            if not step.tool_calls:
+                return
+            if tool_rounds >= request.max_tool_rounds:
+                raise AgentLoopError(
+                    "Chat Completions tool loop exceeded limit")
+            tool_rounds += 1
+
+            requested_calls = [
+                _running_tool_call(tool_call)
+                for tool_call in step.tool_calls
+            ]
+            for tool_call in requested_calls:
+                request.turn.upsert_item(tool_call)
+                yield TurnEvent.item_started(
+                    session_id=request.session_id,
+                    turn_id=request.turn_id,
+                    item=tool_call,
+                )
+
+            try:
+                completed_calls = await request.tool_runtime.execute(
+                    requested_calls,
+                )
+            except Exception as exc:
+                log.error("agent_tool_runtime_failed", error=str(exc))
+                raise AgentLoopError(str(exc)) from exc
+            for tool_call in completed_calls:
+                request.turn.upsert_item(tool_call)
+                yield TurnEvent.item_completed(
+                    session_id=request.session_id,
+                    turn_id=request.turn_id,
+                    item=tool_call,
+                )
+
+    def _raise_if_over_budget(self, start: float) -> None:
+        """Raise when the loop exceeds its wall-clock budget."""
+        loop = asyncio.get_running_loop()
+        if loop.time() - start <= self._wall_budget_sec:
+            return
+        raise AgentLoopError(
+            f"Agent run exceeded {self._wall_budget_sec}s budget",
         )
-        log.error("agent_loop_failed", error=str(caught_error))
-        raise AgentLoopError(str(caught_error)) from caught_error
+
+
+def _started_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
+    """Return an assistant item marked as in progress."""
+    return item.model_copy(update={
+        "status": SessionItemStatus.IN_PROGRESS,
+        "completed_at": None,
+    })
+
+
+def _completed_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
+    """Return an assistant item marked as completed."""
+    return item.model_copy(update={
+        "status": SessionItemStatus.COMPLETED,
+        "completed_at": item.completed_at or datetime.now(UTC),
+    })
+
+
+def _running_tool_call(item: ToolCallItem) -> ToolCallItem:
+    """Return a tool-call item ready to execute in the current turn."""
+    return item.model_copy(update={
+        "status": item.status,
+        "created_at": item.created_at,
+        "started_at": item.started_at or datetime.now(UTC),
+        "completed_at": None,
+    })

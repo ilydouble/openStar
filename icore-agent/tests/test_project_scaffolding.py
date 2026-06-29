@@ -606,8 +606,8 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert (chat_completions_dir / "__init__.py").is_file()
     assert (chat_completions_dir / "runner.py").is_file()
     assert (chat_completions_dir / "renderer.py").is_file()
-    assert (chat_completions_dir / "event_bridge.py").is_file()
-    assert (chat_completions_dir / "payloads.py").is_file()
+    assert not (chat_completions_dir / "event_bridge.py").exists()
+    assert not (chat_completions_dir / "payloads.py").exists()
     assert not (agent_turn_dir / "tool_projection.py").exists()
     assert not (package_dir / "application" /
                 "agent" / "strands_bridge.py").exists()
@@ -632,11 +632,12 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert "enable_tools" not in routing
     assert "class AgentSessionService" in session_service
     assert "AgentTurnExecutor" in turn_service
-    assert "PreparedAgentRunner" in agent_init
-    assert "AgentToolEventBridge" in agent_init
-    assert "AgentRunnerLike" not in (
-        agent_dir / "async_bridge.py"
-    ).read_text(encoding="utf-8")
+    assert "ModelClient" in agent_init
+    assert "ModelStepResult" in agent_init
+    assert "PromptContextManager" in agent_init
+    assert "ToolRuntime" in agent_init
+    assert "ToolRuntimePort" in agent_init
+    assert not (agent_dir / "async_bridge.py").exists()
     assert "AgentLoopRequest" not in turn_service
     assert "StrandsToolEventBridge" not in turn_service
     assert "begin_turn_usage_capture" not in turn_service

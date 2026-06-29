@@ -1,35 +1,64 @@
-"""Shared types for prepared agent loop execution."""
+"""Shared application protocols for agent loop execution."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.turn import TurnEvent
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    SessionItem,
+    ToolCallItem,
+)
+from icore_agent.domain.agent.tool import ToolDefinition
+from icore_agent.domain.agent.turn import Turn
 
 
-class PreparedAgentRunner(Protocol):
-    """Prepared agent surface needed by the turn loop."""
+@dataclass(frozen=True, slots=True)
+class ModelStepResult:
+    """Provider-neutral result from one model sampling step."""
 
-    def __call__(self, prompt_envelope: PromptEnvelope) -> Any:
-        """Run one prompt envelope through the prepared agent."""
+    assistant_item: AgentMessageItem
+    tool_calls: list[ToolCallItem] = field(default_factory=list)
+    deltas: list[str] = field(default_factory=list)
+    usage: dict[str, int] | None = None
+    model: str | None = None
+    provider: str | None = None
+    stop_reason: str = "stop"
+    raw_response_id: str | None = None
+    raw_payload: Any | None = None
+
+
+class ModelClient(Protocol):
+    """Application-facing model client that samples one PromptEnvelope."""
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Return one model step without executing any requested tools."""
         ...
 
 
-class AgentToolEventBridge(Protocol):
-    """Runtime-neutral bridge between agent callbacks and turn events."""
+class PromptContextManager(Protocol):
+    """Build model-visible prompts from loaded context and current turn state."""
 
-    def on_callback(self, **kwargs: Any) -> None:
-        """Handle a provider runtime streaming callback."""
-        ...
-
-    def bound_to(
+    def build_prompt(
         self,
         *,
-        emit: Callable[[TurnEvent], None],
-        emit_assistant_delta: Callable[[str], None],
-    ) -> AbstractContextManager[None]:
-        """Bind event sinks while one prepared runner invocation is active."""
+        turn: Turn,
+        session_items: list[SessionItem],
+        tools: list[ToolDefinition],
+    ) -> PromptEnvelope:
+        """Build the provider-neutral prompt envelope for one sampling step."""
+        ...
+
+
+class ToolRuntimePort(Protocol):
+    """Port for executing tools and exposing model-visible definitions."""
+
+    def visible_tools(self) -> list[ToolDefinition]:
+        """Return tool definitions visible to the model."""
+        ...
+
+    async def execute(self, tool_calls: list[ToolCallItem]) -> list[ToolCallItem]:
+        """Execute requested tool calls and return completed or failed items."""
         ...

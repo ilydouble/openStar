@@ -12,13 +12,11 @@ from .handlers import (
     get_session_state,
     list_sessions,
     search_sessions,
-    run_sequential,
     steer_session_run,
     transcribe_audio,
 )
 from .schemas import (
     AgentRuntimeControlResponse,
-    SequentialResponse,
     SessionListResponse,
     SessionSearchResponse,
     SessionStateResponse,
@@ -49,11 +47,6 @@ router.post(
     response_model=AgentRuntimeControlResponse,
     summary="Queue follow-up input for a later turn",
 )(follow_up_session_run)
-router.post(
-    "/sequential",
-    response_model=SequentialResponse,
-    summary="Run a sequential bash task (mini-SWE-agent style)",
-)(run_sequential)
 router.post(
     "/transcribe",
     response_model=TranscribeResponse,

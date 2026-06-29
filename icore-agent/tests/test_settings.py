@@ -145,6 +145,15 @@ def test_settings_load_agent_runtime_domain(monkeypatch):
     assert settings.agent_runtime_state_ttl_seconds == 84
 
 
+def test_settings_load_agent_tool_workspace_from_tools_domain(monkeypatch):
+    """Agent tool workspace belongs to the tools settings domain."""
+    monkeypatch.setenv("AGENT_TOOL_WORKSPACE", "/tmp/icore-agent-tools")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_tool_workspace == "/tmp/icore-agent-tools"
+
+
 def test_cors_allowed_origins_default_to_local_dev_hosts(monkeypatch):
     monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
 

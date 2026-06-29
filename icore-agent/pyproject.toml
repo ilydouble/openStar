@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "icore-agent"
 version = "0.1.0"
-description = "iCore Agent Platform — self-built agent runtime + mini-SWE-agent"
+description = "iCore Agent Platform — self-built agent runtime"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
     "pydantic-settings>=2.3.0",
     "pydantic[email]",
     "email-validator",
-    # LLM routing (mini-SWE-agent model adapter)
+    # LLM routing
     "litellm>=1.50.0",
     # HTTP client
     "httpx>=0.27.0",

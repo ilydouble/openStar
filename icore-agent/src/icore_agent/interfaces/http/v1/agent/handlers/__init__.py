@@ -2,7 +2,6 @@
 
 from .chat import chat
 from .runtime import abort_session_run, follow_up_session_run, steer_session_run
-from .sequential import run_sequential
 from .session import (
     clear_session,
     finalize_session,
@@ -21,7 +20,6 @@ __all__ = [
     "get_session_state",
     "list_sessions",
     "search_sessions",
-    "run_sequential",
     "steer_session_run",
     "transcribe_audio",
 ]

@@ -2,7 +2,6 @@
 
 from .chat import ChatRequest, ChatResponse
 from .runtime import AgentRuntimeControlResponse, AgentRuntimeInputRequest
-from .sequential import SequentialRequest, SequentialResponse
 from .session import (
     SessionListResponse,
     SessionSearchResponse,
@@ -17,8 +16,6 @@ __all__ = [
     "ChatResponse",
     "AgentRuntimeControlResponse",
     "AgentRuntimeInputRequest",
-    "SequentialRequest",
-    "SequentialResponse",
     "SessionListResponse",
     "SessionSearchResponse",
     "SessionStateResponse",

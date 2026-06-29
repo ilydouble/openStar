@@ -1,7 +1,4 @@
-"""File operation tools — read and write files within the agent workspace.
-
-All paths are sandboxed to settings.sequential_workspace.
-"""
+"""File operation tools — read and write files within the agent workspace."""
 
 from __future__ import annotations
 
@@ -18,7 +15,7 @@ _MAX_READ_BYTES = settings.file_ops_max_size_mb * 1024 * 1024
 
 def _safe_path(relative_path: str) -> Path:
     """Resolve path and ensure it stays inside the workspace."""
-    workspace = Path(settings.sequential_workspace).resolve()
+    workspace = Path(settings.agent_tool_workspace).resolve()
     target = (workspace / relative_path).resolve()
     if not str(target).startswith(str(workspace)):
         raise PermissionError(f"Path escape attempt: {relative_path!r}")

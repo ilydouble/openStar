@@ -12,7 +12,6 @@ from .logging import LoggingSettings
 from .media import MediaSettings
 from .memory import MemorySettings
 from .rag import RagSettings
-from .sequential import SequentialSettings
 from .storage import StorageSettings
 from .tools import ToolsSettings
 
@@ -22,7 +21,6 @@ class Settings(
     AppSettings,
     LoggingSettings,
     LLMSettings,
-    SequentialSettings,
     MemorySettings,
     AuthSettings,
     DatabaseSettings,
@@ -38,11 +36,6 @@ class Settings(
     def __init__(self, **values: Any) -> None:
         """Initialize aggregate settings from explicit values and split env files."""
         super().__init__(**values)
-
-    @property
-    def effective_sequential_model(self) -> str:
-        """Return the configured sequential model, falling back to the main model."""
-        return self.sequential_model or self.effective_model_id()
 
     def effective_model_id(self) -> str:
         """Resolve the current user's BYOK model override or the default model id."""

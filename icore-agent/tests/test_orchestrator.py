@@ -5,7 +5,7 @@ All LLM calls and external services are mocked.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -107,26 +107,17 @@ def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     assert data["session_id"] == "test-session"
 
 
-# ── Sequential endpoint ────────────────────────────────────────────────────
+# ── Removed sequential endpoint ────────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.sequential.SequentialAgent")
-def test_sequential_endpoint_success(mock_seq_cls, client):
-    from icore_agent.application.agent.sequential.agent import SequentialResult
-    mock_instance = MagicMock()
-    mock_instance.run.return_value = SequentialResult(
-        status="complete", output="Files listed.", steps=2
-    )
-    mock_seq_cls.return_value = mock_instance
-
+def test_sequential_endpoint_is_not_registered(client):
+    """The legacy mini-SWE sequential API is no longer an agent entrypoint."""
     resp = client.post(
         "/api/v1/agent/sequential",
         json={"task": "ls -la", "use_docker": False},
         headers=_auth_headers(client),
     )
-    assert resp.status_code == 200
-    data = _api_data(resp)
-    assert data["status"] == "complete"
-    assert data["steps"] == 2
+
+    assert resp.status_code == 404
 
 
 # ── Session clear endpoint ─────────────────────────────────────────────────

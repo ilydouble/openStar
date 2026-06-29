@@ -58,7 +58,7 @@ def run_python_snippet(code: str, timeout: int = 30) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=settings.sequential_workspace,
+            cwd=settings.agent_tool_workspace,
         )
         combined = result.stdout + result.stderr
         if len(combined) > _MAX_OUTPUT:

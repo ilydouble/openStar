@@ -14,7 +14,6 @@ _DOMAINS = (
     "database",
     "logging",
     "llm",
-    "sequential",
     "memory",
     "auth",
     "rag",

@@ -32,7 +32,6 @@ ENV_FILES=(
   "dotenv/.env.logging"
   "dotenv/.env.gateway"
   "dotenv/.env.llm"
-  "dotenv/.env.sequential"
   "dotenv/.env.auth"
   "dotenv/.env.rag"
   "dotenv/.env.tools"

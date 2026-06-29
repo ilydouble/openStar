@@ -108,10 +108,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description=(
-            "iCore Agent Platform — self-built agent runtime with "
-            "mini-SWE-agent sequential executor."
-        ),
+        description="iCore Agent Platform — self-built agent runtime.",
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,

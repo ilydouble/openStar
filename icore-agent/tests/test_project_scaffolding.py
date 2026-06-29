@@ -31,7 +31,6 @@ def test_dotenv_files_are_split_by_domain():
         "agent",
         "database",
         "llm",
-        "sequential",
         "memory",
         "auth",
         "rag",
@@ -48,6 +47,7 @@ def test_dotenv_files_are_split_by_domain():
     for domain in domains:
         assert (dotenv_dir / f".env.{domain}").is_file()
         assert (dotenv_dir / f".env.{domain}.example").is_file()
+    assert not (dotenv_dir / ".env.sequential.example").exists()
 
 
 def test_gitignore_ignores_real_domain_envs_but_allows_examples():
@@ -76,13 +76,13 @@ def test_compose_wrapper_loads_split_env_files():
         "clickhouse",
         "gateway",
         "llm",
-        "sequential",
         "auth",
         "rag",
         "tools",
         "media",
     ):
         assert f'dotenv/.env.{domain}"' in text
+    assert 'dotenv/.env.sequential"' not in text
 
     for compose_file in (
         "base.yml",
@@ -106,6 +106,15 @@ def test_app_env_documents_build_proxy_overrides():
 
     assert "BUILD_HTTP_PROXY=" in build_example
     assert "BUILD_GOPROXY=https://goproxy.cn,direct" in build_example
+
+
+def test_tools_env_documents_agent_tool_workspace():
+    """Tool workspace configuration should live in the tools dotenv domain."""
+    tools_example = (AGENT_ROOT / "dotenv" / ".env.tools.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "AGENT_TOOL_WORKSPACE=/tmp/icore-agent-workspace" in tools_example
 
 
 def test_compose_files_are_split_under_infrastructure():
@@ -431,8 +440,8 @@ def test_http_interface_layer_is_split_by_business_domain():
             "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
         },
         "agent": {
-            "schemas": {"chat.py", "sequential.py", "transcribe.py"},
-            "handlers": {"chat.py", "sequential.py", "session.py", "transcribe.py"},
+            "schemas": {"chat.py", "transcribe.py"},
+            "handlers": {"chat.py", "session.py", "transcribe.py"},
         },
         "files": {
             "schemas": {"files.py"},
@@ -746,7 +755,7 @@ def test_chat_orchestration_lives_in_application_layer():
     chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
     assert chat_sources == []
     assert (catalog_dir / "web_search.py").is_file()
-    assert (agent_dir / "sequential" / "agent.py").is_file()
+    assert not (agent_dir / "sequential").exists()
     assert "create_chat_completions_model_client" in dependencies
     assert f"create_{legacy_vendor}_orchestrator" not in dependencies
     assert "ModuleNotFoundError" not in chat_completions_runner

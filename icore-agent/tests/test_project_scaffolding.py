@@ -44,16 +44,29 @@ def test_dotenv_files_are_split_by_domain():
         "gateway",
         "build",
     }
-    for domain in domains:
-        assert (dotenv_dir / f".env.{domain}").is_file()
-        assert (dotenv_dir / f".env.{domain}.example").is_file()
+    for mode in ("dev", "production"):
+        mode_dir = dotenv_dir / mode
+        assert mode_dir.is_dir()
+        for domain in domains:
+            assert (mode_dir / f".env.{domain}.example").is_file()
+
+    dev_examples = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (dotenv_dir / "dev").glob(".env.*.example")
+    }
+    production_examples = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (dotenv_dir / "production").glob(".env.*.example")
+    }
+    assert dev_examples == production_examples
     assert not (dotenv_dir / ".env.sequential.example").exists()
+    assert not list(dotenv_dir.glob(".env.*.example"))
 
 
 def test_gitignore_ignores_real_domain_envs_but_allows_examples():
     text = (AGENT_ROOT / ".gitignore").read_text(encoding="utf-8")
-    assert "dotenv/.env.*" in text
-    assert "!dotenv/.env.*.example" in text
+    assert "dotenv/**/.env.*" in text
+    assert "!dotenv/**/.env.*.example" in text
 
 
 def test_compose_wrapper_loads_split_env_files():
@@ -63,11 +76,17 @@ def test_compose_wrapper_loads_split_env_files():
     wrapper = AGENT_ROOT / "scripts" / "compose.sh"
     text = wrapper.read_text(encoding="utf-8")
     assert "docker compose" in text
+    assert '"${1:-}" == "dev"' in text
+    assert '"${1:-}" == "production"' in text
+    assert 'BUILD_ENV_FILE="$PROJECT_DIR/dotenv/$MODE/.env.build"' in text
+    assert 'ICORE_COMPOSE_DOTENV_DIR="$PROJECT_DIR/dotenv/$MODE"' in text
+    assert 'ICORE_COMPOSE_ENV_SUFFIX=".example"' in text
     for domain in (
         "app",
         "agent",
         "build",
         "database",
+        "payment",
         "memory",
         "minio",
         "kafka",
@@ -81,12 +100,13 @@ def test_compose_wrapper_loads_split_env_files():
         "tools",
         "media",
     ):
-        assert f'dotenv/.env.{domain}"' in text
+        assert f'"dotenv/$MODE/.env.{domain}"' in text
     assert 'dotenv/.env.sequential"' not in text
 
     for compose_file in (
         "base.yml",
         "postgres.yml",
+        "payment-service.yml",
         "redis.yml",
         "minio.yml",
         "kafka.yml",
@@ -96,30 +116,44 @@ def test_compose_wrapper_loads_split_env_files():
         "backend.yml",
         "gateway.yml",
     ):
-        assert f"infrastructure/docker/compose/{compose_file}" in text
+        assert f"infrastructure/docker/compose/dev/{compose_file}" in text
+    for compose_file in (
+        "base.yml",
+        "minio.yml",
+        "kafka.yml",
+        "click-house.yml",
+        "storage-service.yml",
+        "logging-service.yml",
+        "payment-service.yml",
+        "backend.yml",
+        "gateway.yml",
+    ):
+        assert f"infrastructure/docker/compose/production/{compose_file}" in text
 
 
 def test_app_env_documents_build_proxy_overrides():
-    build_example = (AGENT_ROOT / "dotenv" / ".env.build.example").read_text(
-        encoding="utf-8"
-    )
+    for mode in ("dev", "production"):
+        build_example = (
+            AGENT_ROOT / "dotenv" / mode / ".env.build.example"
+        ).read_text(encoding="utf-8")
 
-    assert "BUILD_HTTP_PROXY=" in build_example
-    assert "BUILD_GOPROXY=https://goproxy.cn,direct" in build_example
+        assert "BUILD_HTTP_PROXY=" in build_example
+        assert "BUILD_GOPROXY=https://goproxy.cn,direct" in build_example
 
 
 def test_tools_env_documents_agent_tool_workspace():
     """Tool workspace configuration should live in the tools dotenv domain."""
-    tools_example = (AGENT_ROOT / "dotenv" / ".env.tools.example").read_text(
-        encoding="utf-8"
-    )
+    for mode in ("dev", "production"):
+        tools_example = (
+            AGENT_ROOT / "dotenv" / mode / ".env.tools.example"
+        ).read_text(encoding="utf-8")
 
-    assert "AGENT_TOOL_WORKSPACE=/tmp/icore-agent-workspace" in tools_example
+        assert "AGENT_TOOL_WORKSPACE=/tmp/icore-agent-workspace" in tools_example
 
 
 def test_compose_files_are_split_under_infrastructure():
     compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
-    expected = {
+    dev_expected = {
         "base.yml",
         "backend.yml",
         "postgres.yml",
@@ -131,41 +165,125 @@ def test_compose_files_are_split_under_infrastructure():
         "click-house.yml",
         "gateway.yml",
     }
+    production_expected = {
+        "base.yml",
+        "backend.yml",
+        "minio.yml",
+        "kafka.yml",
+        "click-house.yml",
+        "storage-service.yml",
+        "logging-service.yml",
+        "payment-service.yml",
+        "gateway.yml",
+    }
 
     assert compose_dir.is_dir()
-    assert expected <= {path.name for path in compose_dir.iterdir()}
+    assert {"dev", "production"} <= {
+        path.name for path in compose_dir.iterdir() if path.is_dir()
+    }
+    assert dev_expected <= {path.name for path in (
+        compose_dir / "dev").iterdir()}
+    assert production_expected <= {
+        path.name for path in (compose_dir / "production").iterdir()
+    }
+    assert not [path for path in compose_dir.iterdir() if path.is_file()]
     assert not (AGENT_ROOT / "docker-compose.yml").exists()
+
+    for mode in ("dev", "production"):
+        for compose_file in (compose_dir / mode).iterdir():
+            if compose_file.suffix not in {".yml", ".yaml"}:
+                continue
+            compose_text = compose_file.read_text(encoding="utf-8")
+            assert "../../../../dotenv/dev" not in compose_text
+            assert "../../../../dotenv/production" not in compose_text
 
 
 def test_infrastructure_compose_base_declares_shared_resources():
-    base = (
-        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "base.yml"
+    dev_base = (
+        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "dev" / "base.yml"
+    ).read_text(encoding="utf-8")
+    production_base = (
+        AGENT_ROOT
+        / "infrastructure"
+        / "docker"
+        / "compose"
+        / "production"
+        / "base.yml"
     ).read_text(encoding="utf-8")
 
-    assert "name: icore-agent" in base
-    assert "icore-net:" in base
-    assert "icore_db:" in base
-    assert "redis-data:" in base
-    assert "minio-data:" in base
-    assert "kafka-data:" in base
-    assert "logging-service-data:" in base
-    assert "clickhouse-data:" in base
+    assert "name: icore-agent" in dev_base
+    assert "icore-net:" in dev_base
+    assert "icore_db:" in dev_base
+    assert "redis-data:" in dev_base
+    assert "minio-data:" in dev_base
+    assert "kafka-data:" in dev_base
+    assert "logging-service-data:" in dev_base
+    assert "clickhouse-data:" in dev_base
+
+    assert "name: icore-agent" in production_base
+    assert "networks:" not in production_base
+    assert "logging-service-data:" in production_base
+
+
+def test_production_compose_uses_host_network_without_infra_services():
+    """Production starts app and init services, but not infrastructure daemons."""
+    compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose" / "production"
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(compose_dir.glob("*.yml"))
+    )
+
+    for service_name in (
+        "icore-agent:",
+        "gateway:",
+        "storage-service:",
+        "logging-service:",
+        "clickhouse-writer:",
+        "payment-service:",
+        "payment-events-consumer:",
+        "minio-init:",
+        "kafka-init:",
+        "clickhouse-migrate:",
+        "payment-db-migrate:",
+    ):
+        assert f"\n  {service_name}" in combined
+
+    for service_name in (
+        "postgres:",
+        "redis:",
+        "minio:",
+        "kafka:",
+        "clickhouse:",
+    ):
+        assert f"\n  {service_name}" not in combined
+
+    assert "networks:" not in combined
+    assert "network_mode: host" in combined
+    assert "127.0.0.1" in combined
 
 
 def test_clickhouse_logging_infra_is_declared():
     compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
-    clickhouse = (compose_dir / "click-house.yml").read_text(encoding="utf-8")
-    clickhouse_example = (AGENT_ROOT / "dotenv" / ".env.clickhouse.example").read_text(
+    dev_clickhouse = (compose_dir / "dev" / "click-house.yml").read_text(
         encoding="utf-8"
     )
-    logging_example = (AGENT_ROOT / "dotenv" / ".env.logging.example").read_text(
-        encoding="utf-8"
-    )
+    production_clickhouse = (
+        compose_dir / "production" / "click-house.yml"
+    ).read_text(encoding="utf-8")
+    clickhouse_example = (
+        AGENT_ROOT / "dotenv" / "dev" / ".env.clickhouse.example"
+    ).read_text(encoding="utf-8")
+    logging_example = (
+        AGENT_ROOT / "dotenv" / "dev" / ".env.logging.example"
+    ).read_text(encoding="utf-8")
     migrations_dir = AGENT_ROOT / "infrastructure" / "clickhouse" / "migrations"
 
-    assert "clickhouse/clickhouse-server" in clickhouse
-    assert "clickhouse-migrate:" in clickhouse
-    assert "clickhouse-writer:" in clickhouse
+    assert "clickhouse/clickhouse-server" in dev_clickhouse
+    assert "clickhouse-migrate:" in dev_clickhouse
+    assert "clickhouse-writer:" in dev_clickhouse
+    assert "clickhouse/clickhouse-server" not in production_clickhouse
+    assert "clickhouse-migrate:" in production_clickhouse
+    assert "clickhouse-writer:" in production_clickhouse
+    assert "network_mode: host" in production_clickhouse
     assert "CLICKHOUSE_DATABASE=icore_logging_db" in clickhouse_example
     assert "CLICKHOUSE_WRITER_GROUP_ID=logging-clickhouse-writer" in clickhouse_example
     assert "kafka_invalid_temp_events.jsonl" in logging_example
@@ -179,11 +297,11 @@ def test_clickhouse_logging_infra_is_declared():
 
 def test_postgres_port_mapping_uses_split_database_ports():
     compose = (
-        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "postgres.yml"
+        AGENT_ROOT / "infrastructure" / "docker" / "compose" / "dev" / "postgres.yml"
     ).read_text(encoding="utf-8")
-    database_example = (AGENT_ROOT / "dotenv" / ".env.database.example").read_text(
-        encoding="utf-8"
-    )
+    database_example = (
+        AGENT_ROOT / "dotenv" / "dev" / ".env.database.example"
+    ).read_text(encoding="utf-8")
 
     assert (
         "${DB_HOST_BIND:-127.0.0.1}:${DB_HOST_PORT:-15432}:${DB_INTERNAL_PORT:-5432}"
@@ -197,19 +315,33 @@ def test_postgres_port_mapping_uses_split_database_ports():
 
 def test_object_and_logging_infra_have_init_services():
     compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose"
-    minio = (compose_dir / "minio.yml").read_text(encoding="utf-8")
-    kafka = (compose_dir / "kafka.yml").read_text(encoding="utf-8")
+    dev_minio = (compose_dir / "dev" / "minio.yml").read_text(encoding="utf-8")
+    dev_kafka = (compose_dir / "dev" / "kafka.yml").read_text(encoding="utf-8")
+    production_minio = (
+        compose_dir / "production" / "minio.yml"
+    ).read_text(encoding="utf-8")
+    production_kafka = (
+        compose_dir / "production" / "kafka.yml"
+    ).read_text(encoding="utf-8")
 
-    assert "minio-init:" in minio
-    assert "mc mb --ignore-existing local/icore-agent-images" in minio
-    assert "mc mb --ignore-existing local/icore-files" in minio
+    assert "minio:" in dev_minio
+    assert "minio-init:" in dev_minio
+    assert "mc mb --ignore-existing local/icore-agent-images" in dev_minio
+    assert "mc mb --ignore-existing local/icore-files" in dev_minio
+    assert "minio:" not in production_minio
+    assert "minio-init:" in production_minio
+    assert "network_mode: host" in production_minio
 
-    assert "kafka-init:" in kafka
-    assert "--if-not-exists" in kafka
-    assert 'topic "$$LOGGING_KAFKA_TOPIC"' in kafka
-    assert "PAYMENT_KAFKA_TOPIC" in kafka
-    assert "PAYMENT_KAFKA_PARTITIONS" in kafka
-    assert 'topic "$$PAYMENT_KAFKA_TOPIC"' in kafka
+    assert "kafka:" in dev_kafka
+    assert "kafka-init:" in dev_kafka
+    assert "--if-not-exists" in dev_kafka
+    assert 'topic "$$LOGGING_KAFKA_TOPIC"' in dev_kafka
+    assert "PAYMENT_KAFKA_TOPIC" in dev_kafka
+    assert "PAYMENT_KAFKA_PARTITIONS" in dev_kafka
+    assert 'topic "$$PAYMENT_KAFKA_TOPIC"' in dev_kafka
+    assert "\n  kafka:" not in production_kafka
+    assert "kafka-init:" in production_kafka
+    assert "network_mode: host" in production_kafka
 
 
 def test_go_microservice_dockerfiles_use_buildkit_caches():
@@ -302,11 +434,16 @@ def test_gateway_ddd_layers_keep_http_policy_and_infrastructure_split():
 
 def test_gateway_rate_limit_env_uses_token_bucket_profiles():
     """Keep gateway env examples and compose on token bucket rate/burst knobs."""
-    gateway_env = (AGENT_ROOT / "dotenv" /
-                   ".env.gateway.example").read_text(encoding="utf-8")
+    gateway_env = (
+        AGENT_ROOT / "dotenv" / "dev" / ".env.gateway.example"
+    ).read_text(encoding="utf-8")
     gateway_compose = (
-        AGENT_ROOT / "infrastructure" / "docker" /
-        "compose" / "gateway.yml"
+        AGENT_ROOT
+        / "infrastructure"
+        / "docker"
+        / "compose"
+        / "dev"
+        / "gateway.yml"
     ).read_text(encoding="utf-8")
 
     required = {
@@ -333,16 +470,23 @@ def test_gateway_rate_limit_env_uses_token_bucket_profiles():
 def test_dockerfile_keeps_dependency_layer_before_source_copy():
     dockerfile = (AGENT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    metadata_copy = dockerfile.index("COPY pyproject.toml")
-    dependency_install = dockerfile.index("requirements-runtime.txt")
+    dependency_manifest_copy = dockerfile.index(
+        "COPY pyproject.toml requirements.txt"
+    )
+    dependency_install = dockerfile.index("pip install --prefix=/install/deps")
     source_copy = dockerfile.index("COPY src/")
 
-    assert metadata_copy < dependency_install < source_copy
+    assert dependency_manifest_copy < dependency_install < source_copy
+    assert "--mount=type=cache,target=/root/.cache/pip" in dockerfile
     assert "--prefix=/install/deps" in dockerfile
     assert "--prefix=/install/app" in dockerfile
     assert "COPY --from=builder /install/deps /usr/local" in dockerfile
     assert "COPY --from=builder /install/app /usr/local" in dockerfile
     assert "--no-deps dist/*.whl" in dockerfile
+    assert "tomllib" not in dockerfile
+    assert "requirements-runtime.txt" not in dockerfile
+    assert "icore-seq-workspace" not in dockerfile
+    assert "/tmp/icore-agent-workspace" in dockerfile
 
 
 def test_copied_logging_client_does_not_reference_old_project_packages():
@@ -933,5 +1077,5 @@ def test_dockerignore_excludes_local_runtime_artifacts_and_real_envs():
 
     assert ".venv/" in dockerignore
     assert "__pycache__/" in dockerignore
-    assert "dotenv/.env.*" in dockerignore
-    assert "!dotenv/.env.*.example" in dockerignore
+    assert "dotenv/**/.env.*" in dockerignore
+    assert "!dotenv/**/.env.*.example" in dockerignore

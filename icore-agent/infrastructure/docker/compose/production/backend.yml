@@ -1,0 +1,81 @@
+services:
+  icore-agent:
+    build:
+      context: ../../../..
+      dockerfile: Dockerfile
+      target: runtime
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        PIP_INDEX_URL: ${BUILD_PIP_INDEX_URL:-}
+        PIP_EXTRA_INDEX_URL: ${BUILD_PIP_EXTRA_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${BUILD_PIP_TRUSTED_HOST:-}
+        PIP_TIMEOUT: ${BUILD_PIP_TIMEOUT:-120}
+    image: ${ICORE_AGENT_IMAGE:-icore-agent:production}
+    container_name: icore-agent
+    restart: unless-stopped
+    env_file:
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.app${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.database${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.llm${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.memory${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.auth${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.rag${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.tools${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.media${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.storage${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
+    environment:
+      DB_HOST: ${DB_HOST:-127.0.0.1}
+      DB_INTERNAL_PORT: ${DB_HOST_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://127.0.0.1:${REDIS_HOST_PORT:-6379}/0}
+      STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://127.0.0.1:${STORAGE_SERVICE_HOST_PORT:-8090}}
+      STORAGE_SERVICE_TOKEN: ${STORAGE_SERVICE_TOKEN:?set STORAGE_SERVICE_TOKEN in dotenv/production/.env.storage}
+      STORAGE_SERVICE_TIMEOUT: ${STORAGE_SERVICE_TIMEOUT:-30}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
+      LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    volumes:
+      - agent-tool-workspace:/tmp/icore-agent-workspace
+    network_mode: host
+    depends_on:
+      storage-service:
+        condition: service_started
+      logging-service:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f "http://127.0.0.1:$${API_PORT:-11001}/health"']
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 5
+
+  payment-events-consumer:
+    image: ${ICORE_AGENT_IMAGE:-icore-agent:production}
+    container_name: icore-payment-events-consumer
+    restart: unless-stopped
+    command: python -m icore_agent.workers.payment_events
+    env_file:
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.database${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}
+    environment:
+      DB_HOST: ${DB_HOST:-127.0.0.1}
+      DB_INTERNAL_PORT: ${DB_HOST_PORT:-5432}
+      PAYMENT_EVENTS_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
+      PAYMENT_EVENTS_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
+      PAYMENT_EVENTS_GROUP_ID: ${PAYMENT_EVENTS_GROUP_ID:-icore-agent-payment-events}
+      PAYMENT_EVENTS_POLL_TIMEOUT_MS: ${PAYMENT_EVENTS_POLL_TIMEOUT_MS:-1000}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    network_mode: host
+    depends_on:
+      icore-agent:
+        condition: service_healthy

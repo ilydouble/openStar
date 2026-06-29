@@ -45,8 +45,8 @@ build/
 .env
 .env.local
 .env.*.local
-icore-agent/dotenv/.env.*
-!icore-agent/dotenv/.env.*.example
+icore-agent/dotenv/**/.env.*
+!icore-agent/dotenv/**/.env.*.example
 icore-agent/secrets/
 icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/*
 !icore-agent/src/icore_agent/services/payment-service/config/wechatpay/secrets/.gitkeep
@@ -100,7 +100,7 @@ docker-compose.override.yaml
 icore-control-plane.json
 icore-chroma/
 icore-images/
-icore-seq-workspace/
+icore-agent-workspace/
 
 # ----------------------
 # OS & Editor

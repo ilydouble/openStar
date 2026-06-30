@@ -729,13 +729,16 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     chat_sources = list(chat_dir.rglob("*.py")) if chat_dir.exists() else []
     assert chat_sources == []
     assert (agent_context_dir / "__init__.py").is_file()
+    assert (agent_context_dir / "builder.py").is_file()
     assert (agent_context_dir / "loader.py").is_file()
+    assert not (agent_context_dir / "manager.py").exists()
     assert not (agent_context_dir / "models.py").exists()
     assert (agent_domain_context_dir / "__init__.py").is_file()
     assert not (agent_domain_context_dir / "models.py").exists()
     assert (agent_domain_context_dir / "attachments.py").is_file()
-    assert (agent_domain_context_dir / "loaded_context.py").is_file()
+    assert (agent_domain_context_dir / "turn_prompt_sources.py").is_file()
     assert (agent_domain_prompt_dir / "__init__.py").is_file()
+    assert (agent_domain_prompt_dir / "assembly_rules.py").is_file()
     assert (agent_domain_prompt_dir / "prompt_envelope.py").is_file()
     assert (agent_domain_prompt_dir / "system_prompt.py").is_file()
     assert (agent_domain_loop_dir / "__init__.py").is_file()
@@ -942,13 +945,17 @@ def test_chat_orchestration_lives_in_application_layer():
         session_items_dir / "user_message_item.py"
     ).read_text(encoding="utf-8")
     assert not (application_agent_context_dir / "agent_context.py").exists()
-    assert (domain_context_dir / "agent_context.py").is_file()
-    assert "class AgentContext" in (
-        domain_context_dir / "agent_context.py"
-    ).read_text(encoding="utf-8")
-    assert "def build_prompt_envelope" in (
-        domain_context_dir / "agent_context.py"
-    ).read_text(encoding="utf-8")
+    assert not (domain_context_dir / "agent_context.py").exists()
+    assert not (domain_context_dir / "loaded_context.py").exists()
+    assert (domain_context_dir / "turn_prompt_sources.py").is_file()
+    context_init = (domain_context_dir / "__init__.py").read_text(
+        encoding="utf-8",
+    )
+    assert "TurnPromptSources" in context_init
+    assert "AgentContext" not in context_init
+    assert "build_prompt_envelope" not in context_init
+    assert "assemble_prompt_envelope" in domain_prompt_init
+    assert "build_context_items" in domain_prompt_init
 
 
 def test_python_sources_do_not_import_top_level_domain_package():

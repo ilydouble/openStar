@@ -9,7 +9,11 @@ import pytest
 
 import icore_agent.application.agent.context as app_context
 import icore_agent.domain.agent.context as agent_context
-from icore_agent.domain.agent.prompt import build_base_instructions
+from icore_agent.domain.agent.prompt import (
+    assemble_prompt_envelope,
+    build_base_instructions,
+    build_context_items,
+)
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
     ContextItem,
@@ -37,12 +41,17 @@ def _history_texts(items: list[UserMessageItem | AgentMessageItem]) -> list[tupl
     return pairs
 
 
-def test_agent_context_builds_context_items_from_runtime_materials() -> None:
-    """Domain AgentContext should own pure runtime-to-ContextItem assembly."""
-    context = agent_context.AgentContext(
+def test_turn_prompt_sources_are_assembled_into_context_items() -> None:
+    """Prompt assembly rules should turn loaded sources into ContextItems."""
+    sources = agent_context.TurnPromptSources(
         summary="Earlier summary",
         history_items=[],
-        has_rag=False,
+        rag_context_items=[
+            ContextItem(
+                kind="rag_result",
+                content="Retrieved policy details.",
+            ),
+        ],
         image_attachments=[
             agent_context.AgentImageAttachment(
                 filename="chart.png",
@@ -59,31 +68,32 @@ def test_agent_context_builds_context_items_from_runtime_materials() -> None:
         user_memory_prompt="User prefers concise Chinese replies.",
     )
 
-    items = context.to_context_items()
+    items = build_context_items(sources)
 
     assert [item.kind for item in items] == [
         "session_summary",
         "user_memory",
+        "rag_result",
         "image_attachment",
         "file_attachment",
     ]
     assert all(isinstance(item, ContextItem) for item in items)
     assert items[0].content == "Earlier conversation summary:\nEarlier summary"
     assert items[1].content == "User prefers concise Chinese replies."
-    assert 'filename="chart.png"' in items[2].content
-    assert 'uuid="img-1"' in items[2].content
-    assert 'ref="https://files.example/img-1"' in items[2].content
-    assert 'filename="notes.txt"' in items[3].content
-    assert 'uuid="file-1"' in items[3].content
-    assert "Use read_uploaded_file" in items[3].content
+    assert items[2].content == "Retrieved policy details."
+    assert 'filename="chart.png"' in items[3].content
+    assert 'uuid="img-1"' in items[3].content
+    assert 'ref="https://files.example/img-1"' in items[3].content
+    assert 'filename="notes.txt"' in items[4].content
+    assert 'uuid="file-1"' in items[4].content
+    assert "Use read_uploaded_file" in items[4].content
 
 
-def test_build_prompt_envelope_uses_image_inputs_when_main_model_supports_vision() -> None:
+def test_assemble_prompt_envelope_uses_image_inputs_when_main_model_supports_vision() -> None:
     """Vision-capable prompts should put image attachments on current user input."""
-    context = agent_context.AgentContext(
+    sources = agent_context.TurnPromptSources(
         summary="Earlier summary",
         history_items=[],
-        has_rag=False,
         image_attachments=[
             agent_context.AgentImageAttachment(
                 filename="chart.png",
@@ -99,9 +109,9 @@ def test_build_prompt_envelope_uses_image_inputs_when_main_model_supports_vision
         ],
     )
 
-    envelope = agent_context.build_prompt_envelope(
+    envelope = assemble_prompt_envelope(
         base_instructions=build_base_instructions(),
-        context=context,
+        sources=sources,
         user_text="Summarize the attachment",
         tools=[],
         tool_choice=ToolChoice.AUTO,
@@ -124,12 +134,11 @@ def test_build_prompt_envelope_uses_image_inputs_when_main_model_supports_vision
     assert envelope.current_user_item.content[2].image_url == "https://files.example/img-1"
 
 
-def test_build_prompt_envelope_keeps_image_refs_as_context_without_vision() -> None:
+def test_assemble_prompt_envelope_keeps_image_refs_as_context_without_vision() -> None:
     """Non-vision prompts should leave images as metadata-only context refs."""
-    context = agent_context.AgentContext(
+    sources = agent_context.TurnPromptSources(
         summary=None,
         history_items=[],
-        has_rag=False,
         image_attachments=[
             agent_context.AgentImageAttachment(
                 filename="chart.png",
@@ -140,9 +149,9 @@ def test_build_prompt_envelope_keeps_image_refs_as_context_without_vision() -> N
         file_attachments=[],
     )
 
-    envelope = agent_context.build_prompt_envelope(
+    envelope = assemble_prompt_envelope(
         base_instructions="Base policy",
-        context=context,
+        sources=sources,
         user_text="What is in this image?",
         tools=[],
         include_image_inputs=False,
@@ -157,9 +166,9 @@ def test_build_prompt_envelope_keeps_image_refs_as_context_without_vision() -> N
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_prefers_cached_history() -> None:
+async def test_load_turn_prompt_sources_prefers_cached_history() -> None:
     """Cached conversation history should be converted to model-visible items."""
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -176,19 +185,19 @@ async def test_load_agent_context_prefers_cached_history() -> None:
         user_memory_service=None,
     )
 
-    assert context.summary == "Earlier summary"
-    assert _history_texts(context.history_items) == [
+    assert sources.summary == "Earlier summary"
+    assert _history_texts(sources.history_items) == [
         ("user", "Cached question")]
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_falls_back_to_persisted_history_when_not_incognito() -> None:
+async def test_load_turn_prompt_sources_falls_back_to_persisted_history_when_not_incognito() -> None:
     """Persisted chat messages should be used when Redis has no recent messages."""
     history = FakeHistory([
         {"role": "assistant", "content": "Persisted answer"},
     ])
 
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -201,20 +210,20 @@ async def test_load_agent_context_falls_back_to_persisted_history_when_not_incog
     )
 
     assert history.load_calls == [("session-1", "user-1")]
-    assert _history_texts(context.history_items) == [
+    assert _history_texts(sources.history_items) == [
         ("assistant", "Persisted answer"),
     ]
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_excludes_current_user_message_from_fallback_history() -> None:
+async def test_load_turn_prompt_sources_excludes_current_user_message_from_fallback_history() -> None:
     """Durable fallback history should not duplicate the current turn prompt."""
     history = FakeHistory([
         {"role": "assistant", "content": "Persisted answer"},
         {"role": "user", "content": "Hello"},
     ])
 
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -226,20 +235,20 @@ async def test_load_agent_context_excludes_current_user_message_from_fallback_hi
         user_memory_service=None,
     )
 
-    assert _history_texts(context.history_items) == [
+    assert _history_texts(sources.history_items) == [
         ("assistant", "Persisted answer"),
     ]
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_skips_history_fallback_and_memory_prompt_in_incognito() -> None:
+async def test_load_turn_prompt_sources_skips_history_fallback_and_memory_prompt_in_incognito() -> None:
     """Incognito context should not load persisted history or durable memory."""
     history = FakeHistory([
         {"role": "assistant", "content": "Persisted answer"},
     ])
     memory_service = FakeUserMemoryService("remember this")
 
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=(),
         user_id="user-1",
@@ -253,11 +262,11 @@ async def test_load_agent_context_skips_history_fallback_and_memory_prompt_in_in
 
     assert history.load_calls == []
     assert memory_service.build_calls == []
-    assert context.user_memory_prompt is None
+    assert sources.user_memory_prompt is None
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
+async def test_load_turn_prompt_sources_buckets_image_and_file_attachments() -> None:
     """File UUIDs should resolve into metadata-only attachment refs."""
     assets = {
         "txt-1": _asset("txt-1", "notes.txt", "text/plain"),
@@ -267,7 +276,7 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
     }
     file_service = FakeFileService(assets)
 
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=("txt-1", "img-1", "csv-1", "pdf-1", "txt-1"),
         user_id="user-1",
@@ -279,7 +288,7 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )
 
-    context_items = context.to_context_items()
+    context_items = build_context_items(sources)
     assert [item.kind for item in context_items] == [
         "user_memory",
         "image_attachment",
@@ -294,15 +303,15 @@ async def test_load_agent_context_buckets_image_and_file_attachments() -> None:
     assert 'uuid="txt-1"' in context_items[2].content
     assert 'filename="data.csv"' in context_items[3].content
     assert 'filename="paper.pdf"' in context_items[4].content
-    assert context.user_memory_prompt == "memory prompt"
+    assert sources.user_memory_prompt == "memory prompt"
     assert file_service.read_calls == []
     assert file_service.materialize_calls == []
 
 
 @pytest.mark.asyncio
-async def test_load_agent_context_returns_empty_context_when_cache_load_fails() -> None:
+async def test_load_turn_prompt_sources_returns_empty_sources_when_cache_load_fails() -> None:
     """Conversation cache failures should leave the turn runnable with no context."""
-    context = await app_context.load_agent_context(
+    sources = await app_context.load_turn_prompt_sources(
         session_id="session-1",
         file_uuids=("txt-1",),
         user_id="user-1",
@@ -316,7 +325,7 @@ async def test_load_agent_context_returns_empty_context_when_cache_load_fails() 
         user_memory_service=FakeUserMemoryService("memory prompt"),
     )
 
-    assert context == agent_context.AgentContext.empty()
+    assert sources == agent_context.TurnPromptSources.empty()
 
 
 @dataclass(frozen=True)

@@ -1,11 +1,10 @@
-"""Domain context models for agent turn preparation."""
+"""Domain context source models for agent turn preparation."""
 
-from .agent_context import AgentContext, build_prompt_envelope
 from .attachments import AgentFileAttachment, AgentImageAttachment
+from .turn_prompt_sources import TurnPromptSources
 
 __all__ = [
-    "AgentContext",
     "AgentFileAttachment",
     "AgentImageAttachment",
-    "build_prompt_envelope",
+    "TurnPromptSources",
 ]

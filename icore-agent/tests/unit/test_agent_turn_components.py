@@ -14,6 +14,10 @@ from icore_agent.application.agent.turn import (
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
+from icore_agent.domain.agent.context import (
+    AgentFileAttachment,
+    AgentImageAttachment,
+)
 from icore_agent.domain.agent.turn import AgentTurnCommand
 from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.domain.agent.prompt import PromptEnvelope
@@ -369,48 +373,28 @@ class RecordingUsageService:
 
 
 class StubContext:
-    """Minimal agent context test double."""
+    """Minimal turn prompt sources test double."""
 
     summary = "summary"
-    image_attachments = [object()]
-    file_attachments = [object(), object()]
+    image_attachments = [
+        AgentImageAttachment(
+            filename="chart.png",
+            ref="https://files.example/img-1",
+            file_uuid="img-1",
+        ),
+    ]
+    file_attachments = [
+        AgentFileAttachment(filename="notes.txt", file_uuid="file-1"),
+        AgentFileAttachment(filename="data.csv", file_uuid="file-2"),
+    ]
     user_memory_prompt = "remember"
+    rag_context_items: list[ContextItem] = []
     history_items = [
         UserMessageItem(content=[
             UserInput(type=UserInputType.TEXT, text="old"),
         ]),
     ]
     has_attachments = True
-
-    def to_context_items(
-        self,
-        *,
-        include_image_refs: bool = True,
-    ) -> list[ContextItem]:
-        """Return context items in the domain AgentContext shape."""
-        _ = include_image_refs
-        return [
-            ContextItem(kind="session_summary", content="summary"),
-            ContextItem(kind="user_memory", content="remember"),
-            ContextItem(
-                kind="file_attachment",
-                content=(
-                    'file_attachment filename="notes.txt" uuid="file-1"\n'
-                    "Use read_uploaded_file with the uuid when "
-                    "file_attachment contents are needed."
-                ),
-            ),
-        ]
-
-    def to_current_user_inputs(
-        self,
-        user_text: str,
-        *,
-        include_image_inputs: bool,
-    ) -> list[UserInput]:
-        """Return current user input blocks in the domain AgentContext shape."""
-        _ = include_image_inputs
-        return [UserInput(type=UserInputType.TEXT, text=user_text)]
 
 
 class StubSettings:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from icore_agent.application.agent.context import AgentPromptContextManager
+from icore_agent.application.agent.context import AgentTurnPromptBuilder
 from icore_agent.application.agent.loop import AgentLoopRequest
 from icore_agent.application.agent.tool import ToolRuntime
 from icore_agent.application.agent.tool.catalog import (
@@ -56,9 +56,9 @@ class AgentTurnRunnerFactory:
             session_id=command.session_id,
             turn_id=turn.id,
             turn=turn,
-            context_manager=AgentPromptContextManager(
+            context_manager=AgentTurnPromptBuilder(
                 command=command,
-                context=context,
+                sources=context,
             ),
             model_client=model_client,
             tool_runtime=ToolRuntime(tool_definitions),

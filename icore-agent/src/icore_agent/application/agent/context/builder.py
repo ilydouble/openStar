@@ -1,11 +1,11 @@
-"""Prompt context manager for agent turn sampling steps."""
+"""Prompt builder for agent turn sampling steps."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from icore_agent.application.agent.prompt import build_agent_prompt_envelope
-from icore_agent.domain.agent.context import AgentContext
+from icore_agent.domain.agent.context import TurnPromptSources
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
@@ -17,13 +17,13 @@ from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.domain.agent.turn import Turn
 
 
-class AgentPromptContextManager:
-    """Build PromptEnvelope values from loaded context and current turn state."""
+class AgentTurnPromptBuilder:
+    """Build PromptEnvelope values from loaded sources and current turn state."""
 
-    def __init__(self, *, command: Any, context: AgentContext) -> None:
-        """Create a manager for one user-triggered turn."""
+    def __init__(self, *, command: Any, sources: TurnPromptSources) -> None:
+        """Create a prompt builder for one user-triggered turn."""
         self._command = command
-        self._context = context
+        self._sources = sources
 
     def build_prompt(
         self,
@@ -36,7 +36,7 @@ class AgentPromptContextManager:
         _ = turn
         envelope = build_agent_prompt_envelope(
             command=self._command,
-            context=self._context,
+            sources=self._sources,
             tool_definitions=tools,
         )
         return envelope.model_copy(update={

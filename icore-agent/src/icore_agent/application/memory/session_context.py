@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.application.chat.services.history_service import ChatHistoryService
+from icore_agent.application.agent.session import AgentSessionService
 from icore_agent.infrastructure.memory.conversation import ConversationMemory
 
 
@@ -13,7 +13,7 @@ async def resolve_session_extract_context(
     *,
     user_id: str,
     conversation_memory: ConversationMemory,
-    chat_history: ChatHistoryService,
+    agent_session: AgentSessionService,
 ) -> tuple[str, list[dict[str, str]]]:
     """Return the best available summary and messages for one session extract."""
     summary, redis_messages = await conversation_memory.get_context(session_id)
@@ -23,7 +23,7 @@ async def resolve_session_extract_context(
         return summary_text, normalized_redis
 
     try:
-        persisted = chat_history.load_messages(session_id, user_id)
+        persisted = agent_session.load_messages(session_id, user_id)
     except (LookupError, PermissionError):
         persisted = []
     return summary_text, _normalize_messages(persisted)

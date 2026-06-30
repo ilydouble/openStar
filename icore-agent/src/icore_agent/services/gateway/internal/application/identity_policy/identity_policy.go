@@ -4,11 +4,13 @@ import (
 	"icore-gateway/internal/domain/identity"
 	"net/http"
 	"strings"
+
+	sharedheaders "icore-services-lib-go/http/headers"
 )
 
 const (
-	userIDHeader    = "X-User-ID"
-	userRolesHeader = "X-User-Roles"
+	userIDHeader    = sharedheaders.HeaderXUserID
+	userRolesHeader = sharedheaders.HeaderXUserRoles
 )
 
 // IdentityPolicy sanitizes caller-supplied identity headers and forwards trusted identity.

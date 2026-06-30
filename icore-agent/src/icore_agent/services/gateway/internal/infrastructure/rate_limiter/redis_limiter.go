@@ -65,6 +65,15 @@ type RedisLimiter struct {
 	now       func() time.Time
 }
 
+// ServiceRedisLimiter applies service-specific token bucket profiles using one Redis client.
+type ServiceRedisLimiter struct {
+	client    scriptRunner
+	profiles  map[string]TokenBucketProfile
+	fallback  TokenBucketProfile
+	keyPrefix string
+	now       func() time.Time
+}
+
 // NewRedisLimiter creates a Redis-backed token bucket limiter.
 func NewRedisLimiter(
 	client scriptRunner,
@@ -81,6 +90,39 @@ func NewRedisLimiter(
 	return &RedisLimiter{
 		client:    client,
 		profile:   profile,
+		keyPrefix: keyPrefix,
+		now:       now,
+	}
+}
+
+// NewServiceRedisLimiter creates a Redis limiter that selects profiles by upstream service name.
+func NewServiceRedisLimiter(
+	client scriptRunner,
+	profiles map[string]TokenBucketProfile,
+	fallback TokenBucketProfile,
+	keyPrefix string,
+	now func() time.Time,
+) *ServiceRedisLimiter {
+	if keyPrefix == "" {
+		keyPrefix = "icore-gateway:rate"
+	}
+	if now == nil {
+		now = time.Now
+	}
+	copiedProfiles := make(map[string]TokenBucketProfile, len(profiles))
+	for service, profile := range profiles {
+		if profile.Scope == "" {
+			profile.Scope = rate_limit.RateLimitScopeService
+		}
+		copiedProfiles[service] = profile
+	}
+	if fallback.Scope == "" {
+		fallback.Scope = rate_limit.RateLimitScopeService
+	}
+	return &ServiceRedisLimiter{
+		client:    client,
+		profiles:  copiedProfiles,
+		fallback:  fallback,
 		keyPrefix: keyPrefix,
 		now:       now,
 	}
@@ -111,6 +153,19 @@ func (limiter *RedisLimiter) GetRateLimitDecision(ctx context.Context, target ra
 		return rate_limit.RateLimitDecision{}, err
 	}
 	return parseTokenBucketResult(result)
+}
+
+// GetRateLimitDecision atomically limits one upstream service with that service's profile.
+func (limiter *ServiceRedisLimiter) GetRateLimitDecision(ctx context.Context, target rate_limit.RateLimitTarget) (rate_limit.RateLimitDecision, error) {
+	if limiter == nil {
+		return rate_limit.RateLimitDecision{Allowed: true, Result: "disabled"}, nil
+	}
+	profile := limiter.fallback
+	if selected, ok := limiter.profiles[target.Key]; ok {
+		profile = selected
+	}
+	return NewRedisLimiter(limiter.client, profile, limiter.keyPrefix, limiter.now).
+		GetRateLimitDecision(ctx, target)
 }
 
 func (limiter *RedisLimiter) redisKey(target rate_limit.RateLimitTarget) string {

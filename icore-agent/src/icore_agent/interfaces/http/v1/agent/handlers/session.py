@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
-from icore_agent.application.chat import ChatHistoryService
+from icore_agent.application.agent import AgentSessionService
 from icore_agent.application.files import FileAssetNotFoundError, FileAssetService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.memory.session_context import resolve_session_extract_context
@@ -15,7 +15,7 @@ from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import (
-    get_chat_history_service,
+    get_agent_session_service,
     get_current_user,
     get_file_asset_service,
     get_user_memory_service,
@@ -23,22 +23,20 @@ from ...dependencies import (
 from ..schemas.session import (
     SessionAttachmentItem,
     SessionListResponse,
-    SessionMessageItem,
     SessionSearchResponse,
     SessionStateResponse,
+    SessionTimelineItem,
+    SessionTurnItem,
 )
 
 
 log = get_logger(__name__)
 
 
-class SessionMessagePayload(TypedDict, total=False):
-    """Persisted or cached chat message payload used by session handlers."""
+class SessionTurnPayload(TypedDict, total=False):
+    """Persisted canonical turn payload used by session handlers."""
 
-    role: str
-    content: str
-    metadata: dict[str, Any]
-    tool_calls: list[dict[str, Any]]
+    items: list[dict[str, Any]]
 
 
 def _history_http_error(exc: Exception) -> HTTPException:
@@ -52,12 +50,12 @@ def _history_http_error(exc: Exception) -> HTTPException:
 
 async def list_sessions(
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> SessionListResponse:
     """List chat sessions owned by the current user from PostgreSQL."""
-    payload = chat_history.list_user_sessions(
+    payload = agent_session.list_user_sessions(
         user.public_id,
         limit=limit,
         offset=offset,
@@ -67,13 +65,13 @@ async def list_sessions(
 
 async def search_sessions(
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     q: str = Query(default="", max_length=500),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> SessionSearchResponse:
     """Search owned chat sessions by title and message content."""
-    payload = chat_history.search_user_sessions(
+    payload = agent_session.search_user_sessions(
         user.public_id,
         query=q,
         limit=limit,
@@ -86,12 +84,12 @@ async def clear_session(
     session_id: str,
     background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     user_memory_service: UserMemoryService = Depends(get_user_memory_service),
 ) -> dict:
     """Soft-delete a session immediately and extract memory from a saved snapshot."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
+        agent_session.assert_owned_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
@@ -99,11 +97,11 @@ async def clear_session(
         session_id,
         user_id=user.public_id,
         conversation_memory=memory,
-        chat_history=chat_history,
+        agent_session=agent_session,
     )
 
     try:
-        chat_history.soft_delete_session(session_id, user.public_id)
+        agent_session.soft_delete_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
     await memory.clear(session_id)
@@ -130,12 +128,12 @@ async def finalize_session(
     session_id: str,
     background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     user_memory_service: UserMemoryService = Depends(get_user_memory_service),
 ) -> dict:
     """Schedule durable user-memory extraction and return immediately."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
+        agent_session.assert_owned_session(session_id, user.public_id)
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
@@ -143,7 +141,7 @@ async def finalize_session(
         _run_finalize_session_extract,
         user_id=user.public_id,
         session_id=session_id,
-        chat_history=chat_history,
+        agent_session=agent_session,
         user_memory_service=user_memory_service,
     )
     log.info(
@@ -158,7 +156,7 @@ async def _run_finalize_session_extract(
     *,
     user_id: str,
     session_id: str,
-    chat_history: ChatHistoryService,
+    agent_session: AgentSessionService,
     user_memory_service: UserMemoryService,
 ) -> None:
     """Resolve session context and extract durable memory after finalize returns."""
@@ -167,7 +165,7 @@ async def _run_finalize_session_extract(
             session_id,
             user_id=user_id,
             conversation_memory=memory,
-            chat_history=chat_history,
+            agent_session=agent_session,
         )
         await _run_session_end_extract_from_context(
             user_id=user_id,
@@ -230,32 +228,26 @@ async def _run_session_end_extract_from_context(
 async def get_session_state(
     session_id: str,
     user: AuthenticatedUser = Depends(get_current_user),
-    chat_history: ChatHistoryService = Depends(get_chat_history_service),
+    agent_session: AgentSessionService = Depends(get_agent_session_service),
     file_service: FileAssetService = Depends(get_file_asset_service),
 ) -> SessionStateResponse:
-    """Read recent messages and file UUID attachments for an owned session."""
+    """Read canonical turns and file UUID attachments for an owned session."""
     try:
-        chat_history.assert_owned_session(session_id, user.public_id)
-        persisted_messages = chat_history.load_messages(
+        agent_session.assert_owned_session(session_id, user.public_id)
+        turns = agent_session.load_session_timeline(
             session_id,
             user.public_id,
-            include_tool_calls=True,
         )
     except (PermissionError, LookupError) as exc:
         raise _history_http_error(exc) from exc
 
     summary, _memory_messages = await memory.get_context(session_id)
-    # Persisted rows include attachment metadata; in-memory cache does not.
-    messages = persisted_messages if persisted_messages else _memory_messages
     return SessionStateResponse(
         session_id=session_id,
         summary=summary or None,
-        messages=[
-            SessionMessageItem(**message)
-            for message in messages
-        ],
+        turns=[_to_session_turn(turn) for turn in turns],
         attachments=_session_attachment_refs(
-            persisted_messages,
+            turns,
             user_id=user.public_id,
             file_service=file_service,
         ),
@@ -263,47 +255,73 @@ async def get_session_state(
 
 
 def _session_attachment_refs(
-    messages: list[SessionMessagePayload],
+    turns: list[SessionTurnPayload],
     *,
     user_id: str,
     file_service: FileAssetService,
 ) -> list[SessionAttachmentItem]:
-    """Resolve file UUIDs stored in message metadata into file asset references."""
+    """Resolve file UUIDs stored in user item metadata into file asset references."""
     refs: list[SessionAttachmentItem] = []
     seen: set[str] = set()
-    for message in messages:
-        metadata = message.get("metadata")
-        file_uuids = metadata.get("file_uuids") if isinstance(
-            metadata, dict) else []
-        if not isinstance(file_uuids, list):
-            continue
-        for raw_uuid in file_uuids:
-            file_uuid = str(raw_uuid or "").strip()
-            if not file_uuid or file_uuid in seen:
+    for turn in turns:
+        for item in turn.get("items") or []:
+            metadata = item.get("metadata")
+            file_uuids = metadata.get("file_uuids") if isinstance(
+                metadata, dict) else []
+            if not isinstance(file_uuids, list):
                 continue
-            seen.add(file_uuid)
-            try:
-                asset = file_service.get_owned_asset(
-                    uploader_public_id=user_id,
-                    file_uuid=file_uuid,
-                )
-            except FileAssetNotFoundError:
-                continue
-            download_url = None
-            if asset.content_type.startswith("image/"):
-                download_url = file_service.create_download_url(
-                    uploader_public_id=user_id,
+            for raw_uuid in file_uuids:
+                file_uuid = str(raw_uuid or "").strip()
+                if not file_uuid or file_uuid in seen:
+                    continue
+                seen.add(file_uuid)
+                try:
+                    asset = file_service.get_owned_asset(
+                        uploader_public_id=user_id,
+                        file_uuid=file_uuid,
+                    )
+                except FileAssetNotFoundError:
+                    continue
+                download_url = None
+                if asset.content_type.startswith("image/"):
+                    download_url = file_service.create_download_url(
+                        uploader_public_id=user_id,
+                        file_uuid=asset.file_uuid,
+                    )
+                refs.append(SessionAttachmentItem(
                     file_uuid=asset.file_uuid,
-                )
-            refs.append(SessionAttachmentItem(
-                file_uuid=asset.file_uuid,
-                original_filename=asset.original_filename,
-                filename=asset.original_filename,
-                content_type=asset.content_type,
-                mode=_asset_mode(asset.original_filename, asset.content_type),
-                download_url=download_url,
-            ))
+                    original_filename=asset.original_filename,
+                    filename=asset.original_filename,
+                    content_type=asset.content_type,
+                    mode=_asset_mode(asset.original_filename,
+                                     asset.content_type),
+                    download_url=download_url,
+                ))
     return refs
+
+
+def _to_session_turn(turn: dict[str, Any]) -> SessionTurnItem:
+    """Convert a repository timeline payload into the HTTP response schema."""
+    return SessionTurnItem(
+        turn_id=str(turn.get("turn_id") or ""),
+        status=str(turn.get("status") or ""),
+        model=turn.get("model"),
+        provider=turn.get("provider"),
+        usage=turn.get("usage"),
+        error=turn.get("error"),
+        started_at=turn.get("started_at"),
+        completed_at=turn.get("completed_at"),
+        duration_ms=turn.get("duration_ms"),
+        items=[
+            SessionTimelineItem(
+                item_id=str(item.get("id") or ""),
+                type=str(item.get("type") or ""),
+                status=str(item.get("status") or ""),
+                payload=dict(item),
+            )
+            for item in turn.get("items") or []
+        ],
+    )
 
 
 def _asset_mode(filename: str, content_type: str) -> str:

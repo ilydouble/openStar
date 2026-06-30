@@ -3,7 +3,7 @@
 # ruff: noqa: E402,I001
 # autopep8: off
 
-# Split dotenv files must be loaded before LiteLLM/Strands import time.
+# Split dotenv files must be loaded before LiteLLM import time.
 from .config.dotenv import load_domain_dotenvs
 
 load_domain_dotenvs()
@@ -37,8 +37,8 @@ log = get_logger(__name__)
 
 
 # ── LiteLLM token usage logging ───────────────────────────────────────────────
-# Fires after EVERY LLM call in the process: orchestrator turns, sub-agent turns,
-# rolling-summary compression, memU extraction — all are counted.
+# Fires after every LLM call in the process: agent turns, rolling-summary
+# compression, memory extraction, and other model-backed work are counted.
 
 def _log_token_usage(kwargs, completion_response, start_time, end_time) -> None:
     event = build_litellm_usage_event(kwargs, completion_response)
@@ -108,10 +108,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description=(
-            "iCore Agent Platform — multi-agent orchestration powered by "
-            "AWS Strands Agents SDK and mini-SWE-agent sequential executor."
-        ),
+        description="iCore Agent Platform — self-built agent runtime.",
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,

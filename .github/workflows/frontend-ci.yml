@@ -4,14 +4,14 @@ on:
   push:
     branches:
       - main
-      - develop
+      - dev
     paths:
       - 'icore-agent-web/**'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
     branches:
       - main
-      - develop
+      - dev
     paths:
       - 'icore-agent-web/**'
       - '.github/workflows/frontend-ci.yml'

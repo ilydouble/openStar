@@ -1,0 +1,12 @@
+FROM migrate/migrate:v4.17.1 AS migrate
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates postgresql16-client
+
+COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+COPY payment-service/scripts/db-bootstrap.sh /usr/local/bin/payment-db-bootstrap
+COPY payment-service/migrations /migrations
+RUN chmod +x /usr/local/bin/payment-db-bootstrap
+
+ENTRYPOINT ["/usr/local/bin/payment-db-bootstrap"]

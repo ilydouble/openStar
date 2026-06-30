@@ -5,14 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
 func TestWriteJSONWrapsPayloadInApiEnvelope(t *testing.T) {
 	router := NewRouter()
-	router.GET("/ok", func(ctx *gin.Context) {
-		WriteJSON(ctx, http.StatusCreated, gin.H{"accepted": 1})
+	router.Get("/ok", func(w http.ResponseWriter, r *http.Request) {
+		WriteJSON(w, http.StatusCreated, map[string]int{"accepted": 1})
 	})
 
 	response := httptest.NewRecorder()
@@ -21,7 +19,7 @@ func TestWriteJSONWrapsPayloadInApiEnvelope(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", response.Code)
 	}
-	if response.Header().Get("Content-Type") != "application/json; charset=utf-8" {
+	if response.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected content type %q", response.Header().Get("Content-Type"))
 	}
 
@@ -46,8 +44,8 @@ func TestWriteJSONWrapsPayloadInApiEnvelope(t *testing.T) {
 
 func TestWriteErrorUsesSharedErrorEnvelope(t *testing.T) {
 	router := NewRouter()
-	router.GET("/fail", func(ctx *gin.Context) {
-		WriteError(ctx, http.StatusUnauthorized, "invalid token")
+	router.Get("/fail", func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, http.StatusUnauthorized, "invalid token")
 	})
 
 	response := httptest.NewRecorder()
@@ -70,8 +68,12 @@ func TestWriteErrorUsesSharedErrorEnvelope(t *testing.T) {
 	if payload["data"] != nil {
 		t.Fatalf("unexpected data %#v", payload["data"])
 	}
-	if payload["error_code"] != http.StatusText(http.StatusUnauthorized) {
-		t.Fatalf("unexpected error code %#v", payload["error_code"])
+	if _, ok := payload["error_reason"]; ok {
+		t.Fatalf("unexpected error_reason %#v", payload["error_reason"])
+	}
+	legacyErrorCodeKey := "error" + "_code"
+	if _, ok := payload[legacyErrorCodeKey]; ok {
+		t.Fatalf("unexpected legacy error code %#v", payload[legacyErrorCodeKey])
 	}
 	if payload["timestamp"] == "" {
 		t.Fatal("timestamp should be populated")

@@ -90,20 +90,9 @@ function *yieldTokenChunks(text) {
 }
 
 /**
- * 流式对话 — 返回 AsyncGenerator，yield 类型化事件：
- *   { kind: 'token',  text: string }                                        — LLM 流式 token
- *   { kind: 'status', tool: string, input_preview: string, step: number }  — 子 agent 工具开始执行
- *   { kind: 'error',  message: string }                                     — 错误
- *   { kind: 'done' }                                                        — 本轮结束
- *
- * 向后兼容：旧后端如果推送的是裸字符串，会被当作 token 文本处理。
- *
- * @param {string} message
- * @param {string} sessionId
- * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
- * @param {{ signal?: AbortSignal }} [options] 传入 signal 可中止 fetch / 流读取（用户点击停止）
+ * Open the backend streaming chat response for one turn request.
  */
-export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
+async function openChatStreamResponse(message, sessionId, agentHint = '', options = {}) {
   const signal = options && options.signal
   const fileUuids = Array.isArray(options?.fileUuids) ? options.fileUuids : []
   const displayCaption = typeof options?.displayCaption === 'string'
@@ -138,7 +127,19 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
   if (!resp.ok) {
     await readAgentError(resp)
   }
+  return resp
+}
 
+/**
+ * Stream raw backend turn events without flattening them into token/status rows.
+ *
+ * @param {string} message
+ * @param {string} sessionId
+ * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
+ * @param {{ signal?: AbortSignal }} [options] 传入 signal 可中止 fetch / 流读取（用户点击停止）
+ */
+export async function* chatEventStream(message, sessionId, agentHint = '', options = {}) {
+  const resp = await openChatStreamResponse(message, sessionId, agentHint, options)
   const reader = resp.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
@@ -162,38 +163,123 @@ export async function* chatStream(message, sessionId, agentHint = '', options = 
       try {
         parsed = JSON.parse(payload)
       } catch {
-        // 非 JSON：按裸文本处理
-        for (const ev of yieldTokenChunks(payload)) yield ev
+        // 旧协议裸文本：转成最小 raw token event，调用方再决定如何投影。
+        yield { type: 'token', text: payload }
         continue
       }
 
-      // 新协议：typed 事件
+      // 新协议：原样暴露 typed turn event。
       if (parsed && typeof parsed === 'object') {
-        const type = parsed.type
-        if (type === 'token') {
-          for (const ev of yieldTokenChunks(String(parsed.text ?? ''))) yield ev
-        } else if (type === 'status') {
-          yield {
-            kind: 'status',
-            tool: String(parsed.tool ?? ''),
-            input_preview: String(parsed.input_preview ?? ''),
-            step: Number(parsed.step ?? 0),
-          }
-        } else if (type === 'error') {
-          throw new Error(String(parsed.message ?? 'unknown error'))
-        } else if (type === 'done') {
-          return
-        }
+        yield parsed
+        if (parsed.type === 'done') return
         continue
       }
 
       // 旧协议：裸字符串
       if (typeof parsed === 'string') {
-        if (parsed.startsWith('[ERROR]')) throw new Error(parsed)
-        for (const ev of yieldTokenChunks(parsed)) yield ev
+        if (parsed.startsWith('[ERROR]')) {
+          yield { type: 'error', message: parsed }
+        } else {
+          yield { type: 'token', text: parsed }
+        }
       }
     }
   }
+}
+
+/**
+ * 流式对话兼容层 — 返回 AsyncGenerator，yield 类型化事件：
+ *   { kind: 'token',  text: string }                                        — LLM 流式 token
+ *   { kind: 'status', tool: string, input_preview: string, step: number }  — 工具开始执行
+ *   { kind: 'error',  message: string }                                     — 错误
+ *   { kind: 'done' }                                                        — 本轮结束
+ *
+ * 新 UI 应使用 chatEventStream()，此函数仅保留旧 token/status 消费者。
+ *
+ * @param {string} message
+ * @param {string} sessionId
+ * @param {string} [agentHint] 可选：research | code | knowledge | image | data | chat
+ * @param {{ signal?: AbortSignal }} [options] 传入 signal 可中止 fetch / 流读取（用户点击停止）
+ */
+export async function* chatStream(message, sessionId, agentHint = '', options = {}) {
+  let receivedAssistantText = false
+
+  for await (const parsed of chatEventStream(message, sessionId, agentHint, options)) {
+    if (!parsed || typeof parsed !== 'object') continue
+    const type = parsed.type
+    if (type === 'token') {
+      for (const ev of yieldTokenChunks(String(parsed.text ?? ''))) {
+        receivedAssistantText = true
+        yield ev
+      }
+    } else if (type === 'status') {
+      yield {
+        kind: 'status',
+        tool: String(parsed.tool ?? ''),
+        input_preview: String(parsed.input_preview ?? ''),
+        step: Number(parsed.step ?? 0),
+      }
+    } else if (type === 'error') {
+      throw new Error(String(parsed.message ?? 'unknown error'))
+    } else if (type === 'done') {
+      return
+    } else if (type === 'item_delta') {
+      const text = String(parsed.delta?.text_append ?? parsed.delta?.text ?? '')
+      for (const ev of yieldTokenChunks(text)) {
+        receivedAssistantText = true
+        yield ev
+      }
+    } else if (type === 'item_started') {
+      const status = parseTurnItemStatus(parsed.item)
+      if (status) yield status
+    } else if (type === 'item_completed') {
+      const item = parsed.item
+      if (!receivedAssistantText && item?.type === 'agent_message') {
+        for (const ev of yieldTokenChunks(String(item.text ?? ''))) {
+          receivedAssistantText = true
+          yield ev
+        }
+      }
+    } else if (type === 'turn_completed') {
+      if (!receivedAssistantText) {
+        for (const ev of yieldTokenChunks(String(parsed.reply ?? ''))) {
+          receivedAssistantText = true
+          yield ev
+        }
+      }
+      return
+    } else if (type === 'turn_failed') {
+      throw new Error(parseTurnErrorMessage(parsed.error))
+    } else if (type === 'turn_aborted') {
+      return
+    }
+  }
+}
+
+function parseTurnItemStatus(item) {
+  if (!item || item.type !== 'tool_call') return null
+  const functionPayload = item.function || {}
+  const argsText = String(functionPayload.arguments_text || '').trim()
+  const argsJson = functionPayload.arguments_json
+  let inputPreview = argsText
+  if (!inputPreview && argsJson && typeof argsJson === 'object') {
+    try {
+      inputPreview = JSON.stringify(argsJson)
+    } catch {
+      inputPreview = ''
+    }
+  }
+  return {
+    kind: 'status',
+    tool: String(functionPayload.name || ''),
+    input_preview: inputPreview,
+    step: Number(item.index ?? 0),
+  }
+}
+
+function parseTurnErrorMessage(error) {
+  if (!error || typeof error !== 'object') return 'Agent turn failed'
+  return String(error.message || error.code || 'Agent turn failed')
 }
 
 /**

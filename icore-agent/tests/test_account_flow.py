@@ -8,6 +8,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from icore_agent.domain.agent.loop import ModelStepResult
+from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.session import AgentMessageItem
 from icore_agent.main import app
 
 
@@ -78,6 +81,21 @@ def _api_data(resp) -> dict:
     assert payload["message"]
     assert payload["timestamp"]
     return payload["data"]
+
+
+class _StaticModelClient:
+    """Model client fake that returns a configured assistant reply."""
+
+    def __init__(self, reply: str) -> None:
+        """Create a static reply model client."""
+        self._reply = reply
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Return the configured assistant reply for any prompt."""
+        _ = envelope
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(text=self._reply),
+        )
 
 
 def _api_message(resp) -> str:
@@ -160,14 +178,14 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
         "/api/v1/account/login",
         json={"email": email, "verification_code": code},
     )
-    assert login.status_code == 200, login.text
+    assert login.status_code == 200, login.TEXT
     body = _api_data(login)
     token = body["access_token"]
     assert token
 
     me = client.get("/api/v1/account/me",
                     headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200, me.text
+    assert me.status_code == 200, me.TEXT
     assert _api_data(me)["email"] == email
 
 
@@ -290,12 +308,12 @@ def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mo
     assert "Verification code sent to" in body["message"]
 
 
-@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_chat_completions_model_client")
 @patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_requires_account_token(mock_memory, mock_create_orch, client: TestClient):
     mock_memory.get_context = AsyncMock(return_value=(None, []))
     mock_memory.append_message = AsyncMock()
-    mock_create_orch.return_value = MagicMock(return_value="secured reply")
+    mock_create_orch.return_value = _StaticModelClient("secured reply")
 
     unauthorized = client.post(
         "/api/v1/agent/chat",
@@ -346,9 +364,9 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
 def test_can_fetch_session_state(mock_memory, client: TestClient):
     user_payload = _register_trial_direct(client)
     headers = {"Authorization": f"Bearer {user_payload['access_token']}"}
-    from icore_agent.application.chat import ChatHistoryService
+    from icore_agent.application.agent import AgentSessionService
 
-    ChatHistoryService().ensure_owned_session(
+    AgentSessionService().ensure_owned_session(
         "demo-session",
         user_payload["user"]["id"],
         title="Demo session",
@@ -368,7 +386,8 @@ def test_can_fetch_session_state(mock_memory, client: TestClient):
     payload = _api_data(resp)
     assert payload["session_id"] == "demo-session"
     assert payload["summary"] == "Summary text"
-    assert len(payload["messages"]) == 2
+    assert payload["turns"] == []
+    assert "messages" not in payload
     assert payload["attachments"] == []
 
 

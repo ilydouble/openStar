@@ -10,7 +10,6 @@ When AUTH_ENABLED=false (default for dev), all requests pass through.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -122,7 +121,6 @@ def _auth_error_response(status_code: int, message: str) -> JSONResponse:
             "code": status_code,
             "message": message,
             "data": None,
-            "error_code": HTTPStatus(status_code).phrase,
             "timestamp": datetime.now(UTC).isoformat(),
         },
         status_code=status_code,

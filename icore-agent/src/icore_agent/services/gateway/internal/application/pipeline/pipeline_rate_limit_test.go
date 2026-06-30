@@ -49,7 +49,7 @@ type orderedProxy struct {
 	order *[]string
 }
 
-func (proxy *orderedProxy) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+func (proxy *orderedProxy) ServeHTTP(w http.ResponseWriter, _ *http.Request, _ string) {
 	proxy.hit = true
 	*proxy.order = append(*proxy.order, "proxy")
 	w.WriteHeader(http.StatusOK)
@@ -221,7 +221,7 @@ func newRateLimitTestPipeline(
 ) *Pipeline {
 	return NewPipeline(PipelineConfig{
 		ServiceName: "icore-gateway",
-		RoutePolicy: route_policy.NewDefaultRoutePolicy("http://backend.local"),
+		RoutePolicy: route_policy.NewDefaultRoutePolicy("http://backend.local", "http://payment.local"),
 		RequestIDPolicy: request_id.RequestIDPolicy{
 			Generate: func() string { return "generated-request-id" },
 		},

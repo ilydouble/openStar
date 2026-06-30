@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # ─────────────────────────────────────────────────
 # Stage 1: builder
 # ─────────────────────────────────────────────────
@@ -10,17 +12,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project metadata first (layer cache)
-COPY pyproject.toml ./
+# Copy dependency manifests first so source-only changes reuse dependency layers.
+COPY pyproject.toml requirements.txt ./
 
-# Runtime dependencies depend only on project metadata. Keep this before
+# Runtime dependencies depend only on requirements.txt. Keep this before
 # copying source so normal code changes can reuse the expensive dependency layer.
-RUN python -c "import tomllib; from pathlib import Path; deps = tomllib.loads(Path('pyproject.toml').read_text())['project']['dependencies']; Path('/tmp/requirements-runtime.txt').write_text('\n'.join(deps) + '\n')" \
-    && pip install --prefix=/install/deps --no-cache-dir -r /tmp/requirements-runtime.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install/deps -r requirements.txt
 
 # Install build tooling after runtime dependencies so dependency resolution
 # cannot remove packages that Hatch needs from the global build environment.
-RUN pip install --no-cache-dir hatch
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install hatch
 
 COPY src/ ./src/
 
@@ -38,7 +41,7 @@ RUN groupadd -r icore && useradd -r -g icore -m -d /app icore
 
 WORKDIR /app
 
-# Runtime system deps (bash required by sequential agent)
+# Runtime system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash curl ffmpeg git \
     && rm -rf /var/lib/apt/lists/*
@@ -51,8 +54,8 @@ COPY --from=builder /install/app /usr/local
 COPY alembic.ini ./alembic.ini
 COPY alembic/ ./alembic/
 
-# Sequential agent workspace
-RUN mkdir -p /tmp/icore-seq-workspace && chown icore:icore /tmp/icore-seq-workspace
+# Agent tool workspace
+RUN mkdir -p /tmp/icore-agent-workspace && chown icore:icore /tmp/icore-agent-workspace
 
 USER icore
 

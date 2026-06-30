@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Addr                  string
 	BackendURL            string
+	PaymentServiceURL     string
 	LoggingServiceName    string
 	LoggingServiceURL     string
 	LoggingServiceToken   string
@@ -44,11 +45,13 @@ type RateLimitProfile struct {
 // Load reads environment variables and applies local development defaults.
 func Load() Config {
 	serviceRateLimits := map[string]RateLimitProfile{
-		"icore-agent": serviceRateLimitProfile("icore-agent", RateLimitProfile{RatePerSecond: 10, Burst: 20}),
+		"icore-agent":     serviceRateLimitProfile("icore-agent", RateLimitProfile{RatePerSecond: 10, Burst: 20}),
+		"payment-service": serviceRateLimitProfile("payment-service", RateLimitProfile{RatePerSecond: 5, Burst: 10}),
 	}
 	return Config{
 		Addr:                  envconfig.String("GATEWAY_ADDR", ":11000"),
 		BackendURL:            envconfig.String("GATEWAY_BACKEND_URL", "http://icore-agent:11001"),
+		PaymentServiceURL:     envconfig.String("GATEWAY_PAYMENT_SERVICE_URL", "http://payment-service:8080"),
 		LoggingServiceName:    envconfig.String("GATEWAY_LOGGING_SERVICE_NAME", "icore-gateway"),
 		LoggingServiceURL:     envconfig.String("LOGGING_SERVICE_URL", "http://logging-service:8091"),
 		LoggingServiceToken:   envconfig.String("LOGGING_SERVICE_TOKEN", "dev-logging-service-token"),

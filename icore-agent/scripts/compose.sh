@@ -4,37 +4,125 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 USE_EXAMPLES="${ICORE_COMPOSE_USE_EXAMPLES:-0}"
 
-COMPOSE_FILES=(
-  "infrastructure/docker/compose/base.yml"
-  "infrastructure/docker/compose/postgres.yml"
-  "infrastructure/docker/compose/redis.yml"
-  "infrastructure/docker/compose/minio.yml"
-  "infrastructure/docker/compose/kafka.yml"
-  "infrastructure/docker/compose/click-house.yml"
-  "infrastructure/docker/compose/storage-service.yml"
-  "infrastructure/docker/compose/logging-service.yml"
-  "infrastructure/docker/compose/backend.yml"
-  "infrastructure/docker/compose/gateway.yml"
-)
+MODE="dev"
+if [[ "${1:-}" == "dev" ]]; then
+  MODE="dev"
+  shift
+elif [[ "${1:-}" == "production" || "${1:-}" == "prod" ]]; then
+  MODE="production"
+  shift
+fi
+
+case "$MODE" in
+  dev)
+    COMPOSE_FILES=(
+      "infrastructure/docker/compose/dev/base.yml"
+      "infrastructure/docker/compose/dev/postgres.yml"
+      "infrastructure/docker/compose/dev/payment-service.yml"
+      "infrastructure/docker/compose/dev/redis.yml"
+      "infrastructure/docker/compose/dev/minio.yml"
+      "infrastructure/docker/compose/dev/kafka.yml"
+      "infrastructure/docker/compose/dev/click-house.yml"
+      "infrastructure/docker/compose/dev/storage-service.yml"
+      "infrastructure/docker/compose/dev/logging-service.yml"
+      "infrastructure/docker/compose/dev/backend.yml"
+      "infrastructure/docker/compose/dev/gateway.yml"
+    )
+    ;;
+  production)
+    COMPOSE_FILES=(
+      "infrastructure/docker/compose/production/base.yml"
+      "infrastructure/docker/compose/production/minio.yml"
+      "infrastructure/docker/compose/production/kafka.yml"
+      "infrastructure/docker/compose/production/click-house.yml"
+      "infrastructure/docker/compose/production/storage-service.yml"
+      "infrastructure/docker/compose/production/logging-service.yml"
+      "infrastructure/docker/compose/production/payment-service.yml"
+      "infrastructure/docker/compose/production/backend.yml"
+      "infrastructure/docker/compose/production/gateway.yml"
+    )
+    ;;
+  *)
+    echo "Unsupported compose mode: $MODE" >&2
+    exit 1
+    ;;
+esac
 
 ENV_FILES=(
-  "dotenv/.env.app"
-  "dotenv/.env.build"
-  "dotenv/.env.database"
-  "dotenv/.env.memory"
-  "dotenv/.env.minio"
-  "dotenv/.env.kafka"
-  "dotenv/.env.clickhouse"
-  "dotenv/.env.storage"
-  "dotenv/.env.logging"
-  "dotenv/.env.gateway"
-  "dotenv/.env.llm"
-  "dotenv/.env.sequential"
-  "dotenv/.env.auth"
-  "dotenv/.env.rag"
-  "dotenv/.env.tools"
-  "dotenv/.env.media"
+  "dotenv/$MODE/.env.app"
+  "dotenv/$MODE/.env.agent"
+  "dotenv/$MODE/.env.build"
+  "dotenv/$MODE/.env.database"
+  "dotenv/$MODE/.env.payment"
+  "dotenv/$MODE/.env.memory"
+  "dotenv/$MODE/.env.minio"
+  "dotenv/$MODE/.env.kafka"
+  "dotenv/$MODE/.env.clickhouse"
+  "dotenv/$MODE/.env.storage"
+  "dotenv/$MODE/.env.logging"
+  "dotenv/$MODE/.env.gateway"
+  "dotenv/$MODE/.env.llm"
+  "dotenv/$MODE/.env.auth"
+  "dotenv/$MODE/.env.rag"
+  "dotenv/$MODE/.env.tools"
+  "dotenv/$MODE/.env.media"
 )
+
+export ICORE_COMPOSE_DOTENV_DIR="$PROJECT_DIR/dotenv/$MODE"
+export ICORE_COMPOSE_ENV_SUFFIX=""
+if [[ "$USE_EXAMPLES" == "1" ]]; then
+  ICORE_COMPOSE_ENV_SUFFIX=".example"
+fi
+
+read_env_value() {
+  local key="$1"
+  local file="$2"
+  awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$file"
+}
+
+normalize_proxy_url() {
+  local value="$1"
+
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+
+  if [[ -z "$value" || "$value" == *"://"* ]]; then
+    printf '%s' "$value"
+    return
+  fi
+
+  case "$value" in
+    http:*|https:*|socks4:*|socks5:*)
+      printf '%s://%s' "${value%%:*}" "${value#*:}"
+      ;;
+    *)
+      printf 'http://%s' "$value"
+      ;;
+  esac
+}
+
+BUILD_ENV_FILE="$PROJECT_DIR/dotenv/$MODE/.env.build"
+BUILD_EXAMPLE_FILE="$BUILD_ENV_FILE.example"
+http_proxy_value="${BUILD_HTTP_PROXY-}"
+https_proxy_value="${BUILD_HTTPS_PROXY-}"
+
+if [[ -z "$http_proxy_value" && -f "$BUILD_ENV_FILE" ]]; then
+  http_proxy_value="$(read_env_value "BUILD_HTTP_PROXY" "$BUILD_ENV_FILE")"
+elif [[ -z "$http_proxy_value" && "$USE_EXAMPLES" == "1" && -f "$BUILD_EXAMPLE_FILE" ]]; then
+  http_proxy_value="$(read_env_value "BUILD_HTTP_PROXY" "$BUILD_EXAMPLE_FILE")"
+fi
+if [[ -z "$https_proxy_value" && -f "$BUILD_ENV_FILE" ]]; then
+  https_proxy_value="$(read_env_value "BUILD_HTTPS_PROXY" "$BUILD_ENV_FILE")"
+elif [[ -z "$https_proxy_value" && "$USE_EXAMPLES" == "1" && -f "$BUILD_EXAMPLE_FILE" ]]; then
+  https_proxy_value="$(read_env_value "BUILD_HTTPS_PROXY" "$BUILD_EXAMPLE_FILE")"
+fi
+
+export BUILD_HTTP_PROXY
+export BUILD_HTTPS_PROXY
+BUILD_HTTP_PROXY="$(normalize_proxy_url "$http_proxy_value")"
+BUILD_HTTPS_PROXY="$(normalize_proxy_url "$https_proxy_value")"
 
 cmd=(docker compose)
 
@@ -54,7 +142,12 @@ for env_file in "${ENV_FILES[@]}"; do
 done
 
 for compose_file in "${COMPOSE_FILES[@]}"; do
-  cmd+=(-f "$PROJECT_DIR/$compose_file")
+  full_path="$PROJECT_DIR/$compose_file"
+  if [[ ! -f "$full_path" ]]; then
+    echo "Missing compose file: $compose_file" >&2
+    exit 1
+  fi
+  cmd+=(-f "$full_path")
 done
 
 exec "${cmd[@]}" "$@"

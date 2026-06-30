@@ -9,6 +9,7 @@ This repository should be developed with clear domain boundaries and verified ch
 - Python-owned database schema changes must be represented as Alembic migrations under `icore-agent/alembic/`.
 - Go microservices that own an isolated database may use service-local `golang-migrate` migrations. Keep those migrations under the owning service, run them with that service's database role, and do not grant other application roles write access to that database.
 - Keep configuration grouped by business domain. Preserve stable public exports when refactoring shared config.
+- Avoid one-line helper functions that only wrap a constant, direct field access, or simple string assembly without adding a real domain concept.
 - Use the shared `ApiEnvelope` response shape for HTTP JSON contracts. The Python backend owns this contract at `icore-agent/src/icore_agent/interfaces/http/v1/envelope.py`: successful responses include `code`, `message`, `data`, and `timestamp`; error responses also include `error_code`. Service clients must unwrap `data` at the adapter boundary and must not read business fields from the top-level envelope.
 
 ## Environment

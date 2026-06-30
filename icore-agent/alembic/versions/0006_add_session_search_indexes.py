@@ -1,4 +1,4 @@
-"""add full-text search indexes for sessions and messages
+"""add full-text search index for sessions
 
 Revision ID: 0006
 Revises: 0005
@@ -23,15 +23,7 @@ def upgrade() -> None:
         USING GIN (to_tsvector('simple', title))
         """
     )
-    op.execute(
-        """
-        CREATE INDEX ix_messages_content_fts
-        ON messages
-        USING GIN (to_tsvector('simple', content))
-        """
-    )
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS ix_messages_content_fts")
     op.execute("DROP INDEX IF EXISTS ix_sessions_title_fts")

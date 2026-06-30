@@ -6,7 +6,11 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
-from icore_agent.application.chat import ChatHistoryService, ChatTurnService
+from icore_agent.application.agent import (
+    AgentRuntime,
+    AgentSessionService,
+    AgentTurnService,
+)
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.memory import UserMemoryService
@@ -14,12 +18,15 @@ from icore_agent.application.usage import UsageService
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.application.chat.orchestrator import create_orchestrator
 from icore_agent.infrastructure.control_plane import (
     ControlPlaneLeadRepository,
     ControlPlaneVerificationRepository,
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.infrastructure.agent.chat_completions import (
+    create_chat_completions_model_client,
+)
+from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
@@ -71,7 +78,7 @@ billing_service = BillingService(
     billing_repository,
     settings.icore_base_url or "http://localhost:11000",
 )
-chat_history_service = ChatHistoryService()
+agent_session_service = AgentSessionService()
 knowledge_service = KnowledgeService(
     add_documents=add_documents,
     list_documents=list_documents,
@@ -90,6 +97,12 @@ file_asset_service = FileAssetService(
     bucket=settings.file_storage_bucket,
     default_expires_in=settings.file_upload_url_expires_in,
 )
+agent_run_store = RedisAgentRunStore(
+    redis_url=settings.redis_url,
+    lock_ttl_seconds=settings.agent_runtime_lock_ttl_seconds,
+    state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
+)
+agent_runtime = AgentRuntime(run_store=agent_run_store)
 
 
 def get_account_service() -> AccountService:
@@ -122,25 +135,26 @@ def get_file_asset_service() -> FileAssetService:
     return file_asset_service
 
 
-def get_chat_history_service() -> ChatHistoryService:
-    """Return the singleton chat history service used by agent handlers."""
-    return chat_history_service
+def get_agent_session_service() -> AgentSessionService:
+    """Return the singleton agent session service used by agent handlers."""
+    return agent_session_service
 
 
-def get_chat_turn_service() -> ChatTurnService:
-    """Return an application service for one HTTP chat turn.
+def get_agent_turn_service() -> AgentTurnService:
+    """Return an application service for one HTTP agent turn.
 
-    usage_service is injected so that every chat turn enforces token quota
+    usage_service is injected so that every agent turn enforces token quota
     before invoking the LLM.  The LiteLLM success callback in main.py then
     records actual usage and decrements the quota counter after the reply.
     """
-    return ChatTurnService(
-        chat_history=chat_history_service,
+    return AgentTurnService(
+        agent_session=agent_session_service,
         file_service=file_asset_service,
         conversation_memory=memory,
-        orchestrator_factory=create_orchestrator,
+        model_client_factory=create_chat_completions_model_client,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
+        agent_runtime=agent_runtime,
     )
 
 

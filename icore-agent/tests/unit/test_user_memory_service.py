@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.application.chat.prompts import build_orchestrator_system_prompt
+from icore_agent.domain.agent.prompt import build_base_instructions
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage.policy import current_timestamp, default_usage
 from icore_agent.domain.account.plans import Plan
@@ -74,7 +74,6 @@ def test_user_memory_service_injects_ranked_prompt(memory_repository) -> None:
         "u1",
         TurnMemoryContext(
             message="Review my Shopify product page",
-            agent_hint="research",
         ),
     )
 
@@ -148,11 +147,8 @@ async def test_extract_on_session_end_skips_empty_session(memory_repository) -> 
     assert profile.extract_count == 0
 
 
-def test_orchestrator_prompt_includes_user_memory_section() -> None:
-    """Orchestrator system prompt should include the user memory block."""
-    prompt = build_orchestrator_system_prompt(
-        summary="Session summary",
-        user_memory_prompt="## About this user\n- tone: concise",
-    )
-    assert "## About this user" in prompt
-    assert "Session summary" in prompt
+def test_orchestrator_prompt_excludes_user_memory_section() -> None:
+    """System prompt should not include runtime user memory context."""
+    prompt = build_base_instructions()
+    assert "## About this user" not in prompt
+    assert "Session summary" not in prompt

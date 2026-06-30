@@ -76,6 +76,7 @@ class LLMSettings(DomainSettings):
     max_retries: int = Field(3, ge=0, le=10)
     agent_max_tokens: int = 8192
     agent_temperature: float = Field(0.1, ge=0.0, le=1.0)
+    agent_model_supports_vision: bool = False
     zai_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
@@ -164,7 +165,7 @@ class LLMSettings(DomainSettings):
         temperature: float | None,
         extra_params: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
-        """Resolve model request parameters for LiteLLM and Strands."""
+        """Resolve model request parameters for LiteLLM."""
         params: dict[str, Any] = {}
         if max_tokens is not None:
             params["max_tokens"] = max_tokens

@@ -1,23 +1,25 @@
 """Agent API schemas."""
 
 from .chat import ChatRequest, ChatResponse
-from .sequential import SequentialRequest, SequentialResponse
+from .runtime import AgentRuntimeControlResponse, AgentRuntimeInputRequest
 from .session import (
     SessionListResponse,
     SessionSearchResponse,
     SessionStateResponse,
-    SessionToolCallItem,
+    SessionTimelineItem,
+    SessionTurnItem,
 )
 from .transcribe import TranscribeResponse
 
 __all__ = [
     "ChatRequest",
     "ChatResponse",
-    "SequentialRequest",
-    "SequentialResponse",
+    "AgentRuntimeControlResponse",
+    "AgentRuntimeInputRequest",
     "SessionListResponse",
     "SessionSearchResponse",
     "SessionStateResponse",
-    "SessionToolCallItem",
+    "SessionTimelineItem",
+    "SessionTurnItem",
     "TranscribeResponse",
 ]

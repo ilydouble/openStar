@@ -25,6 +25,7 @@ case "$MODE" in
       "infrastructure/docker/compose/dev/click-house.yml"
       "infrastructure/docker/compose/dev/storage-service.yml"
       "infrastructure/docker/compose/dev/logging-service.yml"
+      "infrastructure/docker/compose/dev/pi-source-service.yml"
       "infrastructure/docker/compose/dev/backend.yml"
       "infrastructure/docker/compose/dev/gateway.yml"
     )
@@ -66,6 +67,7 @@ ENV_FILES=(
   "dotenv/$MODE/.env.rag"
   "dotenv/$MODE/.env.tools"
   "dotenv/$MODE/.env.media"
+  "dotenv/$MODE/.env.pi"
 )
 
 export ICORE_COMPOSE_DOTENV_DIR="$PROJECT_DIR/dotenv/$MODE"

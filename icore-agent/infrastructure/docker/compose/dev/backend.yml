@@ -1,4 +1,19 @@
 services:
+  # Named volumes are created root-owned on first use, but icore-agent runs as
+  # the unprivileged `icore` user (uid/gid 999 — see Dockerfile). Without this
+  # one-shot chown, PiWorkspaceService.extract_into_sandbox fails with
+  # PermissionError when it tries to mkdir inside the shared sandbox volume.
+  # Idempotent — safe to run on every `up`.
+  pi-workspace-volume-init:
+    image: busybox:latest
+    container_name: icore-pi-workspace-volume-init
+    restart: 'no'
+    command: ['sh', '-c', 'chown -R 999:999 /workspace/projects && echo "pi-projects-workspace ownership ok"']
+    volumes:
+      - pi-projects-workspace:/workspace/projects
+    networks:
+      - icore-net
+
   icore-agent:
     build:
       context: ../../../..
@@ -30,6 +45,7 @@ services:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.tools${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.media${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.storage${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.pi${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
       STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://storage-service:8090}
       STORAGE_SERVICE_TOKEN: ${STORAGE_SERVICE_TOKEN:-dev-storage-service-token}
@@ -44,6 +60,9 @@ services:
     volumes:
       - ../../../../src:/app/src:ro
       - agent-tool-workspace:/tmp/icore-agent-workspace
+      # Pi mode: extracted project sandboxes live here (path matches
+      # `pi_workspace_sandbox_root` default and pi-service's PI_WORKSPACE_ROOT).
+      - pi-projects-workspace:/workspace/projects
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,6 +72,8 @@ services:
         condition: service_healthy
       logging-service:
         condition: service_healthy
+      pi-service:
+        condition: service_started
     networks:
       - icore-net
     healthcheck:

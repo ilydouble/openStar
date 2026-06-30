@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any
 
 from icore_agent.application.usage.policy import current_timestamp
@@ -15,6 +16,7 @@ from icore_agent.domain.memory import (
     UserMemoryProfile,
     UserMemoryRepository,
 )
+from icore_agent.infrastructure.memory.memory_read_cache import memory_read_cache
 from icore_agent.shared.logging.app_logger import get_logger
 
 from . import consolidation, policy
@@ -44,8 +46,10 @@ class UserMemoryService:
     ) -> str | None:
         """Return the bounded user-memory prompt section for one turn."""
         try:
-            profile_row = self._repository.get_or_create_profile(user_id)
-            facts = self._repository.list_active_facts(user_id)
+            profile_row, facts = self._load_snapshot(user_id)
+            # Ranking stays per-turn and in-memory (cheap, pure Python) so
+            # personalization keeps reacting to *this* message's content —
+            # only the Postgres reads behind it are cached/reused.
             selected = policy.rank_facts_for_turn(facts, turn)
             if selected:
                 now = current_timestamp()
@@ -57,6 +61,33 @@ class UserMemoryService:
             log.warning("user_memory_prompt_failed",
                         user_id=user_id, error=str(exc))
             return None
+
+    def _load_snapshot(
+        self, user_id: str
+    ) -> tuple[UserMemoryProfile, list[UserMemoryFact]]:
+        """Return (profile, active_facts) from cache, falling back to Postgres."""
+        cached = memory_read_cache.get_snapshot(user_id)
+        if cached is not None:
+            try:
+                return (
+                    UserMemoryProfile(**cached["profile"]),
+                    [UserMemoryFact(**row) for row in cached["facts"]],
+                )
+            except (KeyError, TypeError) as exc:
+                log.warning("user_memory_cache_payload_invalid",
+                            user_id=user_id, error=str(exc))
+
+        profile_row = self._repository.get_or_create_profile(user_id)
+        facts = self._repository.list_active_facts(user_id)
+        memory_read_cache.set_snapshot(user_id, {
+            "profile": asdict(profile_row),
+            "facts": [asdict(fact) for fact in facts],
+        })
+        return profile_row, facts
+
+    def _invalidate_snapshot(self, user_id: str) -> None:
+        """Drop the cached profile+facts snapshot after a write."""
+        memory_read_cache.invalidate(user_id)
 
     def should_extract_on_compression(self, *, session_compressed: bool) -> bool:
         """Return whether durable memory should run after a turn due to compression."""
@@ -198,6 +229,11 @@ class UserMemoryService:
                 now=now,
             ):
                 saved_count += 1
+
+        # Profile and/or facts changed — drop the cached snapshot so the
+        # very next turn re-reads the fresh rows instead of serving stale
+        # ones for up to memory_read_cache_ttl_seconds.
+        self._invalidate_snapshot(user_id)
         return saved_count
 
     def _apply_candidate(
@@ -329,6 +365,7 @@ class UserMemoryService:
             category=saved.category,
             key=saved.key,
         )
+        self._invalidate_snapshot(user_id)
         return _serialize_fact(saved)
 
     def delete_fact(self, user_id: str, fact_id: int) -> None:
@@ -347,6 +384,7 @@ class UserMemoryService:
             category=fact.category,
             key=fact.key,
         )
+        self._invalidate_snapshot(user_id)
 
 
 def _serialize_fact(fact: UserMemoryFact) -> dict[str, object]:

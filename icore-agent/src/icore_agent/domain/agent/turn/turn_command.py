@@ -21,6 +21,7 @@ class AgentTurnCommand:
     template_id: str | None
     incognito: bool
     user: AuthenticatedUser
+    pi_workspace_id: str | None = None
 
     @property
     def user_id(self) -> str:

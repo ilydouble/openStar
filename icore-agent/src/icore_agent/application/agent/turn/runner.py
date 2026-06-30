@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from icore_agent.application.agent.context import AgentTurnPromptBuilder
@@ -13,6 +14,9 @@ from icore_agent.application.agent.tool.catalog import (
 )
 from icore_agent.domain.agent.loop import AgentLoopControl, ModelClient
 from icore_agent.domain.agent.turn import Turn
+from icore_agent.shared.logging.app_logger import get_logger
+
+log = get_logger(__name__)
 
 ModelClientFactory = Callable[..., ModelClient]
 ModelClientWrapper = Callable[[ModelClient], ModelClient]
@@ -26,10 +30,12 @@ class AgentTurnRunnerFactory:
         model_client_factory: ModelClientFactory,
         *,
         file_service: Any | None = None,
+        pi_workspace_service: Any | None = None,
     ) -> None:
         """Create a loop-request factory with a model-client factory."""
         self._model_client_factory = model_client_factory
         self._file_service = file_service
+        self._pi_workspace_service = pi_workspace_service
 
     def build_loop_request(
         self,
@@ -64,3 +70,39 @@ class AgentTurnRunnerFactory:
             tool_runtime=ToolRuntime(tool_definitions),
             **({"control": control} if control is not None else {}),
         )
+
+    def _resolve_pi_workspace_dir(self, command: Any) -> str | None:
+        """Extract the user's selected Pi project into its sandbox directory.
+
+        Returns the absolute path Pi should be confined to, or ``None`` when
+        Pi mode isn't using an uploaded project (falls back to pi-service's
+        default read-only workspace). Never raises — a missing/foreign/corrupt
+        workspace silently degrades to "no project selected" rather than
+        failing the whole turn, since the user can simply re-pick a project.
+        """
+        workspace_id = (getattr(command, "pi_workspace_id", None) or "").strip()
+        if not workspace_id or self._pi_workspace_service is None:
+            return None
+        try:
+            from icore_agent.config import settings
+
+            sandbox_root = (
+                Path(settings.pi_workspace_sandbox_root)
+                / command.user_id
+                / workspace_id
+            )
+            resolved = self._pi_workspace_service.extract_into_sandbox(
+                owner_user_id=command.user_id,
+                workspace_id=workspace_id,
+                destination_root=sandbox_root,
+            )
+            return str(resolved)
+        except Exception:
+            log.warning(
+                "pi_workspace_resolve_failed",
+                session_id=command.session_id,
+                user_id=command.user_id,
+                workspace_id=workspace_id,
+                exc_info=True,
+            )
+            return None

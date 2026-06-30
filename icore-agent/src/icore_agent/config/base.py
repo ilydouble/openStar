@@ -20,6 +20,7 @@ _DOMAINS = (
     "tools",
     "media",
     "storage",
+    "pi",
 )
 
 

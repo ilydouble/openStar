@@ -12,6 +12,7 @@ from icore_agent.application.agent import (
     AgentTurnService,
 )
 from icore_agent.application.files import FileAssetService
+from icore_agent.application.pi_workspaces import PiWorkspaceService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
@@ -28,6 +29,9 @@ from icore_agent.infrastructure.agent.chat_completions import (
 )
 from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
+from icore_agent.infrastructure.persistence.pi_workspaces import (
+    SqlAlchemyPiWorkspaceRepository,
+)
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
     add_documents,
@@ -103,6 +107,18 @@ agent_run_store = RedisAgentRunStore(
     state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
 )
 agent_runtime = AgentRuntime(run_store=agent_run_store)
+pi_workspace_service = PiWorkspaceService(
+    repository=SqlAlchemyPiWorkspaceRepository(),
+    storage_client=StorageServiceClient(
+        base_url=settings.storage_service_url,
+        token=settings.storage_service_token,
+        timeout=settings.storage_service_timeout,
+    ),
+    bucket=settings.pi_workspace_bucket,
+    default_expires_in=settings.pi_workspace_upload_url_expires_in,
+    max_size_mb=settings.pi_workspace_max_size_mb,
+    max_files=settings.pi_workspace_max_files,
+)
 
 
 def get_account_service() -> AccountService:
@@ -135,6 +151,11 @@ def get_file_asset_service() -> FileAssetService:
     return file_asset_service
 
 
+def get_pi_workspace_service() -> PiWorkspaceService:
+    """Return the singleton Pi workspace service used by HTTP handlers."""
+    return pi_workspace_service
+
+
 def get_agent_session_service() -> AgentSessionService:
     """Return the singleton agent session service used by agent handlers."""
     return agent_session_service
@@ -155,6 +176,7 @@ def get_agent_turn_service() -> AgentTurnService:
         usage_service=usage_service,
         user_memory_service=user_memory_service,
         agent_runtime=agent_runtime,
+        pi_workspace_service=pi_workspace_service,
     )
 
 

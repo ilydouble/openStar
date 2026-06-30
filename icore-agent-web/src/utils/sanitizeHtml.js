@@ -11,6 +11,6 @@ export function sanitizeHtml(html) {
 
 /** Parse markdown and sanitize the resulting HTML for safe v-html rendering. */
 export function renderMarkdown(text) {
-  if (!text) return '&nbsp;'
+  if (!text) return ''
   return DOMPurify.sanitize(marked.parse(text))
 }

@@ -1,0 +1,23 @@
+{
+  "name": "pi-source-service",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx/esm src/server.ts",
+    "dev": "node --import tsx/esm --watch src/server.ts"
+  },
+  "dependencies": {
+    "archiver": "7.0.1",
+    "express": "4.21.2"
+  },
+  "devDependencies": {
+    "@types/archiver": "6.0.3",
+    "@types/express": "5.0.0",
+    "@types/node": "22.15.21",
+    "tsx": "4.19.4",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

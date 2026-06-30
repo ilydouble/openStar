@@ -1,5 +1,5 @@
 <template>
-  <div class="relative z-0 mx-auto w-full max-w-3xl">
+  <div class="relative z-30 mx-auto w-full max-w-3xl">
     <div
       v-if="voiceError"
       role="alert"
@@ -130,7 +130,7 @@
       </div>
       <div class="flex items-center">
         <div class="flex shrink-0 items-center">
-          <div ref="plusRootRef" class="relative z-10">
+          <div ref="plusRootRef" class="relative z-20">
             <button
               type="button"
               aria-haspopup="menu"
@@ -167,10 +167,13 @@
             >
               <div
                 v-show="plusMenuOpen"
-                class="absolute bottom-full left-0 z-[100] mb-2 max-h-[min(24rem,calc(100dvh-6rem))] min-w-[15rem]
-                       max-w-[min(18.5rem,calc(100vw-2rem))] origin-bottom-left overflow-y-auto overflow-x-hidden
-                       rounded-xl border border-zinc-200/90 bg-white/95 py-1 shadow-xl shadow-zinc-900/15
-                       backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/95 dark:shadow-black/50"
+                :class="[
+                  'absolute left-0 z-[100] max-h-[min(24rem,calc(100dvh-6rem))] min-w-[15rem]',
+                  'max-w-[min(18.5rem,calc(100vw-2rem))] overflow-y-auto overflow-x-hidden',
+                  'rounded-xl border border-zinc-200/90 bg-white py-1 shadow-xl shadow-zinc-900/15',
+                  'dark:border-white/10 dark:bg-zinc-900 dark:shadow-black/50',
+                  plusMenuOpensUpward ? 'bottom-full mb-2 origin-bottom-left' : 'top-full mt-2 origin-top-left',
+                ]"
                 role="menu"
               >
                 <template v-if="modePickerOpen && modeMenuItemsList.length">
@@ -212,20 +215,30 @@
                     :key="item.labelKey"
                     type="button"
                     role="menuitem"
-                    class="group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm
-                           text-zinc-900 transition-all duration-200
-                           hover:bg-zinc-100/90
-                           dark:text-white dark:hover:bg-white/10"
-                    @click.stop="handleMenuItemClick(item)"
+                    :disabled="item.comingSoon"
+                    :aria-disabled="item.comingSoon"
+                    :title="item.comingSoon ? t('home.chatInput.comingSoon') : undefined"
+                    :class="[
+                      'group flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-all duration-200',
+                      item.comingSoon
+                        ? 'cursor-not-allowed opacity-50 text-zinc-400 dark:text-zinc-500'
+                        : 'text-zinc-900 hover:bg-zinc-100/90 dark:text-white dark:hover:bg-white/10',
+                    ]"
+                    @click.stop="item.comingSoon ? undefined : handleMenuItemClick(item)"
                   >
                     <component
                       :is="item.icon"
-                      class="h-4 w-4 shrink-0 text-zinc-500 transition-colors duration-200
-                             group-hover:text-zinc-900
-                             dark:text-zinc-400 dark:group-hover:text-white"
+                      class="h-4 w-4 shrink-0 transition-colors duration-200"
+                      :class="item.comingSoon
+                        ? 'text-zinc-300 dark:text-zinc-600'
+                        : 'text-zinc-500 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white'"
                       stroke-width="2"
                     />
-                    {{ t(item.labelKey) }}
+                    <span class="flex-1">{{ t(item.labelKey) }}</span>
+                    <span
+                      v-if="item.comingSoon"
+                      class="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+                    >{{ t('home.chatInput.comingSoon') }}</span>
                   </button>
                 </template>
               </div>
@@ -381,7 +394,7 @@ const props = defineProps({
   /** 无痕模式：不写入历史、不注入记忆 */
   incognito: { type: Boolean, default: false },
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito'])
+const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito', 'composer-resize'])
 
 const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
@@ -696,6 +709,13 @@ const fileInputEl = ref(null)
 const plusMenuOpen = ref(false)
 const modePickerOpen = ref(false)
 const plusRootRef = ref(null)
+// Whether the "+" menu panel should open upward (above the trigger) or
+// downward (below it). Decided right before opening, based on the actual
+// viewport space around the trigger button — prevents the panel from
+// overflowing above the viewport top (which used to clip the first item,
+// "Select mode", out of view whenever the trigger sat close to the top,
+// e.g. after scrolling the home page content).
+const plusMenuOpensUpward = ref(true)
 const isDragging = ref(false)
 
 const MAX_PENDING_IMAGES = 5
@@ -902,11 +922,11 @@ function handleDrop(e) {
 }
 
 const plusMenuItems = [
-  { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode', action: 'openModePicker' },
-  { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
-  { icon: Image,     labelKey: 'home.chatInput.createImage',    action: null },
-  { icon: Brain,     labelKey: 'home.chatInput.thinkDeeply',    action: null },
-  { icon: Search,    labelKey: 'home.chatInput.searchInternet', action: null },
+  { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode',     action: 'openModePicker' },
+  { icon: Paperclip,  labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
+  { icon: Image,      labelKey: 'home.chatInput.createImage',    action: null, comingSoon: true },
+  { icon: Brain,      labelKey: 'home.chatInput.thinkDeeply',    action: null, comingSoon: true },
+  { icon: Search,     labelKey: 'home.chatInput.searchInternet', action: null, comingSoon: true },
 ]
 
 function closePlusMenu() {
@@ -919,6 +939,19 @@ function togglePlusMenu() {
     closePlusMenu()
   } else {
     modePickerOpen.value = false
+    // Pick the open direction from the trigger's current viewport position:
+    // prefer opening upward (matches the original design) but fall back to
+    // downward when there isn't enough room above to fit the panel without
+    // it overflowing past the viewport's top edge.
+    const anchor = plusRootRef.value?.getBoundingClientRect()
+    if (anchor) {
+      const estimatedMenuHeight = 270
+      const spaceAbove = anchor.top
+      const spaceBelow = window.innerHeight - anchor.bottom
+      plusMenuOpensUpward.value = spaceAbove >= estimatedMenuHeight || spaceAbove >= spaceBelow
+    } else {
+      plusMenuOpensUpward.value = true
+    }
     plusMenuOpen.value = true
   }
 }
@@ -987,10 +1020,17 @@ onUnmounted(() => {
 function autoGrow() {
   const el = area.value
   if (!el) return
+  const previousHeight = el.style.height
   el.style.overflow = 'hidden'
   el.style.height = 'auto'
   void el.offsetHeight
   el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`
+  // Let the parent know the composer's footprint changed (e.g. growing to a
+  // multi-line textarea) so it can keep the latest message visible above it
+  // instead of letting the taller composer slide over and cover it.
+  if (el.style.height !== previousHeight) {
+    emit('composer-resize')
+  }
 }
 
 function handleSubmit() {

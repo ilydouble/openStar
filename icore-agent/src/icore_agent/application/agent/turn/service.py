@@ -60,6 +60,7 @@ class AgentTurnService:
         model_client_factory: ModelClientFactory,
         usage_service: UsageService | None = None,
         user_memory_service: UserMemoryService | None = None,
+        pi_workspace_service: Any | None = None,
         wall_budget_sec: int = CHAT_STREAM_WALL_BUDGET_SEC,
         agent_loop: AgentLoop | None = None,
         agent_runtime: AgentRuntime | None = None,
@@ -79,6 +80,7 @@ class AgentTurnService:
             runner_factory=AgentTurnRunnerFactory(
                 model_client_factory,
                 file_service=file_service,
+                pi_workspace_service=pi_workspace_service,
             ),
             persistence=TurnPersistence(agent_session),
             transcript=TurnTranscriptRecorder(

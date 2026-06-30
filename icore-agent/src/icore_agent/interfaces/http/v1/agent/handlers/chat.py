@@ -71,4 +71,5 @@ def _command_from_request(req: ChatRequest, user: AuthenticatedUser) -> AgentTur
         template_id=(req.template_id or "").strip() or None,
         incognito=req.incognito,
         user=user,
+        pi_workspace_id=(req.pi_workspace_id or "").strip() or None,
     )

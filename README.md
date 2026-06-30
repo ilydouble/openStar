@@ -8,6 +8,9 @@
 - **研究助手** - 多源网络检索、事实交叉验证、结构化研究报告生成
 - **代码工程师** - 编写、审查、调试代码，支持序列化 bash 任务执行
 - **知识问答** - 从企业内部文档中精准检索并生成有据可查的答案
+- **Pi Agent** - 独立代码分析微服务（pi-source-service），具备只读文件工具（ls、read、grep、find），可深度分析项目源码、定位 Bug、提出改进建议
+  - 📁 **项目上传与持久化** - 用户可上传完整项目文件夹（最大 2GB / 10 万文件），归档经校验和检查后durably 存储于 MinIO（`icore-pi-workspaces` bucket），跨会话/重启均可恢复
+  - 🔒 **强沙箱隔离** - 每个项目解压到按 `{用户ID}/{工作区ID}` 隔离的目录；pi-source-service 在文件系统层面二次校验所有读/查找/搜索操作，确保 Pi 绝不能越权访问其他用户项目或宿主机文件（拒绝绝对路径、`../` 穿越、符号链接逃逸）
 
 ### 🛠️ 工具集
 - 网络搜索（Tavily / DDG）
@@ -113,6 +116,22 @@ DB_NAME=icore_agent_db
 
 # dotenv/.env.tools
 TAVILY_API_KEY=your-tavily-api-key
+
+# dotenv/.env.pi
+PI_SERVICE_URL=http://pi-service:11002
+PI_SERVICE_PORT=11002
+PI_PROVIDER=zai
+PI_MODEL_ID=glm-4.7
+PI_MAX_TOKENS=8192
+PI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+
+# Pi 项目上传与沙箱（pi_workspace_* 在 storage 域，PI_WORKSPACE_ROOT 由
+# pi-source-service 读取 —— 两端路径必须一致，见下方 Docker Compose 说明）
+PI_WORKSPACE_ROOT=/workspace/projects
+PI_WORKSPACE_BUCKET=icore-pi-workspaces
+PI_WORKSPACE_MAX_SIZE_MB=2048
+PI_WORKSPACE_MAX_FILES=100000
+PI_WORKSPACE_SANDBOX_ROOT=/workspace/projects
 ```
 
 ## 🚀 运行
@@ -157,16 +176,26 @@ iCore/
 ├── icore-agent/                 # 后端服务
 │   ├── src/icore_agent/
 │   │   ├── api/                # API 路由
+│   │   ├── application/
+│   │   │   ├── chat/           # 对话编排（路由、Agent 工厂、turn service）
+│   │   │   └── pi_workspaces/  # Pi 项目工作区应用服务（上传校验、归档解压、配额）
 │   │   ├── config/             # 配置管理
 │   │   ├── engine/             # Agent 引擎
 │   │   │   ├── agents/         # 子 Agent（研究、代码、知识）
 │   │   │   ├── sequential/     # 序列化任务执行器
 │   │   │   └── orchestrator.py # 主协调器
+│   │   ├── infrastructure/persistence/pi_workspaces/  # pi_workspaces 表的仓储与 ORM 模型
+│   │   ├── interfaces/http/v1/pi_workspaces/          # 工作区上传/列表/删除 REST API
 │   │   ├── tools/              # 工具函数
 │   │   └── main.py             # 应用入口
+│   ├── alembic/versions/       # 数据库迁移（含 0011_create_pi_workspaces）
 │   ├── tests/                  # 测试
 │   ├── dotenv/                 # 分域环境变量模板和本地配置
 │   └── pyproject.toml          # 项目配置
+│
+├── pi-source-service/           # Pi Agent 微服务（Node.js/TypeScript）
+│   ├── src/server.ts            # Express 服务器，SSE 流式输出
+│   └── Dockerfile               # 多阶段构建
 │
 └── icore-agent-web/             # 前端应用
     ├── src/
@@ -194,11 +223,19 @@ iCore/
 
 ### 主要 API 端点
 
-- `POST /api/v1/chat/completions` - 聊天对话（SSE 流式）
+- `POST /api/v1/chat/completions` - 聊天对话（SSE 流式，Pi 模式下可携带 `pi_workspace_id` 绑定项目沙箱）
 - `POST /api/v1/agent/research` - 研究助手
 - `POST /api/v1/agent/code` - 代码助手
 - `POST /api/v1/agent/knowledge` - 知识问答
 - `POST /api/v1/agent/sequential/run` - 序列化任务执行
+
+#### Pi 项目工作区（`/api/v1/pi/workspaces`）
+
+- `POST /upload-url/` - 为项目归档申请预签名上传地址（校验和+大小预声明）
+- `POST /{workspace_id}/complete/` - 校验已上传归档（SHA-256、大小、文件数、zip-slip/符号链接安全检查）并标记就绪
+- `GET /` - 列出当前用户自己的项目工作区
+- `GET /{workspace_id}/` - 获取单个工作区详情
+- `DELETE /{workspace_id}/` - 软删除一个工作区
 
 ## 🤝 贡献
 

@@ -3,7 +3,7 @@
 - understand_image: GLM-4.6V-Flash（免费）通过 LiteLLM vision completion
 - generate_image:   CogView-4 直调 Zhipu /images/generations REST 端点
 
-Both are exposed as Strands @tool for the main agent to call.
+Both are exposed through provider-neutral tool definitions for the main agent.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Any, cast
 
 import httpx
 from litellm import completion as litellm_completion
-from strands import tool
 
 from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
@@ -51,7 +50,6 @@ def _resolve_image_source(image_source: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-@tool
 def understand_image(image_source: str, question: str = "") -> str:
     """Analyze an image and answer questions about it using a vision model.
 
@@ -109,7 +107,6 @@ def _gen_api_key() -> str:
     return settings.zai_api_key or os.getenv("ZAI_API_KEY", "")
 
 
-@tool
 def generate_image(
     prompt: str,
     size: str = "1024x1024",

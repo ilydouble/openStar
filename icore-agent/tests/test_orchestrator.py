@@ -5,19 +5,27 @@ All LLM calls and external services are mocked.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from icore_agent.application.agent.sys_prompt import (
-    BuildSystemPromptOptions,
-    build_system_prompt,
+from icore_agent.domain.agent.prompt import (
+    PromptEnvelope,
+    build_base_instructions,
 )
-from icore_agent.application.agent.tool import AgentTool, ToolDefinition
+from icore_agent.domain.agent.tool import ToolDefinition
 from icore_agent.application.agent.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.application.agent.runner.orchestrator import create_orchestrator
+from icore_agent.config import ResolvedLiteLLMConfig
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+)
+from icore_agent.domain.agent.loop import ModelStepResult
+from icore_agent.infrastructure.agent.chat_completions import (
+    ChatCompletionsModelClient,
+    create_chat_completions_model_client,
+)
 from icore_agent.main import app
 from .test_account_flow import ASGISyncTestClient
 
@@ -45,6 +53,21 @@ def _api_data(resp):
     return payload["data"]
 
 
+class _StaticModelClient:
+    """Model client fake that returns a configured assistant reply."""
+
+    def __init__(self, reply: str) -> None:
+        """Create a static reply model client."""
+        self._reply = reply
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Return the configured assistant reply for any prompt."""
+        _ = envelope
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(text=self._reply),
+        )
+
+
 # ── Health endpoints ───────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
@@ -63,14 +86,14 @@ def test_ready_returns_ready(client):
 
 # ── Chat endpoint (non-streaming) ─────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.dependencies.create_orchestrator")
+@patch("icore_agent.interfaces.http.v1.dependencies.create_chat_completions_model_client")
 @patch("icore_agent.interfaces.http.v1.dependencies.memory")
 def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     mock_memory.get_context = AsyncMock(return_value=("", []))
     mock_memory.append_message = AsyncMock()
 
-    mock_agent = MagicMock(return_value="Hello from iCore Agent!")
-    mock_create_orch.return_value = mock_agent
+    mock_create_orch.return_value = _StaticModelClient(
+        "Hello from iCore Agent!")
 
     resp = client.post(
         "/api/v1/agent/chat",
@@ -84,26 +107,17 @@ def test_chat_non_streaming(mock_memory, mock_create_orch, client):
     assert data["session_id"] == "test-session"
 
 
-# ── Sequential endpoint ────────────────────────────────────────────────────
+# ── Removed sequential endpoint ────────────────────────────────────────────
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.sequential.SequentialAgent")
-def test_sequential_endpoint_success(mock_seq_cls, client):
-    from icore_agent.application.agent.sequential.agent import SequentialResult
-    mock_instance = MagicMock()
-    mock_instance.run.return_value = SequentialResult(
-        status="complete", output="Files listed.", steps=2
-    )
-    mock_seq_cls.return_value = mock_instance
-
+def test_sequential_endpoint_is_not_registered(client):
+    """The legacy mini-SWE sequential API is no longer an agent entrypoint."""
     resp = client.post(
         "/api/v1/agent/sequential",
         json={"task": "ls -la", "use_docker": False},
         headers=_auth_headers(client),
     )
-    assert resp.status_code == 200
-    data = _api_data(resp)
-    assert data["status"] == "complete"
-    assert data["steps"] == 2
+
+    assert resp.status_code == 404
 
 
 # ── Session clear endpoint ─────────────────────────────────────────────────
@@ -151,41 +165,45 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.application.agent.runner.model_factory.LiteLLMModel")
-@patch("icore_agent.application.agent.runner.orchestrator.Agent")
-def test_create_orchestrator_uses_correct_model(mock_agent_cls, mock_model_cls):
-    from icore_agent.config import settings
+@patch("icore_agent.infrastructure.agent.chat_completions.runner.settings")
+def test_create_chat_completions_model_client_uses_resolved_model(mock_settings):
+    """Chat Completions model client should use resolved LiteLLM settings."""
+    mock_settings.effective_model_id.return_value = "test-model"
+    mock_settings.agent_max_tokens = 123
+    mock_settings.agent_temperature = 0.2
+    mock_settings.resolve_litellm_config.return_value = ResolvedLiteLLMConfig(
+        model_id="test-model",
+        client_args={"api_key": "secret"},
+        params={"max_tokens": 123, "temperature": 0.2},
+    )
 
-    create_orchestrator()
-    _, model_kwargs = mock_model_cls.call_args
-    assert model_kwargs["model_id"] == settings.model_id
-    assert "client_args" in model_kwargs
-    assert model_kwargs["params"]["max_tokens"] == settings.agent_max_tokens
-    assert model_kwargs["params"]["temperature"] == settings.agent_temperature
-    assert "api_key" not in model_kwargs["params"]
-    mock_agent_cls.assert_called_once()
-    # Verify direct main-agent tools are registered.
-    _, kwargs = mock_agent_cls.call_args
-    tools = kwargs.get("tools", [])
-    assert len(tools) == 12
-    assert all(isinstance(tool, AgentTool) for tool in tools)
-    assert "web_search" in kwargs["system_prompt"]
+    model_client = create_chat_completions_model_client(
+        session_id="session-1",
+        user_id="user-1",
+    )
+
+    assert isinstance(model_client, ChatCompletionsModelClient)
+    mock_settings.resolve_litellm_config.assert_called_once_with(
+        model_id="test-model",
+        user_id="user-1",
+        session_id="session-1",
+        max_tokens=123,
+        temperature=0.2,
+    )
 
 
-def test_orchestrator_prompt_builder_uses_only_base_and_tools():
-    """System prompt should include only base policy and direct tool info."""
-    prompt = str(build_system_prompt(BuildSystemPromptOptions(
-        tools=build_orchestrator_tool_definitions(session_id="session-1"),
-        summary="Earlier summary",
-        user_memory_prompt="## About this user\n- tone: concise",
-    )))
+def test_orchestrator_prompt_builder_uses_only_base_and_tool_rules():
+    """System prompt should include base policy and generic tool behavior."""
+    _ = build_orchestrator_tool_definitions(session_id="session-1")
+    prompt = build_base_instructions()
 
     assert "You are iCore Agent" in prompt
-    assert "web_search" in prompt
-    assert "run_python_snippet" in prompt
-    assert "read_uploaded_file" in prompt
-    assert "chroma_search" in prompt
-    assert "generate_image" in prompt
+    assert "Tool-use rules" in prompt
+    assert "web_search" not in prompt
+    assert "run_python_snippet" not in prompt
+    assert "read_uploaded_file" not in prompt
+    assert "chroma_search" not in prompt
+    assert "generate_image" not in prompt
     assert "data_agent_tool" not in prompt
     assert "sub-agent" not in prompt
     assert "The user clicked the Data shortcut" not in prompt
@@ -194,14 +212,14 @@ def test_orchestrator_prompt_builder_uses_only_base_and_tools():
     assert "## About this user" not in prompt
 
 
-def test_system_prompt_includes_only_tool_prompt_snippets():
-    """Only tools with prompt snippets should appear in the prompt tool list."""
+def test_system_prompt_omits_tool_prompt_snippets():
+    """Tool snippets should not be rendered into the system prompt."""
 
     def _execute(*_: object) -> str:
         """Return a stable test result."""
         return "ok"
 
-    prompt = str(build_system_prompt(BuildSystemPromptOptions(tools=[
+    _ = [
         ToolDefinition(
             name="visible_tool",
             label="Visible tool",
@@ -217,7 +235,10 @@ def test_system_prompt_includes_only_tool_prompt_snippets():
             parameters={"type": "object"},
             execute=_execute,
         ),
-    ])))
+    ]
+    prompt = build_base_instructions()
 
-    assert "visible_tool: Use visible tool when needed." in prompt
+    assert "Tool-use rules" in prompt
+    assert "visible_tool" not in prompt
+    assert "Use visible tool when needed." not in prompt
     assert "hidden_tool" not in prompt

@@ -1,0 +1,41 @@
+services:
+  logging-service:
+    build:
+      context: ../../../../src/icore_agent/services
+      dockerfile: logging-service/Dockerfile
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        GOPROXY: ${BUILD_GOPROXY:-https://proxy.golang.org,direct}
+        GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
+        GONOPROXY: ${BUILD_GONOPROXY:-}
+        GONOSUMDB: ${BUILD_GONOSUMDB:-}
+    image: ${LOGGING_SERVICE_IMAGE:-icore-logging-service:production}
+    container_name: icore-logging-service
+    restart: unless-stopped
+    env_file:
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
+    environment:
+      LOGGING_SERVICE_ADDR: ${LOGGING_SERVICE_ADDR:-:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
+      LOGGING_SERVICE_DATA_DIR: /var/lib/logging-service
+      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    volumes:
+      - logging-service-data:/var/lib/logging-service
+    network_mode: host
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-Y', 'off', '-qO-', 'http://127.0.0.1:8091/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5

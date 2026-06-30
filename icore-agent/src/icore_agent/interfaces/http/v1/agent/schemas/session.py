@@ -5,19 +5,24 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class SessionToolCallItem(BaseModel):
-    tool_call_id: str
-    tool_name: str
+class SessionTimelineItem(BaseModel):
+    item_id: str
+    type: str
     status: str
-    elapsed_ms: int | None = None
-    created_at: str
+    payload: dict[str, Any]
 
 
-class SessionMessageItem(BaseModel):
-    role: str
-    content: str
-    metadata: dict[str, Any] | None = None
-    tool_calls: list[SessionToolCallItem] | None = None
+class SessionTurnItem(BaseModel):
+    turn_id: str
+    status: str
+    model: str | None = None
+    provider: str | None = None
+    usage: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_ms: int | None = None
+    items: list[SessionTimelineItem]
 
 
 class SessionAttachmentItem(BaseModel):
@@ -32,7 +37,7 @@ class SessionAttachmentItem(BaseModel):
 class SessionStateResponse(BaseModel):
     session_id: str
     summary: str | None = None
-    messages: list[SessionMessageItem]
+    turns: list[SessionTurnItem]
     attachments: list[SessionAttachmentItem]
 
 
@@ -41,7 +46,7 @@ class SessionSummaryItem(BaseModel):
     public_id: str
     created_at: int
     updated_at: int
-    message_count: int
+    turn_count: int
 
 
 class SessionListResponse(BaseModel):

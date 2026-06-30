@@ -70,19 +70,28 @@ def test_first_payment_migration_creates_order_event_and_outbox_tables() -> None
 def test_payment_compose_and_env_are_loaded_by_compose_script() -> None:
     """Verify payment migration compose and env files are wired into compose.sh."""
     compose_script = read_text(PROJECT_ROOT / "scripts/compose.sh")
-    compose = read_text(
-        PROJECT_ROOT / "infrastructure/docker/compose/payment-service.yml"
+    dev_compose = read_text(
+        PROJECT_ROOT / "infrastructure/docker/compose/dev/payment-service.yml"
     )
-    env_example = read_text(PROJECT_ROOT / "dotenv/.env.payment.example")
+    production_compose = read_text(
+        PROJECT_ROOT / "infrastructure/docker/compose/production/payment-service.yml"
+    )
+    env_example = read_text(PROJECT_ROOT / "dotenv/dev/.env.payment.example")
 
-    assert "infrastructure/docker/compose/payment-service.yml" in compose_script
-    assert "dotenv/.env.payment" in compose_script
-    assert "payment-db-migrate:" in compose
-    assert "postgres:" in compose
-    assert "kafka-init:" in compose
-    assert "condition: service_healthy" in compose
-    assert "condition: service_completed_successfully" in compose
-    assert "payment-service/Dockerfile.migrate" in compose
+    assert "infrastructure/docker/compose/dev/payment-service.yml" in compose_script
+    assert "infrastructure/docker/compose/production/payment-service.yml" in compose_script
+    assert '"dotenv/$MODE/.env.payment"' in compose_script
+    assert "payment-db-migrate:" in dev_compose
+    assert "postgres:" in dev_compose
+    assert "kafka-init:" in dev_compose
+    assert "condition: service_healthy" in dev_compose
+    assert "condition: service_completed_successfully" in dev_compose
+    assert "payment-service/Dockerfile.migrate" in dev_compose
+    assert "payment-db-migrate:" in production_compose
+    assert "payment-service/Dockerfile.migrate" in production_compose
+    assert "network_mode: host" in production_compose
+    assert "\n  postgres:" not in production_compose
+    assert "\n  kafka-init:" not in production_compose
     assert "POSTGRES_ADMIN_USER" in env_example
     assert "PAYMENT_DATABASE_URL" in env_example
     assert "PAYMENT_RECONCILIATION_POLL_INTERVAL" in env_example
@@ -92,8 +101,11 @@ def test_payment_compose_and_env_are_loaded_by_compose_script() -> None:
 
 def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     """Verify Python has a dedicated payment success-event consumer service."""
-    backend_compose = read_text(
-        PROJECT_ROOT / "infrastructure/docker/compose/backend.yml"
+    dev_backend_compose = read_text(
+        PROJECT_ROOT / "infrastructure/docker/compose/dev/backend.yml"
+    )
+    production_backend_compose = read_text(
+        PROJECT_ROOT / "infrastructure/docker/compose/production/backend.yml"
     )
     pyproject = read_text(PROJECT_ROOT / "pyproject.toml")
     migration = read_text(
@@ -102,12 +114,14 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     )
 
     assert '"aiokafka' in pyproject
-    assert "payment-events-consumer:" in backend_compose
-    assert "python -m icore_agent.workers.payment_events" in backend_compose
-    assert "PAYMENT_EVENTS_KAFKA_BROKERS" in backend_compose
-    assert "PAYMENT_EVENTS_KAFKA_TOPIC" in backend_compose
-    assert "PAYMENT_EVENTS_GROUP_ID" in backend_compose
-    assert "payment-service:" not in backend_compose.split(
+    for backend_compose in (dev_backend_compose, production_backend_compose):
+        assert "payment-events-consumer:" in backend_compose
+        assert "python -m icore_agent.workers.payment_events" in backend_compose
+        assert "PAYMENT_EVENTS_KAFKA_BROKERS" in backend_compose
+        assert "PAYMENT_EVENTS_KAFKA_TOPIC" in backend_compose
+        assert "PAYMENT_EVENTS_GROUP_ID" in backend_compose
+    assert "network_mode: host" in production_backend_compose
+    assert "payment-service:" not in dev_backend_compose.split(
         "payment-events-consumer:", 1)[1]
     assert "processed_payment_events" in migration
     assert "event_id" in migration

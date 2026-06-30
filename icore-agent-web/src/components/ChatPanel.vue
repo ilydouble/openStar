@@ -2,121 +2,14 @@
   <div
     class="flex h-full flex-col bg-zinc-100 transition-colors duration-300 ease-out dark:bg-zinc-950"
   >
-    <div ref="scrollEl" class="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
-      <div
-        v-for="msg in messages"
-        :key="msg.id"
-        v-show="msg.role === 'user' ? userMessageVisible(msg) : (msg.content || (msg.steps && msg.steps.length))"
-        :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'"
-      >
-        <div
-          v-if="msg.role === 'user'"
-          :class="[
-            'rounded-2xl rounded-tr-sm text-sm leading-relaxed text-zinc-900 shadow-md ring-1 ring-zinc-200/90 shadow-zinc-900/8 transition-colors duration-300 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-lg dark:shadow-black/25 dark:ring-white/10',
-            userBubbleUsesAttachLayout(msg)
-              ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] bg-white px-2 py-1.5 dark:bg-zinc-800'
-              : 'max-w-[70%] bg-white px-4 py-3 dark:bg-zinc-800',
-          ]"
-        >
-          <template v-if="msg.type === 'file'">
-            <div class="flex flex-col gap-1.5">
-              <div class="flex flex-wrap items-end gap-1.5">
-                <div
-                  v-for="(row, idx) in (msg.fileAttachments || [])"
-                  :key="(row.filename || 'file') + '-' + idx"
-                  class="flex h-14 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2.5 shadow-sm ring-1 ring-zinc-200/70 dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/10"
-                  :title="row.filename"
-                >
-                  <DocumentFileIcon :filename="row.filename" />
-                  <span class="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight text-zinc-800 dark:text-zinc-200">
-                    {{ row.filename }}
-                  </span>
-                </div>
-              </div>
-              <p
-                v-if="msg.caption"
-                class="max-w-full whitespace-pre-wrap break-words border-t border-zinc-200/80 pt-1.5 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:text-white/95"
-              >
-                {{ msg.caption }}
-              </p>
-            </div>
-          </template>
-          <template v-else>
-            {{ msg.content }}
-          </template>
-        </div>
-        <div v-else class="flex max-w-[80%] gap-3">
-          <div
-            class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
-          >
-            A
-          </div>
-          <div class="flex min-w-0 flex-1 flex-col gap-2">
-            <div
-              v-if="msg.steps && msg.steps.length"
-              class="rounded-xl border border-zinc-200/90 bg-white/70 px-3 py-2 text-xs ring-1 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/40 dark:ring-white/10"
-            >
-              <button
-                type="button"
-                class="flex w-full items-center gap-1.5 text-left text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
-                @click="msg.stepsCollapsed = !msg.stepsCollapsed"
-              >
-                <span class="transition-transform" :class="msg.stepsCollapsed ? '' : 'rotate-90'">▸</span>
-                <span>
-                  {{ msg.streaming
-                    ? t('chat.stepsLive', { n: msg.steps.length })
-                    : t('chat.stepsCollapsed', { n: msg.steps.length }) }}
-                </span>
-              </button>
-              <ul
-                v-if="!msg.stepsCollapsed"
-                class="mt-2 space-y-1 border-l border-zinc-200 pl-3 dark:border-white/10"
-              >
-                <li
-                  v-for="s in msg.steps"
-                  :key="s.step"
-                  class="text-zinc-600 dark:text-zinc-400"
-                >
-                  <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ s.step }}. {{ s.tool }}</span>
-                  <span v-if="s.input_preview" class="ml-1 text-zinc-500 dark:text-zinc-500">— {{ s.input_preview }}</span>
-                </li>
-              </ul>
-            </div>
-            <div
-              :class="[
-                'rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
-                'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
-                dark ? 'prose-chat-dark' : 'prose-chat',
-                msg.streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
-              ]"
-            >
-              <span v-if="msg.streaming" class="whitespace-pre-wrap">{{ msg.content }}</span>
-              <span v-else-if="msg.content" v-html="assistantMessageHtml(msg)" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-if="loading && (!streamingMsg || (!streamingMsg.content && !(streamingMsg.steps && streamingMsg.steps.length)))"
-        class="flex justify-start gap-3"
-      >
-        <div
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600"
-        >
-          <span class="text-xs font-bold text-white">A</span>
-        </div>
-        <div
-          class="flex items-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-md ring-1 ring-black/5 transition-colors duration-300 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:shadow-lg dark:shadow-black/20 dark:ring-white/10"
-        >
-          <span
-            v-for="i in 3"
-            :key="i"
-            class="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-500"
-            :style="{ animationDelay: `${(i - 1) * 0.15}s` }"
-          />
-        </div>
-      </div>
+    <div ref="scrollEl" class="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+      <ChatTimeline
+        :timeline="timeline"
+        :attachments="timelineAttachments"
+        :loading="loading"
+        :dark="dark"
+        @open-document="openDocumentAttachment"
+      />
     </div>
 
     <div
@@ -231,55 +124,72 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { chatStream, newSessionId, deleteFileAsset, uploadFileAsset } from '../api/agent.js'
-import DocumentFileIcon from './DocumentFileIcon.vue'
+import {
+  chatEventStream,
+  newSessionId,
+  deleteFileAsset,
+  getFileDownloadUrl,
+  uploadFileAsset,
+} from '../api/agent.js'
+import ChatTimeline from './timeline/ChatTimeline.vue'
 import { isDark as isDarkFn } from '../theme'
-import { renderMarkdown } from '../utils/sanitizeHtml.js'
+import {
+  applyTurnEvent,
+  hydrateSessionTimeline,
+} from '../utils/sessionTimeline.js'
 
 const { t } = useI18n()
 
-/** Render assistant markdown once after streaming completes; hydrate history on demand. */
-function assistantMessageHtml(msg) {
-  if (msg?.renderedHtml) return msg.renderedHtml
-  return renderMarkdown(msg?.content)
-}
-
 const props = defineProps({ sessionId: String, initialMessage: String })
 
-const messages = ref([])
+const sessionId = ref(props.sessionId || newSessionId())
+const timeline = ref(hydrateSessionTimeline({ session_id: sessionId.value, turns: [], attachments: [] }))
 const draft = ref('')
 const loading = ref(false)
-const streamingMsg = ref(null)
 const scrollEl = ref(null)
 const textareaEl = ref(null)
 const fileInputEl = ref(null)
-const sessionId = ref(props.sessionId || newSessionId())
 const dark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
 
 const attachmentList = ref([])
+const timelineAttachments = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
 const isDraggingFile = ref(false)
 
 const ACCEPTED_EXTS = new Set(['.pdf', '.docx', '.txt', '.md'])
 
-/** Return true when a user bubble should remain visible without plain text content. */
-function userMessageVisible(msg) {
-  if (msg?.type === 'file') {
-    return (msg.fileAttachments?.length ?? 0) > 0 || Boolean(msg.caption?.trim())
-  }
-  return Boolean(msg?.content?.trim())
-}
-
-/** Use compact attachment styling for user bubbles that include uploaded files. */
-function userBubbleUsesAttachLayout(msg) {
-  return msg?.role === 'user' && msg?.type === 'file' && (msg.fileAttachments?.length ?? 0) > 0
-}
-
 /** Build the API prompt when the user sends attachments without typing a message. */
 function defaultAttachmentPrompt(attachments) {
   if (attachments.length > 1) return t('chat.fileReplyPromptMulti')
   return t('chat.fileReplyPrompt')
+}
+
+/** Add a local-only failed turn when a request fails before backend events arrive. */
+function appendLocalErrorTurn(message) {
+  const now = Date.now()
+  timeline.value.turns.push({
+    turnId: `local-error-${now}`,
+    status: 'failed',
+    error: { message },
+    model: null,
+    provider: null,
+    usage: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    items: [{
+      itemId: `local-error-item-${now}`,
+      type: 'agent_message',
+      status: 'completed',
+      payload: {
+        id: `local-error-item-${now}`,
+        type: 'agent_message',
+        status: 'completed',
+        text: message,
+      },
+    }],
+  })
 }
 
 function resetTextarea() {
@@ -294,24 +204,6 @@ function clearComposer() {
   attachmentList.value = []
   uploadError.value = ''
   resetTextarea()
-}
-
-function pushUserMessage(text, attachments) {
-  const caption = text.trim()
-  if (attachments.length) {
-    messages.value.push({
-      id: Date.now(),
-      role: 'user',
-      type: 'file',
-      fileAttachments: attachments.map((item) => ({
-        filename: item.original_filename || item.filename || t('chat.imageUntitled'),
-        mode: item.mode,
-      })),
-      ...(caption ? { caption } : {}),
-    })
-    return
-  }
-  messages.value.push({ id: Date.now(), role: 'user', content: caption })
 }
 
 function handleDrop(e) {
@@ -359,6 +251,19 @@ async function deleteAttachment(fileUuid) {
   }
 }
 
+/** Open one uploaded document attachment in a new tab. */
+async function openDocumentAttachment(row) {
+  const fileUuid = String(row?.file_uuid || '').trim()
+  if (!fileUuid) return
+  try {
+    const payload = await getFileDownloadUrl(fileUuid)
+    const url = payload?.download_url
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (err) {
+    console.error('Failed to open document attachment:', err)
+  }
+}
+
 function syncTheme() {
   dark.value = isDarkFn()
 }
@@ -382,7 +287,7 @@ async function send() {
   const pendingAttachments = [...attachmentList.value]
   if (!text && !pendingAttachments.length) return
 
-  pushUserMessage(text, pendingAttachments)
+  timelineAttachments.value = [...timelineAttachments.value, ...pendingAttachments]
   clearComposer()
 
   const apiText = text || defaultAttachmentPrompt(pendingAttachments)
@@ -392,64 +297,18 @@ async function send() {
 async function sendMessage(msg, attachments = []) {
   loading.value = true
   await scrollBottom()
-
-  const assistant = {
-    id: Date.now() + 1,
-    role: 'assistant',
-    content: '',
-    streaming: true,
-    steps: [],
-    stepsCollapsed: false,
-  }
-  messages.value.push(assistant)
-  const replyIndex = messages.value.length - 1
-  streamingMsg.value = messages.value[replyIndex]
-
-  function commitAssistant(partial) {
-    const cur = messages.value[replyIndex]
-    const next = { ...cur, ...partial }
-    messages.value[replyIndex] = next
-    streamingMsg.value = next
-  }
-
   try {
-    for await (const evt of chatStream(msg, sessionId.value, '', {
+    for await (const evt of chatEventStream(msg, sessionId.value, '', {
       fileUuids: attachments.map((item) => item.file_uuid).filter(Boolean),
     })) {
       if (!evt) continue
-      if (evt.kind === 'token') {
-        const cur = messages.value[replyIndex]
-        commitAssistant({
-          content: (cur.content || '') + (evt.text || ''),
-        })
-      } else if (evt.kind === 'status') {
-        const cur = messages.value[replyIndex]
-        commitAssistant({
-          steps: [
-            ...cur.steps,
-            {
-              step: evt.step,
-              tool: evt.tool,
-              input_preview: evt.input_preview,
-            },
-          ],
-        })
-      }
+      applyTurnEvent(timeline.value, evt)
       await scrollBottom()
     }
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e)
-    commitAssistant({
-      content: t('chat.requestFailed', { msg: err }),
-    })
+    appendLocalErrorTurn(t('chat.requestFailed', { msg: err }))
   } finally {
-    const cur = messages.value[replyIndex]
-    commitAssistant({
-      streaming: false,
-      stepsCollapsed: true,
-      renderedHtml: renderMarkdown(cur?.content || ''),
-    })
-    streamingMsg.value = null
     loading.value = false
     await scrollBottom()
   }

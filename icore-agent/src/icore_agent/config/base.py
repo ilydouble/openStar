@@ -10,10 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DOMAINS = (
     "app",
+    "agent",
     "database",
     "logging",
     "llm",
-    "sequential",
     "memory",
     "auth",
     "rag",
@@ -29,9 +29,16 @@ def dotenv_dir() -> Path:
     if configured:
         return Path(configured)
     cwd_dotenv = Path.cwd() / "dotenv"
+    cwd_dev_dotenv = cwd_dotenv / "dev"
+    if cwd_dev_dotenv.is_dir():
+        return cwd_dev_dotenv
     if cwd_dotenv.is_dir():
         return cwd_dotenv
-    return Path(__file__).resolve().parents[3] / "dotenv"
+    repo_dotenv = Path(__file__).resolve().parents[3] / "dotenv"
+    repo_dev_dotenv = repo_dotenv / "dev"
+    if repo_dev_dotenv.is_dir():
+        return repo_dev_dotenv
+    return repo_dotenv
 
 
 def domain_env_files(*domains: str) -> tuple[str, ...]:

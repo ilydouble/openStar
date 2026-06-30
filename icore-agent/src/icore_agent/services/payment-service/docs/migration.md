@@ -8,7 +8,7 @@ Status: v1 implemented. This document is the source of truth for payment-owned P
 
 - `Dockerfile.migrate` copies the `migrate` binary from `migrate/migrate:v4.17.1`.
 - `bootstrap.sh` waits for ClickHouse, creates the target database if needed, then runs `migrate up`.
-- `infrastructure/docker/compose/click-house.yml` starts `clickhouse-migrate` after ClickHouse is healthy.
+- `infrastructure/docker/compose/dev/click-house.yml` starts `clickhouse-migrate` after ClickHouse is healthy.
 - `clickhouse-writer` starts only after `clickhouse-migrate` completes successfully.
 
 `payment-service` should use the same operational shape: a health-gated one-shot migration service that must finish before the app container starts. The payment bootstrap image is only a migration client. It must not run its own PostgreSQL server or define a separate PostgreSQL service; it connects to the existing `postgres` compose service.
@@ -154,7 +154,8 @@ The payment app container depends on `payment-db-migrate` with `condition: servi
 Add a payment-specific env example before implementation:
 
 ```text
-dotenv/.env.payment.example
+dotenv/dev/.env.payment.example
+dotenv/production/.env.payment.example
 ```
 
 Expected database settings:
@@ -173,7 +174,7 @@ PAYMENT_DB_SCHEMA=payment
 PAYMENT_DATABASE_URL=postgres://icore_payment:<replace-with-payment-db-password>@postgres:5432/icore_payment_db?sslmode=disable&search_path=payment
 ```
 
-`icore-agent/scripts/compose.sh` should load `dotenv/.env.payment` when payment-service compose support is added.
+`icore-agent/scripts/compose.sh` loads `dotenv/<mode>/.env.payment` for both dev and production.
 
 ## Migration Rules
 

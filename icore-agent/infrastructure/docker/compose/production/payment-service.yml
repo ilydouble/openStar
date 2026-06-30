@@ -1,0 +1,78 @@
+services:
+  payment-db-migrate:
+    build:
+      context: ../../../../src/icore_agent/services
+      dockerfile: payment-service/Dockerfile.migrate
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+    image: ${PAYMENT_MIGRATE_IMAGE:-icore-payment-service-migrate:production}
+    container_name: icore-payment-db-migrate
+    restart: 'no'
+    env_file:
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}
+    environment:
+      POSTGRES_HOST: ${PAYMENT_DB_HOST:-127.0.0.1}
+      POSTGRES_PORT: ${PAYMENT_DB_PORT:-5432}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-icore_agent}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD in dotenv/production/.env.payment}
+      POSTGRES_ADMIN_DB: ${POSTGRES_ADMIN_DB:-icore_agent_db}
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:-icore_payment}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?set PAYMENT_DB_PASSWORD in dotenv/production/.env.payment}
+      PAYMENT_DB_NAME: ${PAYMENT_DB_NAME:-icore_payment_db}
+      PAYMENT_DB_SCHEMA: ${PAYMENT_DB_SCHEMA:-payment}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:${PAYMENT_DB_PASSWORD}@127.0.0.1:${PAYMENT_DB_PORT:-5432}/icore_payment_db?sslmode=disable&search_path=payment}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    network_mode: host
+
+  payment-service:
+    build:
+      context: ../../../../src/icore_agent/services
+      dockerfile: payment-service/Dockerfile
+      extra_hosts:
+        - 'host.docker.internal:host-gateway'
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        http_proxy: ${BUILD_HTTP_PROXY:-}
+        https_proxy: ${BUILD_HTTPS_PROXY:-}
+        no_proxy: ${BUILD_NO_PROXY:-localhost,127.0.0.1,::1,localaddress,.localdomain}
+        GOPROXY: ${BUILD_GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${BUILD_GOSUMDB:-sum.golang.org}
+        GONOPROXY: ${BUILD_GONOPROXY:-}
+        GONOSUMDB: ${BUILD_GONOSUMDB:-}
+    image: ${PAYMENT_SERVICE_IMAGE:-icore-payment-service:production}
+    container_name: icore-payment-service
+    restart: unless-stopped
+    env_file:
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
+    environment:
+      PAYMENT_SERVICE_ADDR: ${PAYMENT_SERVICE_ADDR:-:8080}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://icore_payment:${PAYMENT_DB_PASSWORD}@127.0.0.1:${PAYMENT_DB_PORT:-5432}/icore_payment_db?sslmode=disable&search_path=payment}
+      PAYMENT_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    volumes:
+      - ../../../../src/icore_agent/services/payment-service/config:/etc/icore/payment-service:ro
+    network_mode: host
+    depends_on:
+      payment-db-migrate:
+        condition: service_completed_successfully
+      logging-service:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'port="$${PAYMENT_SERVICE_ADDR##*:}"; wget -Y off -qO- "http://127.0.0.1:$${port:-8080}/health"']
+      interval: 30s
+      timeout: 10s
+      retries: 5

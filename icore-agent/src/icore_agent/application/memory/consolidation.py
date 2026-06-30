@@ -9,6 +9,7 @@ from typing import Any
 import litellm
 
 from icore_agent.config import settings
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.memory import MemoryExtractionResult, MemoryFactCandidate
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -263,9 +264,10 @@ def extract_memory_from_session(
         response = litellm.completion(
             model=settings.model_id,
             messages=[
-                {"role": "system", "content": _EXTRACT_SYSTEM},
+                {"role": ChatCompletionRole.SYSTEM.value,
+                    "content": _EXTRACT_SYSTEM},
                 {
-                    "role": "user",
+                    "role": ChatCompletionRole.USER.value,
                     "content": build_extract_user_payload(
                         profile=profile,
                         session_summary=session_summary,

@@ -1,4 +1,4 @@
-"""Tests for the deterministic number comparison Strands tool."""
+"""Tests for the deterministic number comparison agent tool."""
 
 from __future__ import annotations
 

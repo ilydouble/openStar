@@ -5,12 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from icore_agent.application.agent.tool.tool_definition import (
-    AgentTool,
+from icore_agent.domain.agent.tool import (
     ToolDefinition,
     ToolExecutionContext,
     ToolExecutor,
-    make_agent_tool,
 )
 
 from .chroma_search import chroma_search as _chroma_search
@@ -173,23 +171,6 @@ def build_orchestrator_tool_definitions(
             execute=_scoped_generate_image_executor(session_id),
             prompt_snippet="Generate a new image from a detailed text prompt.",
         ),
-    ]
-
-
-def build_orchestrator_tools(
-    *,
-    session_id: str,
-    user_id: str = "",
-    file_service: Any | None = None,
-) -> list[AgentTool]:
-    """Return Strands-compatible tools for the main orchestrator agent."""
-    return [
-        make_agent_tool(definition)
-        for definition in build_orchestrator_tool_definitions(
-            session_id=session_id,
-            user_id=user_id,
-            file_service=file_service,
-        )
     ]
 
 
@@ -476,7 +457,6 @@ _GENERATE_IMAGE_SCHEMA: dict[str, Any] = {
 
 __all__ = [
     "build_orchestrator_tool_definitions",
-    "build_orchestrator_tools",
     "chroma_search",
     "fetch_webpage",
     "generate_image",

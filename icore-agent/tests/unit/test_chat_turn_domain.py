@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
+from icore_agent.domain.agent import ChatCompletionRole
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
+    ContextItem,
     SessionItem,
+    SessionItemType,
     ToolCallItem,
     ToolFunction,
     UserInput,
@@ -36,10 +39,22 @@ def test_session_item_union_parses_user_agent_and_tool_items() -> None:
             "arguments_json": {"location": "北京"},
         },
     })
+    context_item = adapter.validate_python({
+        "type": "context",
+        "kind": "session_summary",
+        "role_hint": ChatCompletionRole.USER.value,
+        "content": "当前会话摘要：用户正在设计销售数据分析模块。",
+    })
 
     assert isinstance(user_item, UserMessageItem)
     assert isinstance(agent_item, AgentMessageItem)
     assert isinstance(tool_item, ToolCallItem)
+    assert isinstance(context_item, ContextItem)
+    assert user_item.type == SessionItemType.USER_MESSAGE.value
+    assert agent_item.type == SessionItemType.AGENT_MESSAGE.value
+    assert tool_item.type == SessionItemType.TOOL_CALL.value
+    assert context_item.type == SessionItemType.CONTEXT.value
+    assert context_item.role_hint == ChatCompletionRole.USER.value
 
 
 def test_turn_upsert_item_replaces_existing_item_by_id() -> None:

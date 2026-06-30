@@ -8,15 +8,27 @@ from typing import Any
 import pytest
 
 from icore_agent.application.agent import (
-    AgentTurnCommand,
     AgentTurnService,
     AgentIntent,
     classify_turn_intent,
 )
+from icore_agent.domain.agent.loop import ModelStepResult
 from icore_agent.application.agent.context import dedupe_file_uuids
-from icore_agent.application.agent.tool import StrandsToolEventBridge
+from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.session import (
+    AgentMessageItem,
+    SessionItem,
+    ToolCallItem,
+    ToolFunction,
+    UserMessageItem,
+)
 from icore_agent.domain.files.models import FileAsset
-from icore_agent.domain.agent.turn import Turn, TurnEventKind, TurnStatus
+from icore_agent.domain.agent.turn import (
+    AgentTurnCommand,
+    Turn,
+    TurnEventKind,
+    TurnStatus,
+)
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -33,17 +45,17 @@ def test_dedupe_file_uuids_preserves_first_seen_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> None:
-    """Non-streaming agent turns should persist both sides and call the agent."""
+async def test_agent_turn_run_persists_canonical_turn_items_and_invokes_model_client() -> None:
+    """Non-streaming turns should write canonical turn/session-item state only."""
     history = FakeHistory()
     memory = FakeMemory()
-    factory = FakeOrchestratorFactory(reply="assistant reply")
+    factory = FakeModelClientFactory(reply="assistant reply")
     usage = FakeUsageService()
     service = AgentTurnService(
         agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
-        orchestrator_factory=factory,
+        model_client_factory=factory,
         usage_service=usage,
     )
 
@@ -53,21 +65,35 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
     assert turn.session_id == "session-1"
     assert turn.status is TurnStatus.COMPLETED
     assert turn.reply_text() == "assistant reply"
-    assert history.calls == [
-        ("ensure", "session-1", "user-1", "Hello"),
-        ("user", "session-1", "user-1", "Hello", {"file_uuids": ["f1"]}),
-        ("load", "session-1", "user-1"),
-        ("assistant", "session-1", "user-1", "assistant reply"),
+    assert history.calls[0] == ("ensure", "session-1", "user-1", "Hello")
+    assert history.calls[1][0:4] == (
+        "start-turn", "session-1", "user-1", "Hello")
+    assert history.calls[1][4] == "Hello"
+    assert history.calls[1][5] == {"file_uuids": ["f1"]}
+    assert ("load", "session-1", "user-1") in history.calls
+    upserted_types = [
+        call[3]
+        for call in history.calls
+        if call[0] == "upsert"
     ]
+    assert "context" in upserted_types
+    assert upserted_types.count("agent_message") == 2
+    assert all(call[0] not in {"user", "assistant", "tool-link"}
+               for call in history.calls)
+    completed_call = next(
+        call for call in history.calls if call[0] == "complete")
+    assert completed_call[4] == TurnStatus.COMPLETED
+    assert completed_call[8]["total_tokens"] > 0
     assert memory.appended == [
         ("session-1", "user", "Hello"),
         ("session-1", "assistant", "assistant reply"),
     ]
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
-    assert len(factory.calls[0]["hooks"]) == 1
-    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
-    assert factory.agent.messages == []
+    assert "hooks" not in factory.calls[0]
+    assert "prompt_envelope" not in factory.calls[0]
+    assert "tool_definitions" not in factory.calls[0]
+    assert factory.client.prompt_envelopes
     assert usage.calls == [
         ("user-1", "attachments", 1),
         ("user-1", "tasks", 1),
@@ -78,14 +104,14 @@ async def test_agent_turn_run_persists_messages_and_invokes_orchestrator() -> No
 
 
 @pytest.mark.asyncio
-async def test_agent_turn_run_links_recorded_tool_calls_to_assistant() -> None:
-    """Completed agent turns should attach observed tool calls to the assistant row."""
+async def test_agent_turn_run_persists_tool_calls_as_session_items() -> None:
+    """Completed turns should store tool calls as canonical ToolCallItem payloads."""
     history = FakeHistory()
     service = AgentTurnService(
         agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
-        orchestrator_factory=FakeOrchestratorFactory(
+        model_client_factory=FakeModelClientFactory(
             reply="assistant reply",
             emit_tool_call=True,
         ),
@@ -95,12 +121,18 @@ async def test_agent_turn_run_links_recorded_tool_calls_to_assistant() -> None:
     turn = await service.run(_command(stream=False))
 
     assert turn.reply_text() == "assistant reply"
-    assert (
-        "tool-link",
-        "session-1",
-        ("tool-1",),
-        99,
-    ) in history.calls
+    tool_items = [
+        call[4]
+        for call in history.calls
+        if call[0] == "upsert" and call[3] == "tool_call"
+    ]
+    assert [item.provider_tool_call_id for item in tool_items] == [
+        "tool-1",
+        "tool-1",
+    ]
+    assert '"comparison": "greater_than"' in tool_items[-1].result.content
+    assert tool_items[-1].result.structured_content is None
+    assert all(call[0] != "tool-link" for call in history.calls)
 
 
 @pytest.mark.asyncio
@@ -111,7 +143,7 @@ async def test_agent_turn_run_skips_user_memory_without_compression() -> None:
         agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
-        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        model_client_factory=FakeModelClientFactory(reply="assistant reply"),
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -131,7 +163,7 @@ async def test_agent_turn_run_schedules_user_memory_extract_on_compression() -> 
         agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
-        orchestrator_factory=FakeOrchestratorFactory(reply="assistant reply"),
+        model_client_factory=FakeModelClientFactory(reply="assistant reply"),
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -152,7 +184,7 @@ async def test_agent_turn_stream_skips_user_memory_without_compression() -> None
         agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
-        orchestrator_factory=FakeOrchestratorFactory(reply="", streaming=True),
+        model_client_factory=FakeModelClientFactory(reply="", streaming=True),
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -171,16 +203,16 @@ async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
     """Streaming agent turns should expose typed application events."""
     history = FakeHistory()
     memory = FakeMemory()
-    factory = FakeOrchestratorFactory(reply="", streaming=True)
+    factory = FakeModelClientFactory(reply="", streaming=True)
     service = AgentTurnService(
         agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=memory,
-        orchestrator_factory=factory,
+        model_client_factory=factory,
         usage_service=FakeUsageService(),
     )
 
-    event_stream = await service.stream(_command(stream=True))
+    event_stream = await service.stream(_command(stream=True, file_uuids=("f1",)))
     events = []
     async for event in event_stream:
         events.append(event)
@@ -190,19 +222,37 @@ async def test_agent_turn_stream_emits_status_tokens_and_done() -> None:
     assert [event.kind for event in events] == [
         TurnEventKind.TURN_STARTED,
         TurnEventKind.ITEM_COMPLETED,
-        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_DELTA,
         TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.TURN_COMPLETED,
     ]
-    assert events[3].item.function.name == "web_search"
+    assert any(
+        event.item is not None and event.item.type == "context"
+        for event in events
+    )
     assert "".join(
-        event.delta["text"]
+        event.delta["text_append"]
         for event in events
         if event.kind is TurnEventKind.ITEM_DELTA
     ) == "Hi"
-    assert ("assistant", "session-1", "user-1", "Hi") in history.calls
+    assert all(event.seq is not None for event in events)
+    assert all(event.run_id for event in events)
+    assert len({
+        event.event_id
+        for event in events
+    }) == len(events)
+    assert any(
+        call[0] == "upsert"
+        and call[3] == "agent_message"
+        and call[4].text == "Hi"
+        for call in history.calls
+    )
+    event_calls = [call for call in history.calls if call[0] == "append-event"]
+    assert [call[4] for call in event_calls] == [
+        event.kind.value for event in events
+    ]
 
 
 @pytest.mark.asyncio
@@ -211,12 +261,12 @@ async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> No
     history = FakeHistory()
     memory_service = TrackingUserMemoryService()
     conversation_memory = FakeMemory(compress_on_append=True)
-    factory = FakeOrchestratorFactory(reply="assistant reply")
+    factory = FakeModelClientFactory(reply="assistant reply")
     service = AgentTurnService(
         agent_session=history,
         file_service=FakeFileService(),
         conversation_memory=conversation_memory,
-        orchestrator_factory=factory,
+        model_client_factory=factory,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -230,9 +280,10 @@ async def test_agent_turn_run_incognito_skips_history_and_memory_extract() -> No
     ]
     assert memory_service.compression_checks == []
     assert memory_service.extract_calls == []
-    assert len(factory.calls[0]["hooks"]) == 1
-    assert isinstance(factory.calls[0]["hooks"][0], StrandsToolEventBridge)
-    assert factory.calls[0]["user_memory_prompt"] is None
+    assert all(
+        item.kind != "user_memory"
+        for item in factory.client.prompt_envelopes[0].context_items
+    )
 
 
 @pytest.mark.asyncio
@@ -247,12 +298,12 @@ async def test_agent_turn_run_incognito_skips_memory_prompt_injection() -> None:
     memory_service.build_calls = []
     # type: ignore[method-assign]
     memory_service.build_memory_prompt = _build_prompt
-    factory = FakeOrchestratorFactory(reply="assistant reply")
+    factory = FakeModelClientFactory(reply="assistant reply")
     service = AgentTurnService(
         agent_session=FakeHistory(),
         file_service=FakeFileService(),
         conversation_memory=FakeMemory(),
-        orchestrator_factory=factory,
+        model_client_factory=factory,
         usage_service=FakeUsageService(),
         user_memory_service=memory_service,
     )
@@ -260,7 +311,10 @@ async def test_agent_turn_run_incognito_skips_memory_prompt_injection() -> None:
     await service.run(_command(stream=False, incognito=True))
 
     assert memory_service.build_calls == []
-    assert factory.calls[0]["user_memory_prompt"] is None
+    assert all(
+        item.kind != "user_memory"
+        for item in factory.client.prompt_envelopes[0].context_items
+    )
 
 
 def _command(
@@ -364,96 +418,91 @@ class FakeHistory:
         """Record session ownership setup."""
         self.calls.append(("ensure", public_id, user_id, title))
 
-    def save_user_message(
+    def start_turn(
         self,
         public_id: str,
         user_id: str,
-        content: str,
         *,
-        metadata: dict[str, Any] | None = None,
+        turn: Turn,
+        user_item: UserMessageItem,
+        title: str = "",
     ) -> None:
-        """Record user message persistence."""
-        self.calls.append(("user", public_id, user_id, content, metadata))
-
-    def save_assistant_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record assistant message persistence."""
-        self.calls.append(("assistant", public_id, user_id, content))
-        return 99
-
-    def save_tool_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record tool message persistence."""
-        self.calls.append(("tool-message", public_id,
-                          user_id, content, metadata))
-        return 42
-
-    def start_tool_call(
-        self,
-        public_id: str,
-        *,
-        tool_call_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> None:
-        """Record tool call start persistence."""
+        """Record canonical turn start persistence."""
         self.calls.append((
-            "tool-start",
+            "start-turn",
             public_id,
-            tool_call_id,
-            tool_name,
-            arguments,
+            user_id,
+            title,
+            user_item.to_text(),
+            dict(user_item.metadata),
+            turn.model,
+            turn.provider,
         ))
 
-    def finish_tool_call(
+    def upsert_session_item(
         self,
         public_id: str,
+        user_id: str,
         *,
-        tool_call_id: str,
-        status: str,
-        result: dict[str, Any] | None,
-        error_code: str | None,
-        error_message: str | None,
-        elapsed_ms: int | None,
-        tool_message_id: int | None,
+        turn_id: str,
+        item: SessionItem,
     ) -> None:
-        """Record tool call finish persistence."""
+        """Record canonical session-item persistence."""
         self.calls.append((
-            "tool-finish",
+            "upsert",
             public_id,
-            tool_call_id,
+            user_id,
+            item.type,
+            item,
+            turn_id,
+        ))
+
+    def complete_turn(
+        self,
+        public_id: str,
+        user_id: str,
+        *,
+        turn_id: str,
+        status: TurnStatus,
+        error,
+        completed_at,
+        duration_ms: int | None,
+        model: str | None,
+        provider: str | None,
+        usage: dict[str, Any] | None,
+    ) -> None:
+        """Record final turn persistence."""
+        self.calls.append((
+            "complete",
+            public_id,
+            user_id,
+            turn_id,
             status,
-            result,
-            error_code,
-            error_message,
-            tool_message_id,
+            error,
+            duration_ms,
+            model,
+            usage,
+            provider,
         ))
 
-    def attach_tool_calls_to_assistant(
+    def append_turn_event(
         self,
         public_id: str,
+        user_id: str,
         *,
-        tool_call_ids: tuple[str, ...],
-        assistant_message_id: int,
+        turn_id: str,
+        event,
     ) -> None:
-        """Record assistant-message linking."""
+        """Record append-only turn event persistence."""
         self.calls.append((
-            "tool-link",
+            "append-event",
             public_id,
-            tool_call_ids,
-            assistant_message_id,
+            user_id,
+            turn_id,
+            event.kind.value,
+            event.seq,
+            event.event_id,
+            event.run_id,
         ))
 
     def load_messages(self, public_id: str, user_id: str) -> list[dict[str, Any]]:
@@ -544,49 +593,49 @@ class TrackingUserMemoryService:
 
 
 @dataclass
-class FakeAgent:
-    """Agent fake with optional stream callback behavior."""
+class FakeModelClient:
+    """Model client fake with optional tool-call and delta behavior."""
 
     reply: str
     streaming: bool
     emit_tool_call: bool = False
-    callback_handler: Any = None
-    hooks: list[Any] | None = None
-    messages: list[dict[str, Any]] | None = None
+    prompt_envelopes: list[PromptEnvelope] | None = None
+    _sample_count: int = 0
 
-    def __call__(self, message: str) -> str:
-        """Return a reply or emit callback stream events."""
-        if self.emit_tool_call:
-            tool_use = {
-                "toolUseId": "tool-1",
-                "name": "web_search",
-                "input": {"q": message},
-            }
-            for hook in self.hooks or []:
-                hook.record_start(tool_use)
-                hook.record_finish(
-                    tool_use,
-                    {
-                        "toolUseId": "tool-1",
-                        "status": "success",
-                        "content": [{"text": "ok"}],
-                    },
-                    exception=None,
-                )
-        if self.streaming and self.callback_handler is not None:
-            self.callback_handler(
-                current_tool_use={
-                    "toolUseId": "tool-1",
-                    "name": "web_search",
-                    "input": {"q": message},
-                }
+    async def sample(self, prompt_envelope: PromptEnvelope) -> ModelStepResult:
+        """Return a scripted model step for agent turn tests."""
+        if self.prompt_envelopes is None:
+            self.prompt_envelopes = []
+        self.prompt_envelopes.append(prompt_envelope)
+        self._sample_count += 1
+        if self.emit_tool_call and self._sample_count == 1:
+            return ModelStepResult(
+                assistant_item=AgentMessageItem(text=""),
+                tool_calls=[
+                    ToolCallItem(
+                        provider_tool_call_id="tool-1",
+                        function=ToolFunction(
+                            name="number_comparator",
+                            arguments_text='{"left":2,"right":1}',
+                            arguments_json={"left": 2, "right": 1},
+                        ),
+                    ),
+                ],
+                usage={"prompt_tokens": 1,
+                       "completion_tokens": 1, "total_tokens": 2},
+                model="test-model",
             )
-            self.callback_handler(data="Hi")
-        return self.reply
+        text = "Hi" if self.streaming else self.reply
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(text=text),
+            deltas=["Hi"] if self.streaming else [],
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            model="test-model",
+        )
 
 
-class FakeOrchestratorFactory:
-    """Orchestrator factory fake that records construction kwargs."""
+class FakeModelClientFactory:
+    """Model-client factory fake that records construction kwargs."""
 
     def __init__(
         self,
@@ -597,16 +646,14 @@ class FakeOrchestratorFactory:
     ) -> None:
         """Create the factory fake."""
         self.calls: list[dict[str, Any]] = []
-        self.agent = FakeAgent(
+        self.client = FakeModelClient(
             reply=reply,
             streaming=streaming,
             emit_tool_call=emit_tool_call,
-            messages=[],
+            prompt_envelopes=[],
         )
 
-    def __call__(self, **kwargs) -> FakeAgent:
-        """Record factory kwargs and return the fake agent."""
+    def __call__(self, **kwargs) -> FakeModelClient:
+        """Record factory kwargs and return the fake model client."""
         self.calls.append(kwargs)
-        self.agent.callback_handler = kwargs.get("callback_handler")
-        self.agent.hooks = kwargs.get("hooks")
-        return self.agent
+        return self.client

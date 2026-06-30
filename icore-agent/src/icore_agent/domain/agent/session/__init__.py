@@ -1,8 +1,12 @@
-from .session_item import (
+"""Public domain session timeline item exports."""
+
+from .session_items import (
     AgentMessageItem,
+    ContextItem,
     PlanItem,
     ReasoningItem,
     SessionItem,
+    SessionItemBase,
     SessionItemStatus,
     SessionItemType,
     ToolCallError,
@@ -18,9 +22,11 @@ from .session_item import (
 
 __all__ = [
     "AgentMessageItem",
+    "ContextItem",
     "PlanItem",
     "ReasoningItem",
     "SessionItem",
+    "SessionItemBase",
     "SessionItemStatus",
     "SessionItemType",
     "ToolCallError",

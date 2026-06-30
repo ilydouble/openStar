@@ -28,8 +28,8 @@ env/
 # Local env files and secrets
 .env
 .env.*
-dotenv/.env.*
-!dotenv/.env.*.example
+dotenv/**/.env.*
+!dotenv/**/.env.*.example
 
 # Runtime data and workspaces
 data/

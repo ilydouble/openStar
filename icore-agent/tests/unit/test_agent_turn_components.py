@@ -14,17 +14,22 @@ from icore_agent.application.agent.turn import (
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.application.agent.tool import TurnToolProjection
-from icore_agent.application.agent import AgentTurnCommand
+from icore_agent.domain.agent.turn import AgentTurnCommand
+from icore_agent.domain.agent.loop import ModelStepResult
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import (
     AgentMessageItem,
+    ContextItem,
     SessionItemStatus,
     ToolCallItem,
     ToolCallResult,
     ToolCallStatus,
     ToolFunction,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
 )
-from icore_agent.domain.agent.turn import TurnError, TurnEvent, TurnStatus
+from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -43,7 +48,7 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
         session_id="session-1",
         turn_id=lifecycle.turn.id,
         item_id="assistant-1",
-        delta={"text": "Hel"},
+        delta={"text_append": "Hel"},
     ))
     lifecycle.apply_agent_event(TurnEvent.item_completed(
         session_id="session-1",
@@ -70,6 +75,28 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
     assert final.event.turn.reply_text() == "Hello back"
 
 
+def test_turn_lifecycle_marks_aborted_turn_as_interrupted() -> None:
+    """TurnLifecycle should expose aborted turns as interrupted lifecycle state."""
+    started_at = datetime(2026, 6, 8, 1, 2, 3, tzinfo=UTC)
+    completed_at = started_at + timedelta(milliseconds=500)
+    lifecycle = TurnLifecycle.start(
+        session_id="session-1",
+        started_at=started_at,
+    )
+    lifecycle.apply_agent_event(TurnEvent.item_completed(
+        session_id="session-1",
+        turn_id=lifecycle.turn.id,
+        item=AgentMessageItem(text="partial"),
+    ))
+
+    final = lifecycle.aborted(completed_at=completed_at)
+
+    assert final.status is TurnStatus.INTERRUPTED
+    assert final.event.kind == "turn_aborted"
+    assert final.event.reply == "partial"
+    assert final.duration_ms == 500
+
+
 def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
     """TurnPersistence should keep persistence failures out of turn execution."""
     history = FailingHistory()
@@ -86,6 +113,9 @@ def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
         error=None,
         completed_at=datetime.now(UTC),
         duration_ms=1,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 1},
     )
 
     assert history.calls == []
@@ -100,72 +130,12 @@ def test_turn_persistence_skips_incognito_and_swallows_storage_errors() -> None:
         error=TurnError(message="boom"),
         completed_at=datetime.now(UTC),
         duration_ms=2,
+        model="test-model",
+        provider="test-provider",
+        usage={"total_tokens": 2},
     )
 
     assert history.calls == ["create", "upsert", "complete"]
-
-
-def test_turn_tool_projection_persists_tool_item_and_links_assistant() -> None:
-    """TurnToolProjection should project SessionItem tool calls into legacy tables."""
-    history = RecordingHistory()
-    projection = TurnToolProjection(history)
-    command = _command(stream=False)
-    tool_item = ToolCallItem(
-        id="item-tool-1",
-        provider_tool_call_id="provider-tool-1",
-        status=ToolCallStatus.COMPLETED,
-        function=ToolFunction(
-            name="web_search",
-            arguments_json={"q": "weather"},
-        ),
-        result=ToolCallResult(structured_content={"ok": True}),
-        duration_ms=42,
-    )
-
-    projection.persist_event(command, TurnEvent.item_started(
-        session_id="session-1",
-        turn_id="turn-1",
-        item=tool_item,
-    ))
-    projection.persist_event(command, TurnEvent.item_completed(
-        session_id="session-1",
-        turn_id="turn-1",
-        item=tool_item,
-    ))
-    projection.attach_to_assistant(command, assistant_message_id=99)
-
-    assert projection.tool_call_ids == ("provider-tool-1",)
-    assert history.calls == [
-        (
-            "tool-start",
-            "session-1",
-            "provider-tool-1",
-            "web_search",
-            {"q": "weather"},
-        ),
-        (
-            "tool-message",
-            "session-1",
-            "user-1",
-            '{"ok":true}',
-            {
-                "tool_call_id": "provider-tool-1",
-                "tool_name": "web_search",
-            },
-        ),
-        (
-            "tool-finish",
-            "session-1",
-            "provider-tool-1",
-            "success",
-            {"ok": True},
-            None,
-            None,
-            42,
-            42,
-        ),
-        ("tool-link", "session-1", ("provider-tool-1",), 99),
-    ]
 
 
 @pytest.mark.asyncio
@@ -181,11 +151,9 @@ async def test_turn_transcript_recorder_appends_memory_and_extracts_on_compressi
     )
     command = _command(stream=False)
 
-    assistant_id = recorder.save_assistant_message(command, "assistant reply")
     compressed = await recorder.append_memory_pair(command, "assistant reply")
     await recorder.maybe_extract_user_memory(command, compressed)
 
-    assert assistant_id == 99
     assert memory.appended == [
         ("session-1", "user", "Hello"),
         ("session-1", "assistant", "assistant reply"),
@@ -198,7 +166,7 @@ async def test_turn_transcript_recorder_appends_memory_and_extracts_on_compressi
     }]
 
 
-def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None:
+def test_turn_usage_recorder_handles_quota_and_model_usage(monkeypatch) -> None:
     """TurnUsageRecorder should keep quota and LLM usage capture out of the service."""
     usage = RecordingUsageService()
     recorder = TurnUsageRecorder(usage)
@@ -235,34 +203,57 @@ def test_turn_usage_recorder_handles_quota_and_runner_usage(monkeypatch) -> None
         "completion_tokens": 3,
         "total_tokens": 6,
     }]
+    assert recorder.turn_usage() == {
+        "model": "test-model",
+        "provider": None,
+        "usage": {
+            "prompt_tokens": 3,
+            "completion_tokens": 3,
+            "total_tokens": 6,
+        },
+    }
 
 
 def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
-    """AgentTurnRunnerFactory should hide Strands runner construction details."""
-    factory = RecordingOrchestratorFactory()
-    runner_factory = AgentTurnRunnerFactory(factory)
+    """AgentTurnRunnerFactory should hide concrete model/tool construction details."""
+    factory = RecordingModelClientFactory()
+    runner_factory = AgentTurnRunnerFactory(
+        factory,
+    )
     command = _command(stream=False)
     context = StubContext()
     request = runner_factory.build_loop_request(
         command=command,
         context=context,
-        turn_id="turn-1",
-        invoke=lambda runner, message: runner(message),
+        turn=Turn(session_id="session-1", id="turn-1"),
+    )
+    prompt_envelope = request.context_manager.build_prompt(
+        turn=request.turn,
+        session_items=[],
+        tools=request.tool_runtime.visible_tools(),
     )
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
-    assert request.message.startswith("Hello\n\nAttached files for this turn:")
-    assert 'file_attachment filename="notes.txt" uuid="file-1"' in request.message
-    assert "read_uploaded_file" in request.message
-    assert request.runner is factory.runner
-    assert request.history_messages == [{"role": "user", "content": "old"}]
+    assert prompt_envelope.current_user_item.content[0].text == "Hello"
+    attachment_context = "\n".join(
+        item.content
+        for item in prompt_envelope.context_items
+        if item.kind == "file_attachment"
+    )
+    assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
+    assert "read_uploaded_file" in attachment_context
+    assert request.model_client is factory.client
+    assert prompt_envelope.history_items[0].content[0].text == "old"
+    assert prompt_envelope.tools
     assert "enable_tools" not in factory.calls[0]
     assert "agent_hint" not in factory.calls[0]
     assert "attachments_text" not in factory.calls[0]
     assert "data_attachments" not in factory.calls[0]
-    assert factory.calls[0]["file_service"] is None
-    assert len(factory.calls[0]["hooks"]) == 1
+    assert "file_service" not in factory.calls[0]
+    assert "prompt_envelope" not in factory.calls[0]
+    assert "tool_definitions" not in factory.calls[0]
+    assert "hooks" not in factory.calls[0]
 
 
 class FailingHistory:
@@ -289,93 +280,11 @@ class FailingHistory:
 
 
 class RecordingHistory:
-    """History fake for transcript and tool projection tests."""
+    """History fake for transcript tests."""
 
     def __init__(self) -> None:
         """Create the fake."""
         self.calls: list[tuple] = []
-
-    def save_assistant_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record assistant message persistence."""
-        self.calls.append(("assistant", public_id, user_id, content, metadata))
-        return 99
-
-    def save_tool_message(
-        self,
-        public_id: str,
-        user_id: str,
-        content: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> int:
-        """Record tool message persistence."""
-        self.calls.append(("tool-message", public_id,
-                          user_id, content, metadata))
-        return 42
-
-    def start_tool_call(
-        self,
-        public_id: str,
-        *,
-        tool_call_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> None:
-        """Record tool-call start."""
-        self.calls.append((
-            "tool-start",
-            public_id,
-            tool_call_id,
-            tool_name,
-            arguments,
-        ))
-
-    def finish_tool_call(
-        self,
-        public_id: str,
-        *,
-        tool_call_id: str,
-        status: str,
-        result: dict[str, Any] | None,
-        error_code: str | None,
-        error_message: str | None,
-        elapsed_ms: int | None,
-        tool_message_id: int | None,
-    ) -> None:
-        """Record tool-call finish."""
-        self.calls.append((
-            "tool-finish",
-            public_id,
-            tool_call_id,
-            status,
-            result,
-            error_code,
-            error_message,
-            elapsed_ms,
-            tool_message_id,
-        ))
-
-    def attach_tool_calls_to_assistant(
-        self,
-        public_id: str,
-        *,
-        tool_call_ids: tuple[str, ...],
-        assistant_message_id: int,
-    ) -> None:
-        """Record tool-call to assistant linking."""
-        self.calls.append((
-            "tool-link",
-            public_id,
-            tool_call_ids,
-            assistant_message_id,
-        ))
 
 
 class CompressingMemory:
@@ -463,16 +372,45 @@ class StubContext:
     """Minimal agent context test double."""
 
     summary = "summary"
-    image_attachment_payloads = [{"file_uuid": "image-1"}]
-    file_attachment_payloads = [
-        {"filename": "notes.txt", "file_uuid": "file-1"},
-        {"filename": "data.csv", "file_uuid": "file-2"},
-    ]
     image_attachments = [object()]
     file_attachments = [object(), object()]
     user_memory_prompt = "remember"
-    strands_history = [{"role": "user", "content": "old"}]
+    history_items = [
+        UserMessageItem(content=[
+            UserInput(type=UserInputType.TEXT, text="old"),
+        ]),
+    ]
     has_attachments = True
+
+    def to_context_items(
+        self,
+        *,
+        include_image_refs: bool = True,
+    ) -> list[ContextItem]:
+        """Return context items in the domain AgentContext shape."""
+        _ = include_image_refs
+        return [
+            ContextItem(kind="session_summary", content="summary"),
+            ContextItem(kind="user_memory", content="remember"),
+            ContextItem(
+                kind="file_attachment",
+                content=(
+                    'file_attachment filename="notes.txt" uuid="file-1"\n'
+                    "Use read_uploaded_file with the uuid when "
+                    "file_attachment contents are needed."
+                ),
+            ),
+        ]
+
+    def to_current_user_inputs(
+        self,
+        user_text: str,
+        *,
+        include_image_inputs: bool,
+    ) -> list[UserInput]:
+        """Return current user input blocks in the domain AgentContext shape."""
+        _ = include_image_inputs
+        return [UserInput(type=UserInputType.TEXT, text=user_text)]
 
 
 class StubSettings:
@@ -483,28 +421,40 @@ class StubSettings:
         return "test-model"
 
 
-class RecordingRunner:
-    """Prepared agent fake."""
+class RecordingModelClient:
+    """Model client fake."""
 
-    messages: list[dict[str, Any]]
+    prompt_envelopes: list[PromptEnvelope]
 
-    def __call__(self, message: str) -> str:
-        """Return a fixed reply."""
-        return f"reply to {message}"
+    def __init__(self) -> None:
+        """Create the fake."""
+        self.prompt_envelopes = []
+
+    async def sample(self, prompt_envelope: PromptEnvelope) -> ModelStepResult:
+        """Record a prompt and return a fixed model step."""
+        self.prompt_envelopes.append(prompt_envelope)
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(
+                text=(
+                    "reply to "
+                    f"{prompt_envelope.current_user_item.content[0].text}"
+                ),
+            ),
+        )
 
 
-class RecordingOrchestratorFactory:
-    """Orchestrator factory fake."""
+class RecordingModelClientFactory:
+    """Model-client factory fake."""
 
     def __init__(self) -> None:
         """Create the fake."""
         self.calls: list[dict[str, Any]] = []
-        self.runner = RecordingRunner()
+        self.client = RecordingModelClient()
 
-    def __call__(self, **kwargs: Any) -> RecordingRunner:
+    def __call__(self, **kwargs: Any) -> RecordingModelClient:
         """Record construction kwargs."""
         self.calls.append(kwargs)
-        return self.runner
+        return self.client
 
 
 def _command(

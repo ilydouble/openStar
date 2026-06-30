@@ -413,7 +413,7 @@ Default local service-owned configuration files live under `payment-service/conf
 Secrets policy:
 
 - Do not commit `.env` files, real private keys, certificates, or API v3 keys.
-- Keep `dotenv/.env.payment.example` complete with placeholders.
+- Keep `dotenv/dev/.env.payment.example` and `dotenv/production/.env.payment.example` complete with placeholders.
 - Mount the merchant private key as a read-only secret file.
 - Mount the WeChat Pay public key as a pinned read-only configuration file. The public key is not a secret, but the key id and file contents must be reviewed together because they define the trust anchor for response and callback verification.
 - Rotate merchant certificates by deploying a new private key path and serial number together.

@@ -37,10 +37,31 @@ class TurnPersistence:
             )
 
     def persist_event(self, command: Any, event: TurnEvent) -> None:
-        """Persist the session item carried by an item event."""
+        """Append a turn event and persist the carried session item if any."""
+        self.append_event(command, event)
         if event.item is None:
             return
         self.upsert_item(command, event.turn_id, event.item)
+
+    def append_event(self, command: Any, event: TurnEvent) -> None:
+        """Persist an append-only event record without failing the turn."""
+        if command.incognito:
+            return
+        try:
+            self._agent_session.append_turn_event(
+                command.session_id,
+                command.user_id,
+                turn_id=event.turn_id,
+                event=event,
+            )
+        except (AttributeError, PermissionError, LookupError) as exc:
+            log.warning(
+                "turn_event_append_failed",
+                session_id=command.session_id,
+                turn_id=event.turn_id,
+                event_id=event.event_id,
+                error=str(exc),
+            )
 
     def upsert_item(self, command: Any, turn_id: str, item: SessionItem) -> None:
         """Persist a turn item without failing an already running request."""
@@ -71,6 +92,9 @@ class TurnPersistence:
         error: TurnError | None,
         completed_at: datetime,
         duration_ms: int | None,
+        model: str | None = None,
+        provider: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> None:
         """Persist final turn state without failing response delivery."""
         if command.incognito:
@@ -84,6 +108,9 @@ class TurnPersistence:
                 error=error,
                 completed_at=completed_at,
                 duration_ms=duration_ms,
+                model=model,
+                provider=provider,
+                usage=usage,
             )
         except (AttributeError, PermissionError, LookupError) as exc:
             log.warning(

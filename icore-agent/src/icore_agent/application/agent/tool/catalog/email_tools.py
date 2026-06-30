@@ -1,18 +1,12 @@
-"""Email tools — send, read, and search emails.
-
-These are Strands @tool functions available from the tool catalog.
-"""
+"""Email tools — send, read, and search emails."""
 
 from __future__ import annotations
-
-from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)
 
 
-@tool
 def send_email(to: str, subject: str, body: str, cc: str = "") -> str:
     """Send an email to one or more recipients.
 
@@ -41,7 +35,6 @@ def send_email(to: str, subject: str, body: str, cc: str = "") -> str:
     return f"✅ Email sent to {to} with subject '{subject}'"
 
 
-@tool
 def list_inbox(limit: int = 10) -> str:
     """Retrieve the most recent emails from the inbox.
 
@@ -63,7 +56,6 @@ Recent emails:
     """.strip()
 
 
-@tool
 def search_emails(query: str, limit: int = 10) -> str:
     """Search for emails matching a keyword or sender.
 

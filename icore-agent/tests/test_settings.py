@@ -6,7 +6,7 @@ from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runt
 
 
 def test_resolve_litellm_config_splits_zai_client_args_and_params(monkeypatch):
-    """Z.AI credentials should be resolved into client_args for Strands."""
+    """Z.AI credentials should be resolved into LiteLLM client_args."""
     monkeypatch.setenv("MODEL_ID", "zai/glm-4.7")
     monkeypatch.setenv("ZAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
     monkeypatch.setenv("ZAI_API_KEY", "zai-key")
@@ -132,6 +132,26 @@ def test_settings_load_logging_service_domain(monkeypatch):
     assert settings.logging_service_url == "http://logging-service:8091"
     assert settings.logging_service_token == "logging-token"
     assert settings.logging_service_timeout == 2.5
+
+
+def test_settings_load_agent_runtime_domain(monkeypatch):
+    """Agent runtime settings should be part of aggregate settings."""
+    monkeypatch.setenv("AGENT_RUNTIME_LOCK_TTL_SECONDS", "42")
+    monkeypatch.setenv("AGENT_RUNTIME_STATE_TTL_SECONDS", "84")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_runtime_lock_ttl_seconds == 42
+    assert settings.agent_runtime_state_ttl_seconds == 84
+
+
+def test_settings_load_agent_tool_workspace_from_tools_domain(monkeypatch):
+    """Agent tool workspace belongs to the tools settings domain."""
+    monkeypatch.setenv("AGENT_TOOL_WORKSPACE", "/tmp/icore-agent-tools")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_tool_workspace == "/tmp/icore-agent-tools"
 
 
 def test_cors_allowed_origins_default_to_local_dev_hosts(monkeypatch):

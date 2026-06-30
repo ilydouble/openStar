@@ -1,7 +1,7 @@
 ## 支付模块启动说明
 
 ### env文件
-编辑 icore-agent/dotenv/.env.payment, 一共有这些参数
+编辑 icore-agent/dotenv/dev/.env.payment 或 icore-agent/dotenv/production/.env.payment, 一共有这些参数
 - POSTGRES_ADMIN_USER=icore_agent # bootstrap.sh 创建支付db时使用的高权限用户, 默认为 icore_agent
 - POSTGRES_ADMIN_PASSWORD=change-me # bootstrap.sh 创建支付db时使用的高权限用户密码
 - POSTGRES_ADMIN_DB=icore_agent_db # PostgreSQL 连接需要先连上已有数据库
@@ -40,4 +40,3 @@
 
 ### 注意
 本地测试时, 每次申请cloudflared隧道之后, 都更新参数 WECHATPAY_NOTIFY_URL 并 build 一次 payment-service
-

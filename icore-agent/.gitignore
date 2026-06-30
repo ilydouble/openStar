@@ -19,8 +19,8 @@ env/
 .env
 .env.local
 .env.*.local
-dotenv/.env.*
-!dotenv/.env.*.example
+dotenv/**/.env.*
+!dotenv/**/.env.*.example
 
 # ── Tests & coverage ─────────────────────────
 .pytest_cache/
@@ -41,7 +41,7 @@ logs/
 icore-control-plane.json
 icore-chroma/
 icore-images/
-/tmp/icore-seq-workspace/
+/tmp/icore-agent-workspace/
 hello.txt
 
 # ── Go services (gateway, logging, storage) ──

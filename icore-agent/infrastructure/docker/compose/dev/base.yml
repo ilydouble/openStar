@@ -1,0 +1,27 @@
+name: icore-agent
+
+networks:
+  icore-net:
+    driver: bridge
+
+volumes:
+  icore_db:
+    driver: local
+  redis-data:
+    driver: local
+  agent-tool-workspace:
+    driver: local
+  minio-data:
+    driver: local
+  kafka-data:
+    driver: local
+  logging-service-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  # Shared between backend (icore-agent, which extracts uploaded project
+  # archives here) and pi-service (which Pi's sandboxed tools read from).
+  # Mount path MUST match on both sides — see PiWorkspaceService.settings
+  # `pi_workspace_sandbox_root` and pi-source-service's PI_WORKSPACE_ROOT.
+  pi-projects-workspace:
+    driver: local

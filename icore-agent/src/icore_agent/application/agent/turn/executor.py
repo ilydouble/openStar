@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
-from icore_agent.application.agent.loop.agent_loop import AgentLoop, AgentLoopError
+from icore_agent.application.agent.loop.agent_loop import (
+    AgentLoop,
+    AgentLoopAborted,
+    AgentLoopError,
+)
+from icore_agent.domain.agent.loop import AgentLoopControl
 from icore_agent.domain.agent.turn import TurnError, TurnEvent
 
 from .lifecycle import TurnLifecycle
@@ -12,7 +18,6 @@ from .persistence import TurnPersistence
 from .runner import AgentTurnRunnerFactory
 from .transcript import TurnTranscriptRecorder
 from .usage import TurnUsageRecorder
-from ..tool import TurnToolProjection
 
 
 class AgentTurnExecutor:
@@ -26,7 +31,6 @@ class AgentTurnExecutor:
         persistence: TurnPersistence,
         transcript: TurnTranscriptRecorder,
         usage: TurnUsageRecorder,
-        tool_projection_factory: Callable[[], TurnToolProjection],
     ) -> None:
         """Create the executor with its turn-scoped collaborators."""
         self._agent_loop = agent_loop
@@ -34,38 +38,78 @@ class AgentTurnExecutor:
         self._persistence = persistence
         self._transcript = transcript
         self._usage = usage
-        self._tool_projection_factory = tool_projection_factory
 
     async def run(
         self,
         *,
         command,
         context,
+        lifecycle: TurnLifecycle,
+        user_event: TurnEvent,
+        control: AgentLoopControl | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run a prepared command through one agent turn lifecycle."""
-        lifecycle = TurnLifecycle.start(session_id=command.session_id)
-        self._persistence.create(command, lifecycle.turn)
-        yield lifecycle.started_event()
-
-        user_event = lifecycle.user_message_event(command.message)
+        sequencer = _TurnEventSequencer(
+            run_id=control.run_id() if control is not None else None,
+        )
+        started_event = sequencer.apply(lifecycle.started_event())
+        self._persistence.persist_event(command, started_event)
+        yield started_event
+        user_event = sequencer.apply(user_event)
         self._persistence.persist_event(command, user_event)
         yield user_event
 
-        projection = self._tool_projection_factory()
         request = self._runner_factory.build_loop_request(
             command=command,
             context=context,
-            turn_id=lifecycle.turn.id,
-            invoke=self._usage.invoke_with_usage(command),
+            turn=lifecycle.turn,
+            model_client_wrapper=lambda model_client: (
+                self._usage.wrap_model_client(command, model_client)
+            ),
+            control=control,
         )
+        initial_envelope = request.context_manager.build_prompt(
+            turn=lifecycle.turn,
+            session_items=list(lifecycle.turn.items),
+            tools=request.tool_runtime.visible_tools(),
+        )
+        for context_item in initial_envelope.context_items:
+            context_event = TurnEvent.item_completed(
+                session_id=command.session_id,
+                turn_id=lifecycle.turn.id,
+                item=context_item,
+            )
+            context_event = sequencer.apply(context_event)
+            lifecycle.apply_agent_event(context_event)
+            self._persistence.persist_event(command, context_event)
+            yield context_event
         try:
             async for event in self._agent_loop.run(request):
+                event = sequencer.apply(event)
                 lifecycle.apply_agent_event(event)
                 self._persistence.persist_event(command, event)
-                projection.persist_event(command, event)
                 yield event
+        except AgentLoopAborted:
+            usage_metadata = self._usage.turn_usage()
+            _apply_turn_usage(lifecycle, usage_metadata)
+            final = lifecycle.aborted()
+            self._persistence.complete(
+                command,
+                turn_id=lifecycle.turn.id,
+                status=final.status,
+                error=final.error,
+                completed_at=final.completed_at,
+                duration_ms=final.duration_ms,
+                **usage_metadata,
+            )
+            final_event = sequencer.apply(final.event)
+            self._persistence.persist_event(command, final_event)
+            yield final_event
+            return
         except AgentLoopError as exc:
             error = TurnError(message=str(exc), code=type(exc).__name__)
+            usage_metadata = self._usage.turn_usage()
+            _apply_turn_usage(lifecycle, usage_metadata)
             final = lifecycle.failed(error)
             self._persistence.complete(
                 command,
@@ -74,27 +118,24 @@ class AgentTurnExecutor:
                 error=final.error,
                 completed_at=final.completed_at,
                 duration_ms=final.duration_ms,
+                **usage_metadata,
             )
-            yield final.event
+            final_event = sequencer.apply(final.event)
+            self._persistence.persist_event(command, final_event)
+            yield final_event
             return
 
         session_compressed = await self._transcript.append_memory_pair(
             command,
             lifecycle.reply,
         )
-        assistant_message_id = self._transcript.save_assistant_message(
-            command,
-            lifecycle.reply,
-        )
-        projection.attach_to_assistant(
-            command,
-            assistant_message_id=assistant_message_id,
-        )
         self._usage.consume_task(command)
         await self._transcript.maybe_extract_user_memory(
             command,
             session_compressed,
         )
+        usage_metadata = self._usage.turn_usage()
+        _apply_turn_usage(lifecycle, usage_metadata)
         final = lifecycle.completed()
         self._persistence.complete(
             command,
@@ -103,5 +144,34 @@ class AgentTurnExecutor:
             error=final.error,
             completed_at=final.completed_at,
             duration_ms=final.duration_ms,
+            **usage_metadata,
         )
-        yield final.event
+        final_event = sequencer.apply(final.event)
+        self._persistence.persist_event(command, final_event)
+        yield final_event
+
+
+def _apply_turn_usage(
+    lifecycle: TurnLifecycle,
+    usage_metadata: dict,
+) -> None:
+    """Copy captured usage metadata onto the in-memory domain turn."""
+    lifecycle.turn.model = usage_metadata.get("model")
+    lifecycle.turn.provider = usage_metadata.get("provider")
+    lifecycle.turn.usage = usage_metadata.get("usage")
+
+
+@dataclass(slots=True)
+class _TurnEventSequencer:
+    """Assign turn-local stream envelope metadata in emission order."""
+
+    run_id: str | None
+    next_seq: int = 0
+
+    def apply(self, event: TurnEvent) -> TurnEvent:
+        """Return an event with monotonic sequence and runtime run id."""
+        self.next_seq += 1
+        return event.with_envelope(
+            seq=self.next_seq,
+            run_id=self.run_id,
+        )

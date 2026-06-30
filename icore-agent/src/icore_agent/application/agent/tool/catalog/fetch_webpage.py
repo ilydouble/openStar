@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 
 import httpx
-from strands import tool
 
 from icore_agent.shared.logging.app_logger import get_logger
 
@@ -42,7 +41,6 @@ def _strip_html(html: str) -> str:
     return html.strip()
 
 
-@tool
 def fetch_webpage(url: str) -> str:
     """Fetch the full text content of a webpage.
 

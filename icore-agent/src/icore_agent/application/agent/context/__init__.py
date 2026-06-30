@@ -2,7 +2,8 @@
 
 from .attachments import dedupe_file_uuids
 from .loader import load_agent_context
-from icore_agent.domain.agent.context.models import (
+from .manager import AgentPromptContextManager
+from icore_agent.domain.agent.context import (
     AgentContext,
     AgentFileAttachment,
     AgentImageAttachment,
@@ -18,6 +19,7 @@ __all__ = [
     "AgentContext",
     "AgentFileAttachment",
     "AgentImageAttachment",
+    "AgentPromptContextManager",
     "AgentSessionReader",
     "ConversationMemory",
     "FileContextReader",

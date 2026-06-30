@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from icore_agent.application.agent.loop.types import PreparedAgentRunner
+from icore_agent.domain.agent.loop import (
+    ModelClient,
+    ModelStepResult,
+    ModelTextDelta,
+)
 from icore_agent.application.usage.recording import (
     begin_turn_usage_capture,
     end_turn_usage_capture,
     flush_turn_usage_capture,
 )
 from icore_agent.config import settings
+from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.shared.logging.app_logger import get_logger
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
@@ -25,6 +31,17 @@ class TurnUsageRecorder:
     def __init__(self, usage_service: Any | None) -> None:
         """Create a usage recorder around the optional usage service."""
         self._usage_service = usage_service
+        self._model = settings.effective_model_id()
+        self._provider = _provider_from_model(self._model)
+        self._usage: dict[str, int] | None = None
+
+    def turn_usage(self) -> dict[str, Any]:
+        """Return model/provider/usage metadata captured for the current turn."""
+        return {
+            "model": self._model,
+            "provider": self._provider,
+            "usage": dict(self._usage) if self._usage is not None else None,
+        }
 
     def check_task_quota(self, command: Any) -> None:
         """Raise PermissionError if the user's monthly task quota is exhausted."""
@@ -66,32 +83,113 @@ class TurnUsageRecorder:
         if self._usage_service is not None:
             self._usage_service.consume_task(command.user_id)
 
-    def invoke_with_usage(self, command: Any):
-        """Return a runner invoker that records actual or estimated LLM usage."""
-        def _invoke(runner: PreparedAgentRunner, message: str) -> Any:
-            capture_token = begin_turn_usage_capture()
-            runtime_token = set_runtime_user(command.user)
-            result = None
-            try:
-                result = runner(message)
-                return result
-            finally:
-                if self._usage_service is not None:
-                    recorded = flush_turn_usage_capture(
-                        user_id=command.user_id,
-                        session_id=command.session_id,
-                        record_usage=self._usage_service.record_llm_usage,
-                    )
-                    if recorded == 0 and result is not None:
-                        self.record_estimated_turn_usage(
-                            command,
-                            prompt=message,
-                            reply=str(result),
-                        )
-                end_turn_usage_capture(capture_token)
-                clear_runtime_user(runtime_token)
+    def wrap_model_client(
+        self,
+        command: Any,
+        model_client: ModelClient,
+    ) -> ModelClient:
+        """Return a model client that records usage for every sample call."""
+        recorder = self
 
-        return _invoke
+        class _UsageRecordingModelClient:
+            """ModelClient wrapper that scopes LiteLLM usage to one turn."""
+
+            async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+                """Sample the wrapped model and record actual or estimated usage."""
+                capture_token = begin_turn_usage_capture()
+                runtime_token = set_runtime_user(command.user)
+                result: ModelStepResult | None = None
+                try:
+                    result = await model_client.sample(envelope)
+                    return result
+                finally:
+                    recorder._record_sample_usage(
+                        command,
+                        envelope=envelope,
+                        result=result,
+                    )
+                    end_turn_usage_capture(capture_token)
+                    clear_runtime_user(runtime_token)
+
+            async def stream(self, envelope: PromptEnvelope):
+                """Stream the wrapped model and record usage from the final step."""
+                capture_token = begin_turn_usage_capture()
+                runtime_token = set_runtime_user(command.user)
+                result: ModelStepResult | None = None
+                try:
+                    stream = getattr(model_client, "stream", None)
+                    if not callable(stream):
+                        result = await model_client.sample(envelope)
+                        for delta in result.deltas:
+                            yield ModelTextDelta(text=delta)
+                        yield result
+                        return
+                    async for event in stream(envelope):
+                        if isinstance(event, ModelStepResult):
+                            result = event
+                        yield event
+                finally:
+                    recorder._record_sample_usage(
+                        command,
+                        envelope=envelope,
+                        result=result,
+                    )
+                    end_turn_usage_capture(capture_token)
+                    clear_runtime_user(runtime_token)
+
+        return _UsageRecordingModelClient()
+
+    def _record_sample_usage(
+        self,
+        command: Any,
+        *,
+        envelope: PromptEnvelope,
+        result: ModelStepResult | None,
+    ) -> None:
+        """Record usage captured by callbacks, model result, or estimation."""
+        if self._usage_service is None:
+            return
+        recorded = flush_turn_usage_capture(
+            user_id=command.user_id,
+            session_id=command.session_id,
+            record_usage=self._record_llm_usage,
+        )
+        if recorded > 0 or result is None:
+            return
+        if result.usage is not None:
+            self._record_result_usage(command, result)
+            return
+        self.record_estimated_turn_usage(
+            command,
+            prompt=envelope.usage_text(),
+            reply=result.assistant_item.text,
+        )
+
+    def _record_result_usage(
+        self,
+        command: Any,
+        result: ModelStepResult,
+    ) -> None:
+        """Persist usage returned directly by a model step result."""
+        usage = result.usage or {}
+        total_tokens = int(usage.get("total_tokens", 0) or 0)
+        if total_tokens <= 0:
+            return
+        try:
+            self._record_llm_usage(
+                user_id=command.user_id,
+                session_id=command.session_id,
+                model=result.model or self._model,
+                prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
+                completion_tokens=int(usage.get("completion_tokens", 0) or 0),
+                total_tokens=total_tokens,
+            )
+        except KeyError:
+            log.warning(
+                "turn_usage_user_missing",
+                user_id=command.user_id,
+                session_id=command.session_id,
+            )
 
     def record_estimated_turn_usage(
         self,
@@ -120,7 +218,7 @@ class TurnUsageRecorder:
         if total_tokens <= 0:
             return
         try:
-            self._usage_service.record_llm_usage(
+            self._record_llm_usage(
                 user_id=command.user_id,
                 session_id=command.session_id,
                 model=model,
@@ -134,6 +232,29 @@ class TurnUsageRecorder:
                 user_id=command.user_id,
                 session_id=command.session_id,
             )
+
+    def _record_llm_usage(self, **payload: Any) -> None:
+        """Record one LLM usage event and aggregate it for turn persistence."""
+        model = str(payload.get("model") or self._model)
+        self._model = model
+        self._provider = _provider_from_model(model)
+        prompt_tokens = int(payload.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(payload.get("completion_tokens", 0) or 0)
+        total_tokens = int(payload.get("total_tokens", 0) or 0)
+        if total_tokens <= 0:
+            total_tokens = prompt_tokens + completion_tokens
+        if total_tokens > 0:
+            current = self._usage or {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+            current["prompt_tokens"] += prompt_tokens
+            current["completion_tokens"] += completion_tokens
+            current["total_tokens"] += total_tokens
+            self._usage = current
+        if self._usage_service is not None:
+            self._usage_service.record_llm_usage(**payload)
 
     def _count_tokens(
         self,
@@ -154,7 +275,7 @@ class TurnUsageRecorder:
                         counter(
                             model=model,
                             messages=[{
-                                "role": "user",
+                                "role": ChatCompletionRole.USER.value,
                                 "content": prompt_text,
                             }],
                         )
@@ -178,3 +299,12 @@ def _get_token_counter():
         return None
     token_counter = litellm_token_counter
     return token_counter
+
+
+def _provider_from_model(model: str | None) -> str | None:
+    """Infer a provider label from LiteLLM-style model ids."""
+    value = str(model or "").strip()
+    if not value or "/" not in value:
+        return None
+    provider, _separator, _model_name = value.partition("/")
+    return provider or None

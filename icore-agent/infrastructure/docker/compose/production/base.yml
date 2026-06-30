@@ -1,0 +1,7 @@
+name: icore-agent
+
+volumes:
+  agent-tool-workspace:
+    driver: local
+  logging-service-data:
+    driver: local

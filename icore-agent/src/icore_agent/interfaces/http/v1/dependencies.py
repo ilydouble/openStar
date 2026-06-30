@@ -6,8 +6,11 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
-from icore_agent.application.agent import AgentSessionService, AgentTurnService
-from icore_agent.application.agent.runner import create_orchestrator
+from icore_agent.application.agent import (
+    AgentRuntime,
+    AgentSessionService,
+    AgentTurnService,
+)
 from icore_agent.application.files import FileAssetService
 from icore_agent.application.pi_workspaces import PiWorkspaceService
 from icore_agent.application.knowledge import KnowledgeService
@@ -21,6 +24,10 @@ from icore_agent.infrastructure.control_plane import (
     ControlPlaneVerificationRepository,
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.infrastructure.agent.chat_completions import (
+    create_chat_completions_model_client,
+)
+from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.persistence.pi_workspaces import (
     SqlAlchemyPiWorkspaceRepository,
@@ -106,6 +113,12 @@ pi_workspace_service = PiWorkspaceService(
     max_size_mb=settings.pi_workspace_max_size_mb,
     max_files=settings.pi_workspace_max_files,
 )
+agent_run_store = RedisAgentRunStore(
+    redis_url=settings.redis_url,
+    lock_ttl_seconds=settings.agent_runtime_lock_ttl_seconds,
+    state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
+)
+agent_runtime = AgentRuntime(run_store=agent_run_store)
 
 
 def get_account_service() -> AccountService:
@@ -159,10 +172,11 @@ def get_agent_turn_service() -> AgentTurnService:
         agent_session=agent_session_service,
         file_service=file_asset_service,
         conversation_memory=memory,
-        orchestrator_factory=create_orchestrator,
+        model_client_factory=create_chat_completions_model_client,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
         pi_workspace_service=pi_workspace_service,
+        agent_runtime=agent_runtime,
     )
 
 

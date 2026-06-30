@@ -63,20 +63,8 @@ def test_multiturn(session_id: str):
     print(r.json()["reply"][:300], "...")
 
 
-def test_sequential():
-    print("\n== 5. 序列化任务（mini-SWE-agent）==")
-    r = httpx.post(
-        f"{BASE}/api/v1/agent/sequential",
-        json={"task": "用 echo 命令创建一个文件 hello.txt，写入 Hello iCore，然后用 cat 读出来"},
-        timeout=120,
-    )
-    data = r.json()
-    print(f"status: {data['status']}, steps: {data['steps']}")
-    print(f"output: {data['output']}")
-
-
 def test_clear_session(session_id: str):
-    print("\n== 6. 清除会话 ==")
+    print("\n== 5. 清除会话 ==")
     r = httpx.delete(f"{BASE}/api/v1/agent/session/{session_id}")
     print(r.json())
 
@@ -86,6 +74,5 @@ if __name__ == "__main__":
     session_id = test_chat_sync()
     test_chat_stream()
     test_multiturn(session_id)
-    test_sequential()
     test_clear_session(session_id)
     print("\n✅ 全部测试完成")

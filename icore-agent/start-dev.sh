@@ -31,6 +31,9 @@ for env_file in "${env_files[@]}"; do
   fi
 done
 
+# Redis 使用宿主机映射端口（Docker 映射到 127.0.0.1:16379）
+export REDIS_URL=redis://localhost:16379/0
+
 # 设置 PYTHONPATH
 export PYTHONPATH="$SCRIPT_DIR/src:${PYTHONPATH:-}"
 

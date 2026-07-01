@@ -86,12 +86,11 @@ def test_settings_load_split_dotenv_files(tmp_path, monkeypatch):
     assert split_settings.max_retries == 2
 
 
-def test_default_dotenv_dir_prefers_dev_environment(monkeypatch):
-    """Local process defaults should load the dev dotenv directory."""
+def test_default_dotenv_dir_resolves_to_dotenv(monkeypatch):
+    """Local process defaults should load the dotenv directory directly."""
     monkeypatch.delenv("ICORE_AGENT_DOTENV_DIR", raising=False)
 
-    assert dotenv_dir().name == "dev"
-    assert dotenv_dir().parent.name == "dotenv"
+    assert dotenv_dir().name == "dotenv"
 
 
 def test_domain_settings_load_only_their_dotenv_file(tmp_path, monkeypatch):

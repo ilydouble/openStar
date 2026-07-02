@@ -104,6 +104,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import SimulatedPaymentModal from './SimulatedPaymentModal.vue'
+import { simulatePaymentSuccess } from '../api/account.js'
+import { persistSimulatedEntitlement } from '../utils/simulatedCheckout.js'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -183,7 +185,12 @@ function openSimulatedPayment(planKey) {
 }
 
 /** Close both upgrade surfaces after a simulated payment succeeds. */
-function handlePaymentPaid() {
+async function handlePaymentPaid(checkout) {
+  try {
+    await simulatePaymentSuccess(checkout)
+  } catch {
+    persistSimulatedEntitlement(checkout)
+  }
   showPaymentModal.value = false
   emit('dismiss')
 }

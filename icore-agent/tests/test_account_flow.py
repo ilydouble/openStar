@@ -360,6 +360,35 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     assert me_payload["byok"]["api_key"] == "****-key"
 
 
+def test_debug_simulated_payment_success_updates_account_plan(monkeypatch, client: TestClient):
+    """Development payment simulation should reuse payment event plan application."""
+    from icore_agent.config import settings
+
+    monkeypatch.setattr(settings, "debug", True)
+    headers = _trial_headers(client)
+
+    payment = client.post(
+        "/api/v1/account/billing/simulated-payment-success",
+        headers=headers,
+        json={
+            "plan_code": "team",
+            "billing_period": "monthly",
+            "order_no": f"SIM-TEAM-{uuid4().hex}",
+        },
+    )
+
+    assert payment.status_code == 200
+    payment_payload = _api_data(payment)
+    assert payment_payload["status"] in {"applied", "duplicate"}
+
+    plan = client.get("/api/v1/account/billing/plan", headers=headers)
+
+    assert plan.status_code == 200
+    payload = _api_data(plan)
+    assert payload["plan"] == "team"
+    assert payload["label"] == "Team"
+
+
 @patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
 def test_can_fetch_session_state(mock_memory, client: TestClient):
     user_payload = _register_trial_direct(client)

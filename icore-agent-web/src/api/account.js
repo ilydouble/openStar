@@ -1,5 +1,6 @@
 import { clearSession, peekAccessTokenState, setSession } from '../auth/session.js'
 import { authTrace } from '../auth/trace.js'
+import { applySimulatedEntitlement, clearSimulatedEntitlement } from '../utils/simulatedCheckout.js'
 import { createJsonClient } from './client.js'
 
 const BASE = '/api/v1/account'
@@ -88,7 +89,8 @@ export async function fetchMe() {
 }
 
 export async function fetchPlan() {
-  return client.get(`${BASE}/billing/plan`)
+  const plan = await client.get(`${BASE}/billing/plan`)
+  return applySimulatedEntitlement(plan)
 }
 
 export async function fetchUsageSummary() {
@@ -127,6 +129,14 @@ export async function updateByok(payload) {
   return client.post(`${BASE}/billing/byok`, payload)
 }
 
+export async function simulatePaymentSuccess(checkout) {
+  return client.post(`${BASE}/billing/simulated-payment-success`, {
+    plan_code: checkout.planCode,
+    billing_period: checkout.billingPeriod,
+    order_no: checkout.orderNo,
+  })
+}
+
 export async function fetchMemory() {
   return client.get(`${BASE}/memory`)
 }
@@ -140,5 +150,6 @@ export async function deleteMemoryFact(factId) {
 }
 
 export function signOut() {
+  clearSimulatedEntitlement()
   clearSession()
 }

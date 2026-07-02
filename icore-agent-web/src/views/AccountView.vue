@@ -304,12 +304,14 @@ import {
   fetchPlan,
   fetchTeam,
   renameTeam,
+  simulatePaymentSuccess,
   signOut,
   updateByok,
   updateKnowledgeScope,
 } from '../api/account.js'
 import MemoryManagerSection from '../components/MemoryManagerSection.vue'
 import SimulatedPaymentModal from '../components/SimulatedPaymentModal.vue'
+import { persistSimulatedEntitlement } from '../utils/simulatedCheckout.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -502,7 +504,12 @@ function openSimulatedPayment(planKey) {
 }
 
 /** Show a local success message after the simulated provider callback completes. */
-function handleSimulatedPaymentPaid(checkout) {
+async function handleSimulatedPaymentPaid(checkout) {
+  try {
+    await simulatePaymentSuccess(checkout)
+  } catch {
+    persistSimulatedEntitlement(checkout)
+  }
   const planName = t(`paymentSimulation.plans.${checkout.planKey}.name`)
   paymentNotice.value = t('account.paymentSimulatedNotice', { plan: planName })
   loadAccount({ silent: true })

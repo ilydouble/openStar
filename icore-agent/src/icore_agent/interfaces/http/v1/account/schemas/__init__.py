@@ -8,7 +8,7 @@ from .auth import (
     TrialRegistrationRequest,
     TrialRegistrationResponse,
 )
-from .billing import ByokRequest
+from .billing import ByokRequest, SimulatedPaymentSuccessRequest
 from .lead import LeadCaptureRequest
 from .project import ProjectSyncRequest
 from .team import KnowledgeScopeRequest, OrganizationRenameRequest, TeamMemberRequest
@@ -23,6 +23,7 @@ __all__ = [
     "ProjectSyncRequest",
     "SendVerificationCodeRequest",
     "SendVerificationCodeResponse",
+    "SimulatedPaymentSuccessRequest",
     "TeamMemberRequest",
     "TrialRegistrationRequest",
     "TrialRegistrationResponse",

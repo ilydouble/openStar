@@ -19,6 +19,7 @@ from .handlers import (
     rename_team,
     send_verification_code,
     sync_project,
+    simulate_payment_success,
     update_byok,
     update_memory_fact,
     update_team_knowledge_scope,
@@ -51,6 +52,7 @@ router.get("/usage/summary")(get_usage_summary)
 router.get("/admin/overview")(get_admin_overview)
 router.get("/billing/plan")(get_plan)
 router.post("/billing/byok")(update_byok)
+router.post("/billing/simulated-payment-success")(simulate_payment_success)
 router.post("/projects/sync")(sync_project)
 router.get("/projects")(list_projects)
 router.get("/team")(get_team)

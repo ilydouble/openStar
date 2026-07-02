@@ -1,3 +1,7 @@
+import { getBrowserStorage, readStoredString, removeStoredKey, writeStoredString } from '../stores/browserStorage.js'
+
+const SIMULATED_ENTITLEMENT_KEY = 'icore_simulated_entitlement'
+
 const SIMULATED_PLANS = {
   pilot: {
     planKey: 'pilot',
@@ -5,6 +9,9 @@ const SIMULATED_PLANS = {
     billingPeriod: 'once',
     currency: 'CNY',
     amountCents: 49900,
+    label: '试点服务',
+    taskLimit: 1000,
+    attachmentLimit: 400,
   },
   ops: {
     planKey: 'ops',
@@ -12,6 +19,9 @@ const SIMULATED_PLANS = {
     billingPeriod: 'monthly',
     currency: 'CNY',
     amountCents: 99900,
+    label: '持续运营',
+    taskLimit: 5000,
+    attachmentLimit: 2000,
   },
 }
 
@@ -51,6 +61,61 @@ export function completeSimulatedCheckout(checkout, options = {}) {
     ...checkout,
     status: 'paid',
     paidAt,
+  }
+}
+
+/** Persist the simulated payment entitlement so later plan fetches show upgraded access. */
+export function persistSimulatedEntitlement(checkout, options = {}) {
+  if (!checkout || checkout.status !== 'paid') return null
+  const plan = getSimulatedCheckoutPlan(checkout.planKey)
+  const entitlement = {
+    enabled: true,
+    plan_key: plan.planKey,
+    plan: plan.planCode,
+    label: plan.label,
+    limits: {
+      tasks: plan.taskLimit,
+      attachments: plan.attachmentLimit,
+    },
+    order_no: checkout.orderNo,
+    paid_at: checkout.paidAt || new Date().toISOString(),
+  }
+  const storage = options.storage ?? getBrowserStorage()
+  writeStoredString(storage, SIMULATED_ENTITLEMENT_KEY, JSON.stringify(entitlement))
+  return entitlement
+}
+
+/** Overlay a simulated paid entitlement onto the backend account plan response. */
+export function applySimulatedEntitlement(plan, options = {}) {
+  const entitlement = readSimulatedEntitlement(options)
+  if (!entitlement) return plan
+  return {
+    ...plan,
+    plan: entitlement.plan,
+    label: entitlement.label,
+    limits: {
+      ...(plan?.limits || {}),
+      ...entitlement.limits,
+    },
+    simulated_entitlement: entitlement,
+  }
+}
+
+/** Remove the local simulated entitlement, usually on sign-out. */
+export function clearSimulatedEntitlement(options = {}) {
+  const storage = options.storage ?? getBrowserStorage()
+  removeStoredKey(storage, SIMULATED_ENTITLEMENT_KEY)
+}
+
+function readSimulatedEntitlement(options = {}) {
+  const storage = options.storage ?? getBrowserStorage()
+  const raw = readStoredString(storage, SIMULATED_ENTITLEMENT_KEY, '')
+  if (!raw) return null
+  try {
+    const entitlement = JSON.parse(raw)
+    return entitlement?.enabled && entitlement?.plan ? entitlement : null
+  } catch {
+    return null
   }
 }
 

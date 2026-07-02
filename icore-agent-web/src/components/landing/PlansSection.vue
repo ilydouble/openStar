@@ -92,6 +92,7 @@
         :show="showPaymentModal"
         :plan-key="selectedPaymentPlan"
         @dismiss="showPaymentModal = false"
+        @paid="handlePaymentPaid"
       />
     </div>
   </section>
@@ -102,7 +103,9 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { isAuthenticated } from '../../auth/session.js'
+import { simulatePaymentSuccess } from '../../api/account.js'
 import SimulatedPaymentModal from '../SimulatedPaymentModal.vue'
+import { persistSimulatedEntitlement } from '../../utils/simulatedCheckout.js'
 
 const { t, tm } = useI18n()
 const showPaymentModal = ref(false)
@@ -128,6 +131,15 @@ function paymentPlanForTier(_tier, index) {
 function openSimulatedPayment(tier, index) {
   selectedPaymentPlan.value = paymentPlanForTier(tier, index) || 'pilot'
   showPaymentModal.value = true
+}
+
+/** Persist simulated entitlement after a landing-page checkout completes. */
+async function handlePaymentPaid(checkout) {
+  try {
+    await simulatePaymentSuccess(checkout)
+  } catch {
+    persistSimulatedEntitlement(checkout)
+  }
 }
 
 /** Keep tier CTA styling consistent across links and payment buttons. */

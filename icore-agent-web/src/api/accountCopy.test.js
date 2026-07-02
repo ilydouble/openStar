@@ -39,9 +39,12 @@ test('account page opens the commerce workspace first', () => {
 test('account page and quota modal expose simulated payment upgrades', () => {
   const account = readFileSync(new URL('../views/AccountView.vue', import.meta.url), 'utf8')
   const quota = readFileSync(new URL('../components/QuotaExceededModal.vue', import.meta.url), 'utf8')
+  const api = readFileSync(new URL('./account.js', import.meta.url), 'utf8')
 
   assert.match(account, /SimulatedPaymentModal/)
   assert.match(account, /openSimulatedPayment\('pilot'\)/)
   assert.match(quota, /SimulatedPaymentModal/)
   assert.match(quota, /openSimulatedPayment\(plan\.paymentPlan\)/)
+  assert.match(api, /simulatePaymentSuccess/)
+  assert.match(api, /\/billing\/simulated-payment-success/)
 })

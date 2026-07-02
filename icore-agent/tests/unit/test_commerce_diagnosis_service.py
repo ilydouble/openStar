@@ -113,6 +113,48 @@ def test_commerce_diagnosis_accepts_common_chinese_csv_headers() -> None:
     assert report.risks[0]["type"] == "stockout"
 
 
+def test_commerce_diagnosis_accepts_ad_csv_without_sku() -> None:
+    """Commerce diagnosis should accept campaign-level CSVs that have no SKU column."""
+    csv_body = (
+        "date,campaign_id,campaign_name,channel,spend_usd,orders,revenue_usd\n"
+        "2026-06-15,CAM-NA,Summer Travel Essentials,Amazon PPC,223.15,309,9541.06\n"
+        "2026-06-15,CAM-EU,Summer Travel Essentials,Amazon PPC,165.70,7,151.08\n"
+    ).encode()
+    service = CommerceDiagnosisService(file_service=FakeFileService(csv_body))
+
+    report = service.create_diagnosis(
+        user_id="user-123",
+        file_uuid="file-123",
+        locale="zh-CN",
+    )
+
+    assert report.metrics["sku_count"] == 2
+    assert report.metrics["total_orders"] == 316
+    assert report.metrics["total_revenue"] == 9692.14
+    assert report.risks[0]["sku"] == "CAM-EU"
+    assert report.risks[0]["type"] == "low_margin"
+
+
+def test_commerce_diagnosis_maps_inventory_report_headers() -> None:
+    """Commerce diagnosis should map replenishment CSV stock and velocity headers."""
+    csv_body = (
+        "sku,product,current_stock,daily_sales_avg,supplier,lead_time_days\n"
+        "TRVL-CABLE-3P,Travel cable pack,27,3.27,Shenzhen Brightline,10\n"
+    ).encode()
+    service = CommerceDiagnosisService(file_service=FakeFileService(csv_body))
+
+    report = service.create_diagnosis(
+        user_id="user-123",
+        file_uuid="file-123",
+        locale="zh-CN",
+    )
+
+    assert report.metrics["sku_count"] == 1
+    assert report.risks[0]["sku"] == "TRVL-CABLE-3P"
+    assert report.risks[0]["type"] == "stockout"
+    assert report.risks[0]["days_left"] == 8.3
+
+
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:
     """Commerce agent profile should describe its dedicated workflow and tools."""
     profile = commerce_diagnosis_profile()

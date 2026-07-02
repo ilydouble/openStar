@@ -36,6 +36,8 @@ HEADER_ALIASES = {
     "productname": "product",
     "name": "product",
     "title": "product",
+    "campaign_name": "product",
+    "campaignname": "product",
     "商品名称": "product",
     "产品名称": "product",
     "品名": "product",
@@ -53,6 +55,8 @@ HEADER_ALIASES = {
     "sales": "revenue",
     "sales_amount": "revenue",
     "salesamount": "revenue",
+    "revenue_usd": "revenue",
+    "revenueusd": "revenue",
     "amount": "revenue",
     "gmv": "revenue",
     "销售额": "revenue",
@@ -62,12 +66,22 @@ HEADER_ALIASES = {
     "cogs": "cost",
     "landed_cost": "cost",
     "landedcost": "cost",
+    "spend_usd": "cost",
+    "spendusd": "cost",
+    "ad_spend": "cost",
+    "adspend": "cost",
+    "advertising_spend": "cost",
+    "advertisingspend": "cost",
+    "marketing_spend": "cost",
+    "marketingspend": "cost",
     "成本": "cost",
     "商品成本": "cost",
     "采购成本": "cost",
     "inventory": "inventory",
     "inventory_qty": "inventory",
     "inventoryqty": "inventory",
+    "current_stock": "inventory",
+    "currentstock": "inventory",
     "stock": "inventory",
     "stock_qty": "inventory",
     "stockqty": "inventory",
@@ -78,6 +92,8 @@ HEADER_ALIASES = {
     "现有库存": "inventory",
     "daily_sales": "daily_sales",
     "dailysales": "daily_sales",
+    "daily_sales_avg": "daily_sales",
+    "dailysalesavg": "daily_sales",
     "avg_daily_sales": "daily_sales",
     "avgdailysales": "daily_sales",
     "daily_units_sold": "daily_sales",
@@ -223,9 +239,7 @@ def _parse_csv(body: bytes) -> list[CommerceRow]:
 def _row_from_mapping(row: dict[str, str], line_no: int) -> CommerceRow:
     """Normalize one CSV row into the Commerce diagnosis schema."""
     normalized = {_normalize_key(key): value for key, value in row.items()}
-    sku = _text(normalized, "sku")
-    if not sku:
-        raise ValueError(f"CSV line {line_no} is missing sku")
+    sku = _text(normalized, "sku") or _row_identifier(normalized, line_no)
     revenue = _decimal(normalized, "revenue")
     cost = _decimal(normalized, "cost")
     inventory = _decimal(normalized, "inventory")
@@ -280,7 +294,7 @@ def _detect_risks(rows: list[CommerceRow]) -> list[dict[str, Any]]:
                     f"{_float(days_left, places=1)} days, below supplier lead time."
                 ),
             })
-        if row.gross_margin_rate < LOW_MARGIN_THRESHOLD:
+        if row.revenue > 0 and row.gross_margin_rate < LOW_MARGIN_THRESHOLD:
             risks.append({
                 "type": "low_margin",
                 "severity": "medium",
@@ -366,6 +380,15 @@ def _decimal(row: dict[str, str], key: str) -> Decimal:
         return Decimal(raw.replace(",", ""))
     except InvalidOperation as exc:
         raise ValueError(f"CSV column {key} must be numeric") from exc
+
+
+def _row_identifier(row: dict[str, str], line_no: int) -> str:
+    """Return a stable identifier for non-SKU operating report rows."""
+    for key in ("campaign_id", "shipment_id", "po_number", "product"):
+        value = _text(row, key)
+        if value:
+            return value
+    return f"row-{line_no}"
 
 
 def _normalize_key(key: str | None) -> str:

@@ -12,6 +12,12 @@ export const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/commerce',
+    name: 'commerce',
+    component: () => import('./views/CommerceDashboardView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/app',
     name: 'workspace',
     component: () => import('./views/HomeView.vue'),

@@ -152,13 +152,14 @@
 
 <script setup>
 import { reactive, ref, computed, watch } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { registerTrial, sendVerificationCode, emailLogin } from '../api/account.js'
-import { authenticatedHomeRouteName } from '../router.js'
+import { resolvePostAuthRoute } from '../router.js'
 
 const { t, tm } = useI18n()
 const router = useRouter()
+const route = useRoute()
 
 const isLoginMode = ref(false)  // 登录/注册模式切换
 const step = ref(1)  // 1=填信息发验证码, 2=填验证码注册/登录
@@ -229,7 +230,7 @@ async function submit() {
       // 注册模式：需要姓名 + 邮箱 + 验证码
       await registerTrial(form)
     }
-    router.push({ name: authenticatedHomeRouteName })
+    router.push(resolvePostAuthRoute(route.query))
   } catch (err) {
     error.value = err.message || t('auth.failed')
   } finally {

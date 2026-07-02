@@ -3,6 +3,14 @@ import { isAuthenticated } from './auth/session.js'
 
 export const authenticatedHomeRouteName = 'commerce'
 
+export function resolvePostAuthRoute(query = {}) {
+  const redirect = typeof query.redirect === 'string' ? query.redirect : ''
+  if (redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.startsWith('/auth')) {
+    return redirect
+  }
+  return { name: authenticatedHomeRouteName }
+}
+
 export const routes = [
   { path: '/', name: 'landing', component: () => import('./views/LandingView.vue') },
   { path: '/auth', name: 'auth', component: () => import('./views/AuthView.vue') },
@@ -62,7 +70,7 @@ export function createAppRouter() {
       }
     }
     if (to.name === 'auth' && isAuthenticated()) {
-      return { name: authenticatedHomeRouteName }
+      return resolvePostAuthRoute(to.query)
     }
     return true
   })

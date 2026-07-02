@@ -13,10 +13,10 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <button class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-                Load sample data
+                Load sample CSVs
               </button>
               <button class="rounded-lg bg-zinc-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950">
-                Import CSV
+                Upload CSVs
               </button>
             </div>
           </div>
@@ -33,14 +33,14 @@
                   <Sparkles class="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div>
-                  <p class="text-sm font-semibold text-zinc-950 dark:text-white">AI Operations Assistant</p>
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400">Context-aware commerce copilot</p>
+                  <p class="text-sm font-semibold text-zinc-950 dark:text-white">AI Diagnosis Assistant</p>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400">Turns uploaded tables into operating questions</p>
                 </div>
               </div>
               <div class="mt-4 space-y-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                <p>Ask about low-stock SKUs, margin changes, supplier follow-ups, or today&apos;s top priorities.</p>
+                <p>Ask what the uploaded products, orders, inventory, and supplier sheets reveal before connecting any store API.</p>
                 <div class="rounded-lg border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-500 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-400">
-                  Try: "Which SKU should we replenish first?"
+                  Try: "What should we fix first from this diagnosis?"
                 </div>
               </div>
             </div>

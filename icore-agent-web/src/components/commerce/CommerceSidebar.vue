@@ -3,7 +3,7 @@
     <div class="border-b border-zinc-200 px-5 py-5 dark:border-white/10">
       <RouterLink to="/commerce" class="block">
         <p class="text-sm font-semibold text-zinc-950 dark:text-white">iCore Commerce OS</p>
-        <p class="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">AI operations cockpit</p>
+        <p class="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">CSV diagnosis pilot</p>
       </RouterLink>
     </div>
 
@@ -23,7 +23,7 @@
     <div class="border-t border-zinc-200 p-4 dark:border-white/10">
       <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
         <p class="text-xs font-semibold uppercase tracking-wide">Pilot mode</p>
-        <p class="mt-2 text-xs leading-5">Single-team experience with organization-scoped data underneath.</p>
+        <p class="mt-2 text-xs leading-5">V1 focuses on one loop: upload CSV, generate diagnosis, review tasks.</p>
       </div>
     </div>
   </aside>
@@ -44,14 +44,14 @@ import {
 } from 'lucide-vue-next'
 
 const navItems = [
-  { label: 'Dashboard', icon: BarChart3, to: '/commerce', active: true },
-  { label: 'Daily Brief', icon: FileText, to: '/commerce' },
+  { label: 'Diagnosis', icon: BarChart3, to: '/commerce', active: true },
+  { label: 'Report', icon: FileText, to: '/commerce' },
   { label: 'Tasks', icon: ClipboardList, to: '/commerce' },
   { label: 'Products', icon: PackageSearch, to: '/commerce' },
   { label: 'Inventory', icon: Boxes, to: '/commerce' },
   { label: 'Suppliers', icon: Truck, to: '/commerce' },
-  { label: 'Orders', icon: Ship, to: '/commerce' },
-  { label: 'Support', icon: Headphones, to: '/commerce' },
-  { label: 'Data Import', icon: Upload, to: '/commerce' },
+  { label: 'Orders CSV', icon: Ship, to: '/commerce' },
+  { label: 'Support later', icon: Headphones, to: '/commerce' },
+  { label: 'CSV Import', icon: Upload, to: '/commerce' },
 ]
 </script>

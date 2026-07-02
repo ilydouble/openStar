@@ -1,7 +1,7 @@
 <template>
   <CommerceShell
-    title="Operations Dashboard"
-    subtitle="A single-team pilot cockpit for sales, margin, inventory, suppliers, and AI tasks."
+    title="AI Operations Diagnosis"
+    subtitle="V1 starts with sample CSVs: products, orders, inventory, and suppliers. The output is a report, SKU risks, and today&apos;s tasks."
   >
     <section class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" aria-label="Commerce metrics">
       <article
@@ -22,7 +22,7 @@
       <article class="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
         <div class="border-b border-zinc-200 px-5 py-4 dark:border-white/10">
           <p class="text-sm font-semibold text-zinc-950 dark:text-white">SKU risk queue</p>
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Sample data shows how V1 will surface inventory and margin risks.</p>
+          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Sample CSV data shows what the first diagnosis will surface after upload.</p>
         </div>
         <div class="overflow-x-auto">
           <table class="min-w-full text-left text-sm">
@@ -47,9 +47,9 @@
       </article>
 
       <article class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-        <p class="text-sm font-semibold text-zinc-950 dark:text-white">Daily operations brief</p>
+        <p class="text-sm font-semibold text-zinc-950 dark:text-white">AI diagnosis report</p>
         <p class="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          Gross margin is stable, but two fast-moving SKUs may stock out within 14 days. Supplier follow-up should happen before ad spend is increased.
+          The uploaded sample sheets are enough to flag two stockout risks, one margin review, and one supplier follow-up. This report is the first conversion hook for prospects.
         </p>
         <div class="mt-5 space-y-3">
           <div
@@ -73,10 +73,10 @@
 import CommerceShell from '../components/commerce/CommerceShell.vue'
 
 const metrics = [
-  { label: 'Today sales', value: '$8,420', badge: '+12%', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200', body: 'Across Shopify sample store and imported marketplace orders.' },
-  { label: 'Gross margin', value: '34.8%', badge: 'Stable', badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-300/15 dark:text-sky-200', body: 'Estimated from product cost, platform fees, and logistics cost.' },
-  { label: 'Inventory risks', value: '6', badge: '2 urgent', badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-300/15 dark:text-rose-200', body: 'SKUs that need replenishment or supplier confirmation.' },
-  { label: 'AI tasks', value: '9', badge: 'Drafted', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-300/15 dark:text-amber-200', body: 'Suggested actions waiting for operator review.' },
+  { label: 'CSV templates', value: '4', badge: 'Required', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200', body: 'Products, orders, inventory, and suppliers are enough for the first diagnosis.' },
+  { label: 'Diagnosis score', value: '72', badge: 'Review', badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-300/15 dark:text-sky-200', body: 'A simple sample score summarizing margin, stock, and supplier risk.' },
+  { label: 'SKU risks', value: '6', badge: '2 urgent', badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-300/15 dark:text-rose-200', body: 'Risks discovered from uploaded inventory and order history.' },
+  { label: 'Today tasks', value: '9', badge: 'Generated', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-300/15 dark:text-amber-200', body: 'Suggested actions created from the diagnosis report.' },
 ]
 
 const skuRisks = [

@@ -4,20 +4,20 @@ import assert from 'node:assert/strict'
 import enUS from '../locales/en-US.js'
 import zhCN from '../locales/zh-CN.js'
 
-test('english landing copy positions iCore as Commerce OS', () => {
+test('english landing copy focuses V1 on CSV operations diagnosis', () => {
   assert.equal(
     enUS.landing.hero.title,
-    'AI operations dashboard for small cross-border commerce teams.',
+    'Upload commerce spreadsheets. Get an AI operations diagnosis.',
   )
-  assert.equal(enUS.landing.hero.primaryCta, 'View sample operations brief')
-  assert.equal(enUS.landing.hero.secondaryCta, 'Upload CSV for a free diagnosis')
+  assert.equal(enUS.landing.hero.primaryCta, 'Generate sample diagnosis')
+  assert.equal(enUS.landing.hero.secondaryCta, 'Upload CSV for free diagnosis')
 })
 
-test('chinese landing copy positions iCore as Commerce OS', () => {
+test('chinese landing copy focuses V1 on CSV operations diagnosis', () => {
   assert.equal(
     zhCN.landing.hero.title,
-    '小型跨境团队的 AI 运营驾驶舱',
+    '上传电商运营表格，生成 AI 运营诊断',
   )
-  assert.equal(zhCN.landing.hero.primaryCta, '查看示例运营日报')
+  assert.equal(zhCN.landing.hero.primaryCta, '生成示例诊断')
   assert.equal(zhCN.landing.hero.secondaryCta, '上传 CSV 免费诊断')
 })

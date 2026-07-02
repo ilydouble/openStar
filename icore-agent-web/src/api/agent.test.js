@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
-import { chatEventStream, chatStream, createCommerceDiagnosis } from './agent.js'
+import {
+  chatEventStream,
+  chatStream,
+  createCommerceDiagnosis,
+  createSampleCommerceDiagnosis,
+} from './agent.js'
 
 const originalFetch = globalThis.fetch
 
@@ -155,6 +160,37 @@ test('createCommerceDiagnosis posts uploaded CSV file uuid to commerce API', asy
   })
   assert.equal(report.agent_profile, 'commerce_diagnosis_v1')
   assert.equal(report.source_file.filename, 'orders.csv')
+})
+
+test('createSampleCommerceDiagnosis posts to sample endpoint without file uuid', async () => {
+  let request = null
+  globalThis.fetch = async (url, init) => {
+    request = { url, init }
+    return jsonResponse({
+      code: 200,
+      message: 'OK',
+      data: {
+        diagnosis_id: 'sample-diagnosis-1',
+        agent_profile: 'commerce_diagnosis_v1',
+        source_file: { sample: true, filename: 'commerce-sample.csv', row_count: 3 },
+        metrics: { sku_count: 3 },
+        risks: [],
+        tasks: [],
+        report_summary: 'sample done',
+      },
+      timestamp: '2026-01-01T00:00:00Z',
+    })
+  }
+
+  const report = await createSampleCommerceDiagnosis({ locale: 'zh-CN' })
+
+  assert.equal(request.url, '/api/v1/commerce/diagnoses/sample')
+  assert.equal(request.init.method, 'POST')
+  assert.deepEqual(JSON.parse(request.init.body), {
+    locale: 'zh-CN',
+  })
+  assert.equal(report.source_file.sample, true)
+  assert.equal(report.source_file.filename, 'commerce-sample.csv')
 })
 
 function mockChatStreamResponse(frames) {

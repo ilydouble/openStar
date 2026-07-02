@@ -11,7 +11,11 @@ from icore_agent.domain.commerce import CommerceDiagnosisReport
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import account_service, file_asset_service
-from ..schemas import CommerceDiagnosisRequest, CommerceDiagnosisResponse
+from ..schemas import (
+    CommerceDiagnosisRequest,
+    CommerceDiagnosisResponse,
+    CommerceSampleDiagnosisRequest,
+)
 
 
 async def get_commerce_current_user(
@@ -51,6 +55,17 @@ async def create_commerce_diagnosis(
         raise HTTPException(status_code=404, detail="File not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _serialize_report(report)
+
+
+async def create_sample_commerce_diagnosis(
+    payload: CommerceSampleDiagnosisRequest,
+    _user: AuthenticatedUser = Depends(get_commerce_current_user),
+    service: CommerceDiagnosisService = Depends(
+        get_commerce_diagnosis_service),
+) -> CommerceDiagnosisResponse:
+    """Create a Commerce sample diagnosis without requiring an uploaded CSV."""
+    report = service.create_sample_diagnosis(locale=payload.locale)
     return _serialize_report(report)
 
 

@@ -3,7 +3,10 @@
 from fastapi import APIRouter
 
 from ..envelope import ApiEnvelopeRoute
-from .handlers import create_commerce_diagnosis
+from .handlers import (
+    create_commerce_diagnosis,
+    create_sample_commerce_diagnosis,
+)
 from .schemas import CommerceDiagnosisResponse
 
 router = APIRouter(
@@ -17,3 +20,8 @@ router.post(
     response_model=CommerceDiagnosisResponse,
     summary="Create a Commerce operating diagnosis from an uploaded CSV",
 )(create_commerce_diagnosis)
+router.post(
+    "/diagnoses/sample",
+    response_model=CommerceDiagnosisResponse,
+    summary="Create a sample Commerce operating diagnosis",
+)(create_sample_commerce_diagnosis)

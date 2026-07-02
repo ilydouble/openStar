@@ -14,6 +14,12 @@ class CommerceDiagnosisRequest(BaseModel):
     locale: str = Field(default="zh-CN", max_length=16)
 
 
+class CommerceSampleDiagnosisRequest(BaseModel):
+    """Request body for creating a sample Commerce diagnosis."""
+
+    locale: str = Field(default="zh-CN", max_length=16)
+
+
 class CommerceDiagnosisResponse(BaseModel):
     """Response body for one generated Commerce diagnosis."""
 

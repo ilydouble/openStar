@@ -523,6 +523,35 @@ export async function createCommerceDiagnosis(fileUuid, options = {}) {
 }
 
 /**
+ * Create a sample Commerce operating diagnosis without uploading a CSV file.
+ * @param {{ locale?: string }} [options]
+ * @returns {Promise<{
+ *   diagnosis_id: string,
+ *   agent_profile: string,
+ *   source_file: Record<string, unknown>,
+ *   metrics: Record<string, unknown>,
+ *   risks: Array<Record<string, unknown>>,
+ *   tasks: Array<Record<string, unknown>>,
+ *   report_summary: string,
+ * }>}
+ */
+export async function createSampleCommerceDiagnosis(options = {}) {
+  const locale = typeof options.locale === 'string' && options.locale.trim()
+    ? options.locale.trim()
+    : 'zh-CN'
+  const resp = await fetch(`${COMMERCE_BASE}/diagnoses/sample`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders(
+      { 'Content-Type': 'application/json' },
+      'commerce-sample-diagnosis',
+    ),
+    body: JSON.stringify({ locale }),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
  * Bütün layihə qovluğunu (File[] - webkitdirectory ilə seçilmiş) zip arxivinə
  * sıxır. Toxunulmamış halda saxlanılır (DEFLATE 0) ki, brauzerdə tez işləsin —
  * tam sıxılma serverdə arxivi inspektə edərkən artıq edilmir, server tərəfdə

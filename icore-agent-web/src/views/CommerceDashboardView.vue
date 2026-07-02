@@ -77,7 +77,11 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { createCommerceDiagnosis, uploadFileAsset } from '../api/agent.js'
+import {
+  createCommerceDiagnosis,
+  createSampleCommerceDiagnosis,
+  uploadFileAsset,
+} from '../api/agent.js'
 import CommerceShell from '../components/commerce/CommerceShell.vue'
 
 const { t, tm, locale } = useI18n()
@@ -174,8 +178,7 @@ async function handleCsvUploaded(file) {
 }
 
 async function handleSampleDiagnosis() {
-  const file = new File([sampleCsv], 'commerce-sample.csv', { type: 'text/csv' })
-  await runDiagnosis(file)
+  await runSampleDiagnosis()
 }
 
 async function runDiagnosis(file) {
@@ -195,6 +198,22 @@ async function runDiagnosis(file) {
   }
 }
 
+async function runSampleDiagnosis() {
+  diagnosisLoading.value = true
+  diagnosisError.value = ''
+  try {
+    const report = await createSampleCommerceDiagnosis({
+      locale: locale.value,
+    })
+    diagnosisReport.value = report
+    diagnosisSource.value = report.source_file?.filename || 'commerce-sample.csv'
+  } catch (err) {
+    diagnosisError.value = err?.message || t('commerce.dashboard.status.failed')
+  } finally {
+    diagnosisLoading.value = false
+  }
+}
+
 function formatMoney(value) {
   const number = Number(value || 0)
   return new Intl.NumberFormat(locale.value === 'zh-CN' ? 'zh-CN' : 'en-US', {
@@ -207,9 +226,4 @@ function formatPercent(value) {
   return `${Math.round(number * 1000) / 10}%`
 }
 
-const sampleCsv = `sku,product,orders,revenue,cost,inventory,daily_sales,supplier,lead_time_days
-TRVL-CABLE-3P,Travel cable pack,30,900,450,4,2,Shenzhen Brightline,10
-DESK-LAMP-MINI,Mini desk lamp,5,100,85,80,0.5,Guangzhou Northstar,15
-PACK-CUBE-SET,Packing cube set,60,600,540,100,1,Ningbo Packwell,30
-`
 </script>

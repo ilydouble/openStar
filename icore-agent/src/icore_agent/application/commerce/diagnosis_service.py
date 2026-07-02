@@ -14,6 +14,12 @@ from icore_agent.domain.identifiers import uuid7
 from .agent_profile import commerce_diagnosis_profile
 
 LOW_MARGIN_THRESHOLD = Decimal("0.20")
+SAMPLE_CSV = (
+    "sku,product,orders,revenue,cost,inventory,daily_sales,supplier,lead_time_days\n"
+    "TRVL-CABLE-3P,Travel cable pack,30,900,450,4,2,Shenzhen Brightline,10\n"
+    "DESK-LAMP-MINI,Mini desk lamp,5,100,85,80,0.5,Guangzhou Northstar,15\n"
+    "PACK-CUBE-SET,Packing cube set,60,600,540,100,1,Ningbo Packwell,30\n"
+).encode()
 
 
 @dataclass(frozen=True)
@@ -71,23 +77,54 @@ class CommerceDiagnosisService:
                 file_uuid=file_uuid,
             )
         )
-        metrics = _summarize_metrics(rows)
-        risks = _detect_risks(rows)
-        tasks = _build_tasks(risks)
-        profile = commerce_diagnosis_profile()
-        return CommerceDiagnosisReport(
-            diagnosis_id=str(uuid7()),
-            agent_profile=profile.id,
+        return _build_report(
+            rows,
             source_file={
                 "file_uuid": file_uuid,
                 "filename": asset.original_filename,
                 "row_count": len(rows),
             },
-            metrics=metrics,
-            risks=risks,
-            tasks=tasks,
-            report_summary=_build_summary(metrics, risks, locale=locale),
+            locale=locale,
         )
+
+    def create_sample_diagnosis(
+        self,
+        *,
+        locale: str = "zh-CN",
+    ) -> CommerceDiagnosisReport:
+        """Create a V1 sample diagnosis without uploaded-file infrastructure."""
+        rows = _parse_csv(SAMPLE_CSV)
+        return _build_report(
+            rows,
+            source_file={
+                "sample": True,
+                "filename": "commerce-sample.csv",
+                "row_count": len(rows),
+            },
+            locale=locale,
+        )
+
+
+def _build_report(
+    rows: list[CommerceRow],
+    *,
+    source_file: dict[str, Any],
+    locale: str,
+) -> CommerceDiagnosisReport:
+    """Build a Commerce diagnosis report from normalized CSV rows."""
+    metrics = _summarize_metrics(rows)
+    risks = _detect_risks(rows)
+    tasks = _build_tasks(risks)
+    profile = commerce_diagnosis_profile()
+    return CommerceDiagnosisReport(
+        diagnosis_id=str(uuid7()),
+        agent_profile=profile.id,
+        source_file=source_file,
+        metrics=metrics,
+        risks=risks,
+        tasks=tasks,
+        report_summary=_build_summary(metrics, risks, locale=locale),
+    )
 
 
 def _parse_csv(body: bytes) -> list[CommerceRow]:

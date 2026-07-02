@@ -78,6 +78,20 @@ def test_commerce_diagnosis_summarizes_metrics_risks_and_tasks() -> None:
     assert "SKU-A" in report.report_summary
 
 
+def test_sample_commerce_diagnosis_does_not_require_file_service() -> None:
+    """Sample diagnosis should work without uploaded-file infrastructure."""
+    service = CommerceDiagnosisService(file_service=None)
+
+    report = service.create_sample_diagnosis(locale="zh-CN")
+
+    assert report.agent_profile == "commerce_diagnosis_v1"
+    assert report.source_file["sample"] is True
+    assert report.source_file["filename"] == "commerce-sample.csv"
+    assert report.metrics["sku_count"] == 3
+    assert report.risks[0]["sku"] == "TRVL-CABLE-3P"
+    assert any(task["type"] == "replenishment" for task in report.tasks)
+
+
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:
     """Commerce agent profile should describe its dedicated workflow and tools."""
     profile = commerce_diagnosis_profile()

@@ -33,7 +33,7 @@
         <ThemeToggle variant="navbar" />
         <template v-if="loggedIn">
           <RouterLink
-            to="/app"
+            to="/commerce"
             class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
           >
             {{ t('landing.nav.goToApp') }}
@@ -66,7 +66,7 @@
         </button>
         <ThemeToggle variant="navbar" />
         <RouterLink
-          :to="loggedIn ? '/app' : '/auth'"
+          :to="loggedIn ? '/commerce' : '/auth'"
           class="inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-3.5 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 dark:bg-white dark:text-zinc-950"
         >
           {{ loggedIn ? t('landing.nav.goToApp') : t('landing.nav.mobileCta') }}
@@ -130,7 +130,7 @@
           </div>
           <RouterLink
             v-if="loggedIn"
-            to="/app"
+            to="/commerce"
             class="rounded-full bg-zinc-950 px-4 py-2.5 text-center text-sm font-semibold text-white dark:bg-white dark:text-zinc-950"
             @click="menuOpen = false"
           >

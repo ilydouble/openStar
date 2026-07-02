@@ -21,6 +21,13 @@
     </nav>
 
     <div class="border-t border-zinc-200 p-4 dark:border-white/10">
+      <RouterLink
+        to="/app"
+        class="mb-3 flex min-h-10 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-white"
+      >
+        <Bot class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>AI Workspace</span>
+      </RouterLink>
       <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
         <p class="text-xs font-semibold uppercase tracking-wide">Pilot mode</p>
         <p class="mt-2 text-xs leading-5">V1 focuses on one loop: upload CSV, generate diagnosis, review tasks.</p>
@@ -33,6 +40,7 @@
 import { RouterLink } from 'vue-router'
 import {
   BarChart3,
+  Bot,
   Boxes,
   ClipboardList,
   FileText,

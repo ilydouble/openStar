@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isAuthenticated } from './auth/session.js'
 
+export const authenticatedHomeRouteName = 'commerce'
+
 export const routes = [
   { path: '/', name: 'landing', component: () => import('./views/LandingView.vue') },
   { path: '/auth', name: 'auth', component: () => import('./views/AuthView.vue') },
@@ -60,7 +62,7 @@ export function createAppRouter() {
       }
     }
     if (to.name === 'auth' && isAuthenticated()) {
-      return { name: 'workspace' }
+      return { name: authenticatedHomeRouteName }
     }
     return true
   })

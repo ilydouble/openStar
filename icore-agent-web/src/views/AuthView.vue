@@ -155,6 +155,7 @@ import { reactive, ref, computed, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { registerTrial, sendVerificationCode, emailLogin } from '../api/account.js'
+import { authenticatedHomeRouteName } from '../router.js'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -228,7 +229,7 @@ async function submit() {
       // 注册模式：需要姓名 + 邮箱 + 验证码
       await registerTrial(form)
     }
-    router.push({ name: 'workspace' })
+    router.push({ name: authenticatedHomeRouteName })
   } catch (err) {
     error.value = err.message || t('auth.failed')
   } finally {

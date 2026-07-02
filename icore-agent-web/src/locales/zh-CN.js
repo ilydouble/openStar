@@ -29,7 +29,7 @@ export default {
       signIn: '选择方案',
       startFree: '免费试用',
       mobileCta: '试用',
-      goToApp: '进入工作台',
+      goToApp: '进入 Commerce OS',
       language: '语言',
       menu: '打开菜单',
       closeMenu: '关闭菜单',
@@ -330,7 +330,8 @@ export default {
     signOut: '退出登录',
     sidebar: {
       new: '新建',
-      home: '首页',
+      commerce: 'Commerce OS',
+      home: 'AI 工作台',
       chat: '对话',
       flow: '流程',
       more: '更多',

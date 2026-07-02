@@ -29,7 +29,7 @@ export default {
       signIn: 'Plans',
       startFree: 'Start free',
       mobileCta: 'Try',
-      goToApp: 'Open workspace',
+      goToApp: 'Open Commerce OS',
       language: 'Language',
       menu: 'Open menu',
       closeMenu: 'Close menu',
@@ -330,7 +330,8 @@ export default {
     signOut: 'Sign out',
     sidebar: {
       new: 'New',
-      home: 'Home',
+      commerce: 'Commerce OS',
+      home: 'AI Workspace',
       chat: 'Chat',
       flow: 'Flow',
       more: 'More',

@@ -15,12 +15,12 @@ function memoryStorage(initial = {}) {
   }
 }
 
-test('locale preference defaults to English for international users', () => {
-  assert.equal(getLocalePreference(memoryStorage()), 'en-US')
+test('locale preference defaults to Chinese for the international product', () => {
+  assert.equal(getLocalePreference(memoryStorage()), 'zh-CN')
 })
 
-test('locale preference keeps an explicit Chinese selection', () => {
-  const storage = memoryStorage({ [LOCALE_STORAGE_KEY]: 'zh-CN' })
+test('locale preference keeps an explicit English selection', () => {
+  const storage = memoryStorage({ [LOCALE_STORAGE_KEY]: 'en-US' })
 
-  assert.equal(getLocalePreference(storage), 'zh-CN')
+  assert.equal(getLocalePreference(storage), 'en-US')
 })

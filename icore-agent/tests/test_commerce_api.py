@@ -53,6 +53,22 @@ class FakeCommerceDiagnosisService:
             locale=kwargs["locale"],
         )
 
+    def get_latest_diagnosis(self, **kwargs) -> CommerceDiagnosisReport | None:
+        """Return a deterministic latest diagnosis report."""
+        assert kwargs["user_id"] == "user-123"
+        return CommerceDiagnosisReport(
+            diagnosis_id="latest-diagnosis-123",
+            agent_profile="commerce_diagnosis_v1",
+            source_file={
+                "file_uuids": ["file-123"],
+                "analysis_mode": "agent",
+            },
+            metrics={"sku_count": 3, "total_revenue": 1600.0},
+            risks=[{"type": "stockout", "sku": "SKU-A", "severity": "high"}],
+            tasks=[{"type": "replenishment", "sku": "SKU-A", "priority": "high"}],
+            report_summary="最近一次诊断。",
+        )
+
     def create_diagnosis(self, **kwargs) -> CommerceDiagnosisReport:
         """Return a deterministic diagnosis report."""
         assert kwargs["user_id"] == "user-123"
@@ -104,6 +120,20 @@ class FakeCommerceDiagnosisService:
                     "sku": "SKU-SAMPLE", "priority": "high"}],
             report_summary="本次诊断覆盖 3 个 SKU，发现首要风险 SKU-SAMPLE。",
         )
+
+    def create_sample_diagnosis_for_user(self, **kwargs) -> CommerceDiagnosisReport:
+        """Return a deterministic persisted sample diagnosis report."""
+        assert kwargs["user_id"] == "user-123"
+        return self.create_sample_diagnosis(locale=kwargs["locale"])
+
+
+class EmptyCommerceDiagnosisService(FakeCommerceDiagnosisService):
+    """Fake service with no persisted Commerce diagnosis report."""
+
+    def get_latest_diagnosis(self, **kwargs) -> CommerceDiagnosisReport | None:
+        """Return no latest diagnosis for the current user."""
+        assert kwargs["user_id"] == "user-123"
+        return None
 
 
 @pytest.mark.asyncio
@@ -225,3 +255,60 @@ async def test_sample_commerce_diagnosis_returns_report_without_upload() -> None
     assert data["source_file"]["sample"] is True
     assert data["source_file"]["filename"] == "commerce-sample.csv"
     assert data["risks"][0]["sku"] == "SKU-SAMPLE"
+
+
+@pytest.mark.asyncio
+async def test_latest_commerce_diagnosis_returns_persisted_report() -> None:
+    """Commerce latest diagnosis endpoint should return a saved report snapshot."""
+    test_app = _build_app()
+
+    async def fake_current_user() -> AuthenticatedUser:
+        """Return the current test user."""
+        return AuthenticatedUser(
+            public_id="user-123",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
+
+    async def fake_service() -> FakeCommerceDiagnosisService:
+        """Return the fake Commerce diagnosis service."""
+        return FakeCommerceDiagnosisService()
+
+    test_app.dependency_overrides[get_commerce_current_user] = fake_current_user
+    test_app.dependency_overrides[get_commerce_diagnosis_service] = fake_service
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.get("/api/v1/commerce/diagnoses/latest")
+
+    assert resp.status_code == 200, resp.text
+    data = _api_data(resp)
+    assert data["diagnosis_id"] == "latest-diagnosis-123"
+    assert data["source_file"]["analysis_mode"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_latest_commerce_diagnosis_returns_404_when_missing() -> None:
+    """Commerce latest diagnosis endpoint should return 404 before any report exists."""
+    test_app = _build_app()
+
+    async def fake_current_user() -> AuthenticatedUser:
+        """Return the current test user."""
+        return AuthenticatedUser(
+            public_id="user-123",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
+
+    async def fake_service() -> EmptyCommerceDiagnosisService:
+        """Return a fake Commerce diagnosis service without reports."""
+        return EmptyCommerceDiagnosisService()
+
+    test_app.dependency_overrides[get_commerce_current_user] = fake_current_user
+    test_app.dependency_overrides[get_commerce_diagnosis_service] = fake_service
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.get("/api/v1/commerce/diagnoses/latest")
+
+    assert resp.status_code == 404

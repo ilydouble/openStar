@@ -113,6 +113,26 @@ class FakeCommerceModelFactory:
         return self.client
 
 
+class MemoryDiagnosisRepository:
+    """In-memory Commerce diagnosis repository for service tests."""
+
+    def __init__(self) -> None:
+        """Initialize empty report storage."""
+        self.saved: list[tuple[str, object]] = []
+
+    def save(self, user_id: str, report):
+        """Record and return one persisted report."""
+        self.saved.append((user_id, report))
+        return report
+
+    def get_latest_for_user(self, user_id: str):
+        """Return the most recently saved report for one user."""
+        for saved_user_id, report in reversed(self.saved):
+            if saved_user_id == user_id:
+                return report
+        return None
+
+
 def test_commerce_diagnosis_summarizes_metrics_risks_and_tasks() -> None:
     """Commerce diagnosis should turn uploaded CSV rows into an operating report."""
     csv_body = (
@@ -155,6 +175,24 @@ def test_sample_commerce_diagnosis_does_not_require_file_service() -> None:
     assert report.metrics["sku_count"] == 3
     assert report.risks[0]["sku"] == "TRVL-CABLE-3P"
     assert any(task["type"] == "replenishment" for task in report.tasks)
+
+
+def test_sample_commerce_diagnosis_can_be_persisted_for_user() -> None:
+    """Sample diagnosis should use the configured persistence repository."""
+    repository = MemoryDiagnosisRepository()
+    service = CommerceDiagnosisService(
+        file_service=None,
+        diagnosis_repository=repository,
+    )
+
+    report = service.create_sample_diagnosis_for_user(
+        user_id="user-123",
+        locale="zh-CN",
+    )
+
+    assert repository.saved == [("user-123", report)]
+    assert report.source_file["analysis_mode"] == "sample"
+    assert service.get_latest_diagnosis(user_id="user-123") == report
 
 
 def test_commerce_diagnosis_accepts_common_chinese_csv_headers() -> None:
@@ -320,6 +358,31 @@ async def test_commerce_agent_uses_model_to_review_evidence_packet() -> None:
     assert report.tasks[0]["type"] == "agent_follow_up"
     assert report.source_file["analysis_mode"] == "agent"
     assert report.source_file["agent_model"] == "fake-commerce-model"
+
+
+@pytest.mark.asyncio
+async def test_commerce_agent_persists_generated_diagnosis_report() -> None:
+    """Commerce agent diagnosis should save a report snapshot for later reads."""
+    sales_csv = (
+        "sku,product,orders,revenue,cost\n"
+        "SKU-A,Widget A,3,120,60\n"
+    ).encode()
+    repository = MemoryDiagnosisRepository()
+    service = CommerceDiagnosisService(
+        file_service=MultiFileService({
+            "sales-file": ("daily_sales_report.csv", sales_csv),
+        }),
+        diagnosis_repository=repository,
+    )
+
+    report = await service.create_agent_diagnosis(
+        user_id="user-123",
+        file_uuids=["sales-file"],
+        locale="zh-CN",
+    )
+
+    assert repository.saved == [("user-123", report)]
+    assert service.get_latest_diagnosis(user_id="user-123") == report
 
 
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:

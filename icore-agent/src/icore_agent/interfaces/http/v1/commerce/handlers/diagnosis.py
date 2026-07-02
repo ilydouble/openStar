@@ -12,6 +12,9 @@ from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.agent.chat_completions import (
     create_chat_completions_model_client,
 )
+from icore_agent.infrastructure.persistence.commerce import (
+    SqlAlchemyCommerceDiagnosisRepository,
+)
 
 from ...dependencies import account_service, file_asset_service
 from ..schemas import (
@@ -19,6 +22,8 @@ from ..schemas import (
     CommerceDiagnosisResponse,
     CommerceSampleDiagnosisRequest,
 )
+
+commerce_diagnosis_repository = SqlAlchemyCommerceDiagnosisRepository()
 
 
 async def get_commerce_current_user(
@@ -41,6 +46,7 @@ async def get_commerce_diagnosis_service() -> CommerceDiagnosisService:
     return CommerceDiagnosisService(
         file_service=file_asset_service,
         model_client_factory=create_chat_completions_model_client,
+        diagnosis_repository=commerce_diagnosis_repository,
     )
 
 
@@ -67,12 +73,28 @@ async def create_commerce_diagnosis(
 
 async def create_sample_commerce_diagnosis(
     payload: CommerceSampleDiagnosisRequest,
-    _user: AuthenticatedUser = Depends(get_commerce_current_user),
+    user: AuthenticatedUser = Depends(get_commerce_current_user),
     service: CommerceDiagnosisService = Depends(
         get_commerce_diagnosis_service),
 ) -> CommerceDiagnosisResponse:
     """Create a Commerce sample diagnosis without requiring an uploaded CSV."""
-    report = service.create_sample_diagnosis(locale=payload.locale)
+    report = service.create_sample_diagnosis_for_user(
+        user_id=user.public_id,
+        locale=payload.locale,
+    )
+    return _serialize_report(report)
+
+
+async def get_latest_commerce_diagnosis(
+    user: AuthenticatedUser = Depends(get_commerce_current_user),
+    service: CommerceDiagnosisService = Depends(
+        get_commerce_diagnosis_service),
+) -> CommerceDiagnosisResponse:
+    """Return the current user's latest persisted Commerce diagnosis."""
+    report = service.get_latest_diagnosis(user_id=user.public_id)
+    if report is None:
+        raise HTTPException(
+            status_code=404, detail="Commerce diagnosis not found")
     return _serialize_report(report)
 
 

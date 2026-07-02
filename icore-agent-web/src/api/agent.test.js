@@ -6,6 +6,7 @@ import {
   chatStream,
   createCommerceDiagnosis,
   createSampleCommerceDiagnosis,
+  getLatestCommerceDiagnosis,
 } from './agent.js'
 
 const originalFetch = globalThis.fetch
@@ -191,6 +192,47 @@ test('createSampleCommerceDiagnosis posts to sample endpoint without file uuid',
   })
   assert.equal(report.source_file.sample, true)
   assert.equal(report.source_file.filename, 'commerce-sample.csv')
+})
+
+test('getLatestCommerceDiagnosis reads the latest persisted report', async () => {
+  let request = null
+  globalThis.fetch = async (url, init) => {
+    request = { url, init }
+    return jsonResponse({
+      code: 200,
+      message: 'OK',
+      data: {
+        diagnosis_id: 'diagnosis-latest',
+        agent_profile: 'commerce_diagnosis_v1',
+        source_file: { filename: 'orders.csv' },
+        metrics: { sku_count: 8 },
+        risks: [],
+        tasks: [],
+        report_summary: 'latest done',
+      },
+      timestamp: '2026-01-01T00:00:00Z',
+    })
+  }
+
+  const report = await getLatestCommerceDiagnosis()
+
+  assert.equal(request.url, '/api/v1/commerce/diagnoses/latest')
+  assert.equal(request.init.method, 'GET')
+  assert.equal(report.diagnosis_id, 'diagnosis-latest')
+  assert.equal(report.metrics.sku_count, 8)
+})
+
+test('getLatestCommerceDiagnosis returns null when no report exists', async () => {
+  globalThis.fetch = async () => jsonResponse({
+    code: 404,
+    message: 'Not found',
+    data: null,
+    timestamp: '2026-01-01T00:00:00Z',
+  }, 404)
+
+  const report = await getLatestCommerceDiagnosis()
+
+  assert.equal(report, null)
 })
 
 function mockChatStreamResponse(frames) {

@@ -1,5 +1,5 @@
 """Commerce domain models."""
 
-from .diagnosis import CommerceDiagnosisReport
+from .diagnosis import CommerceDiagnosisReport, CommerceDiagnosisRepository
 
-__all__ = ["CommerceDiagnosisReport"]
+__all__ = ["CommerceDiagnosisReport", "CommerceDiagnosisRepository"]

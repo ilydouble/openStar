@@ -75,11 +75,12 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createCommerceDiagnosis,
   createSampleCommerceDiagnosis,
+  getLatestCommerceDiagnosis,
   uploadFileAsset,
 } from '../api/agent.js'
 import CommerceShell from '../components/commerce/CommerceShell.vue'
@@ -182,6 +183,21 @@ async function handleSampleDiagnosis() {
   await runSampleDiagnosis()
 }
 
+onMounted(() => {
+  restoreLatestDiagnosis()
+})
+
+async function restoreLatestDiagnosis() {
+  try {
+    const report = await getLatestCommerceDiagnosis()
+    if (!report || diagnosisReport.value) return
+    diagnosisReport.value = report
+    diagnosisSource.value = describePersistedDiagnosisSource(report)
+  } catch {
+    // Loading historical diagnosis is opportunistic; live analysis should remain usable.
+  }
+}
+
 async function runDiagnosis(files) {
   diagnosisLoading.value = true
   diagnosisError.value = ''
@@ -215,6 +231,21 @@ async function runSampleDiagnosis() {
   } finally {
     diagnosisLoading.value = false
   }
+}
+
+function describePersistedDiagnosisSource(report) {
+  const source = report?.source_file || {}
+  if (typeof source.filename === 'string' && source.filename.trim()) {
+    return source.filename.trim()
+  }
+  const uploadedFiles = Array.isArray(source.uploaded_files) ? source.uploaded_files : []
+  const names = uploadedFiles
+    .map((item) => String(item?.filename || item?.original_filename || '').trim())
+    .filter(Boolean)
+  if (names.length > 0) {
+    return names.length === 1 ? names[0] : `${names[0]} + ${names.length - 1}`
+  }
+  return ''
 }
 
 function formatMoney(value) {

@@ -555,6 +555,20 @@ export async function createSampleCommerceDiagnosis(options = {}) {
 }
 
 /**
+ * Load the authenticated user's most recent persisted Commerce diagnosis.
+ * @returns {Promise<Record<string, unknown>|null>}
+ */
+export async function getLatestCommerceDiagnosis() {
+  const resp = await fetch(`${COMMERCE_BASE}/diagnoses/latest`, {
+    method: 'GET',
+    headers: mergeAgentAuthHeaders({}, 'commerce-latest-diagnosis'),
+  })
+  if (resp.status === 404) return null
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
+}
+
+/**
  * Bütün layihə qovluğunu (File[] - webkitdirectory ilə seçilmiş) zip arxivinə
  * sıxır. Toxunulmamış halda saxlanılır (DEFLATE 0) ki, brauzerdə tez işləsin —
  * tam sıxılma serverdə arxivi inspektə edərkən artıq edilmir, server tərəfdə

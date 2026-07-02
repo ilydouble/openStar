@@ -5,6 +5,7 @@ from .diagnosis import (
     create_sample_commerce_diagnosis,
     get_commerce_current_user,
     get_commerce_diagnosis_service,
+    get_latest_commerce_diagnosis,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "create_sample_commerce_diagnosis",
     "get_commerce_current_user",
     "get_commerce_diagnosis_service",
+    "get_latest_commerce_diagnosis",
 ]

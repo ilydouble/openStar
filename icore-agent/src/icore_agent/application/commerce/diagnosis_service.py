@@ -14,7 +14,10 @@ from icore_agent.domain.agent.loop import ModelClient
 from icore_agent.domain.agent.prompt import PromptEnvelope
 from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
 from icore_agent.domain.agent.tool import ToolChoice
-from icore_agent.domain.commerce import CommerceDiagnosisReport
+from icore_agent.domain.commerce import (
+    CommerceDiagnosisReport,
+    CommerceDiagnosisRepository,
+)
 from icore_agent.domain.identifiers import uuid7
 
 from .agent_profile import commerce_diagnosis_profile
@@ -180,10 +183,12 @@ class CommerceDiagnosisService:
         *,
         file_service: Any,
         model_client_factory: Callable[..., ModelClient] | None = None,
+        diagnosis_repository: CommerceDiagnosisRepository | None = None,
     ) -> None:
         """Create the service with a user-owned file asset reader."""
         self._file_service = file_service
         self._model_client_factory = model_client_factory
+        self._diagnosis_repository = diagnosis_repository
 
     def create_diagnosis(
         self,
@@ -275,10 +280,11 @@ class CommerceDiagnosisService:
             locale=locale,
         )
         if self._model_client_factory is None:
-            return _report_with_source_metadata(
+            report = _report_with_source_metadata(
                 baseline,
                 {"analysis_mode": "deterministic"},
             )
+            return self._save_report(user_id, report)
         try:
             model_client = self._model_client_factory(
                 session_id=f"commerce:{baseline.diagnosis_id}",
@@ -287,20 +293,38 @@ class CommerceDiagnosisService:
             result = await model_client.sample(
                 _build_agent_prompt_envelope(baseline, locale=locale)
             )
-            return _apply_agent_review(
+            report = _apply_agent_review(
                 baseline,
                 result.assistant_item.text,
                 model=result.model,
                 provider=result.provider,
             )
+            return self._save_report(user_id, report)
         except Exception as exc:
-            return _report_with_source_metadata(
+            report = _report_with_source_metadata(
                 baseline,
                 {
                     "analysis_mode": "deterministic_fallback",
                     "agent_error": type(exc).__name__,
                 },
             )
+            return self._save_report(user_id, report)
+
+    def get_latest_diagnosis(self, *, user_id: str) -> CommerceDiagnosisReport | None:
+        """Return the user's latest persisted Commerce diagnosis report."""
+        if self._diagnosis_repository is None:
+            return None
+        return self._diagnosis_repository.get_latest_for_user(user_id)
+
+    def _save_report(
+        self,
+        user_id: str,
+        report: CommerceDiagnosisReport,
+    ) -> CommerceDiagnosisReport:
+        """Persist the report when a diagnosis repository is configured."""
+        if self._diagnosis_repository is None:
+            return report
+        return self._diagnosis_repository.save(user_id, report)
 
     def create_sample_diagnosis(
         self,
@@ -318,6 +342,19 @@ class CommerceDiagnosisService:
             },
             locale=locale,
         )
+
+    def create_sample_diagnosis_for_user(
+        self,
+        *,
+        user_id: str,
+        locale: str = "zh-CN",
+    ) -> CommerceDiagnosisReport:
+        """Create and persist a sample Commerce diagnosis for one user."""
+        report = _report_with_source_metadata(
+            self.create_sample_diagnosis(locale=locale),
+            {"analysis_mode": "sample"},
+        )
+        return self._save_report(user_id, report)
 
 
 def _build_report(

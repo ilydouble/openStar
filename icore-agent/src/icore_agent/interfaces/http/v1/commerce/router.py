@@ -6,6 +6,7 @@ from ..envelope import ApiEnvelopeRoute
 from .handlers import (
     create_commerce_diagnosis,
     create_sample_commerce_diagnosis,
+    get_latest_commerce_diagnosis,
 )
 from .schemas import CommerceDiagnosisResponse
 
@@ -25,3 +26,8 @@ router.post(
     response_model=CommerceDiagnosisResponse,
     summary="Create a sample Commerce operating diagnosis",
 )(create_sample_commerce_diagnosis)
+router.get(
+    "/diagnoses/latest",
+    response_model=CommerceDiagnosisResponse,
+    summary="Read the latest persisted Commerce operating diagnosis",
+)(get_latest_commerce_diagnosis)

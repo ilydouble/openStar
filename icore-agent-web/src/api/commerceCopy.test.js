@@ -27,3 +27,20 @@ test('commerce workspace components use locale copy instead of hard-coded Englis
     assert.doesNotMatch(content, /AI Operations Diagnosis|Load sample CSVs|CSV diagnosis pilot/)
   }
 })
+
+test('commerce workspace upload controls are wired to the diagnosis API', () => {
+  const shell = readFileSync(
+    new URL('../components/commerce/CommerceShell.vue', import.meta.url),
+    'utf8',
+  )
+  const dashboard = readFileSync(
+    new URL('../views/CommerceDashboardView.vue', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(shell, /type="file"/)
+  assert.ok(shell.includes('accept=".csv,text/csv"'))
+  assert.match(shell, /@change="handleFileChange"/)
+  assert.match(dashboard, /createCommerceDiagnosis/)
+  assert.match(dashboard, /@uploaded="handleCsvUploaded"/)
+})

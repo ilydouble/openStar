@@ -308,6 +308,33 @@ export default {
       skuQueueSubtitle: '示例 CSV 数据展示首次上传后诊断会呈现哪些问题。',
       reportTitle: 'AI 诊断报告',
       reportBody: '上传的示例表格足以标记两个断货风险、一个毛利复核和一个供应商跟进。这份报告是面向潜在客户的第一转化钩子。',
+      daysValue: '{days} 天',
+      status: {
+        running: '正在上传并生成诊断…',
+        ready: '已生成诊断：{file}',
+        failed: '诊断失败',
+      },
+      liveMetrics: {
+        skus: 'SKU 数量',
+        revenue: '销售额',
+        margin: '毛利率',
+        tasks: '行动任务',
+        fromCsv: 'CSV',
+        calculated: '已计算',
+        generated: '已生成',
+        skusBody: '从上传 CSV 中识别到的商品数量。',
+        revenueBody: '根据 CSV revenue 字段汇总的销售额。',
+        marginBody: '根据收入和成本计算的整体毛利率。',
+        tasksBody: '由后端 Commerce 诊断生成的建议动作。',
+      },
+      actions: {
+        replenish: '安排补货',
+        review: '复核毛利',
+      },
+      taskStatus: {
+        high: '高优先级',
+        suggested: '建议',
+      },
       table: {
         sku: 'SKU',
         risk: '风险',

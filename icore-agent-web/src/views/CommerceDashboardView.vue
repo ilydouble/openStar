@@ -2,6 +2,11 @@
   <CommerceShell
     :title="t('commerce.dashboard.title')"
     :subtitle="t('commerce.dashboard.subtitle')"
+    :busy="diagnosisLoading"
+    :status-text="diagnosisStatus"
+    :error-text="diagnosisError"
+    @sample="handleSampleDiagnosis"
+    @uploaded="handleCsvUploaded"
   >
     <section class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" :aria-label="t('commerce.dashboard.metricsLabel')">
       <article
@@ -49,7 +54,7 @@
       <article class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
         <p class="text-sm font-semibold text-zinc-950 dark:text-white">{{ t('commerce.dashboard.reportTitle') }}</p>
         <p class="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          {{ t('commerce.dashboard.reportBody') }}
+          {{ reportBody }}
         </p>
         <div class="mt-5 space-y-3">
           <div
@@ -70,11 +75,17 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { createCommerceDiagnosis, uploadFileAsset } from '../api/agent.js'
 import CommerceShell from '../components/commerce/CommerceShell.vue'
 
-const { t, tm } = useI18n()
+const { t, tm, locale } = useI18n()
+
+const diagnosisReport = ref(null)
+const diagnosisLoading = ref(false)
+const diagnosisError = ref('')
+const diagnosisSource = ref('')
 
 const metricBadgeClasses = [
   'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200',
@@ -89,11 +100,116 @@ function localizedArray(path) {
 }
 
 const metrics = computed(() =>
-  localizedArray('commerce.dashboard.metrics').map((metric, index) => ({
+  (diagnosisReport.value ? diagnosisMetrics.value : localizedArray('commerce.dashboard.metrics')).map((metric, index) => ({
     ...metric,
     badgeClass: metricBadgeClasses[index] || metricBadgeClasses[0],
   })),
 )
-const skuRisks = computed(() => localizedArray('commerce.dashboard.skuRisks'))
-const tasks = computed(() => localizedArray('commerce.dashboard.tasks'))
+const skuRisks = computed(() => diagnosisReport.value ? diagnosisRisks.value : localizedArray('commerce.dashboard.skuRisks'))
+const tasks = computed(() => diagnosisReport.value ? diagnosisTasks.value : localizedArray('commerce.dashboard.tasks'))
+const reportBody = computed(() => diagnosisReport.value?.report_summary || t('commerce.dashboard.reportBody'))
+const diagnosisStatus = computed(() => {
+  if (diagnosisLoading.value) return t('commerce.dashboard.status.running')
+  if (diagnosisReport.value) {
+    return t('commerce.dashboard.status.ready', {
+      file: diagnosisSource.value || diagnosisReport.value.source_file?.filename || '',
+    })
+  }
+  return ''
+})
+
+const diagnosisMetrics = computed(() => {
+  const metricsValue = diagnosisReport.value?.metrics || {}
+  return [
+    {
+      label: t('commerce.dashboard.liveMetrics.skus'),
+      value: String(metricsValue.sku_count ?? 0),
+      badge: t('commerce.dashboard.liveMetrics.fromCsv'),
+      body: t('commerce.dashboard.liveMetrics.skusBody'),
+    },
+    {
+      label: t('commerce.dashboard.liveMetrics.revenue'),
+      value: formatMoney(metricsValue.total_revenue),
+      badge: t('commerce.dashboard.liveMetrics.calculated'),
+      body: t('commerce.dashboard.liveMetrics.revenueBody'),
+    },
+    {
+      label: t('commerce.dashboard.liveMetrics.margin'),
+      value: formatPercent(metricsValue.gross_margin_rate),
+      badge: t('commerce.dashboard.liveMetrics.calculated'),
+      body: t('commerce.dashboard.liveMetrics.marginBody'),
+    },
+    {
+      label: t('commerce.dashboard.liveMetrics.tasks'),
+      value: String(diagnosisReport.value?.tasks?.length ?? 0),
+      badge: t('commerce.dashboard.liveMetrics.generated'),
+      body: t('commerce.dashboard.liveMetrics.tasksBody'),
+    },
+  ]
+})
+
+const diagnosisRisks = computed(() =>
+  (diagnosisReport.value?.risks || []).map((risk) => ({
+    sku: risk.sku || '-',
+    risk: risk.message || risk.type || '-',
+    daysLeft: risk.days_left != null ? t('commerce.dashboard.daysValue', { days: risk.days_left }) : '-',
+    action: risk.type === 'stockout'
+      ? t('commerce.dashboard.actions.replenish')
+      : t('commerce.dashboard.actions.review'),
+  })),
+)
+
+const diagnosisTasks = computed(() =>
+  (diagnosisReport.value?.tasks || []).map((task) => ({
+    title: task.title || task.type || '-',
+    status: task.priority === 'high'
+      ? t('commerce.dashboard.taskStatus.high')
+      : t('commerce.dashboard.taskStatus.suggested'),
+    body: task.body || '',
+  })),
+)
+
+async function handleCsvUploaded(file) {
+  await runDiagnosis(file)
+}
+
+async function handleSampleDiagnosis() {
+  const file = new File([sampleCsv], 'commerce-sample.csv', { type: 'text/csv' })
+  await runDiagnosis(file)
+}
+
+async function runDiagnosis(file) {
+  diagnosisLoading.value = true
+  diagnosisError.value = ''
+  try {
+    const uploaded = await uploadFileAsset(file)
+    const report = await createCommerceDiagnosis(uploaded.file_uuid, {
+      locale: locale.value,
+    })
+    diagnosisReport.value = report
+    diagnosisSource.value = uploaded.original_filename || uploaded.filename || file.name
+  } catch (err) {
+    diagnosisError.value = err?.message || t('commerce.dashboard.status.failed')
+  } finally {
+    diagnosisLoading.value = false
+  }
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0)
+  return new Intl.NumberFormat(locale.value === 'zh-CN' ? 'zh-CN' : 'en-US', {
+    maximumFractionDigits: 0,
+  }).format(number)
+}
+
+function formatPercent(value) {
+  const number = Number(value || 0)
+  return `${Math.round(number * 1000) / 10}%`
+}
+
+const sampleCsv = `sku,product,orders,revenue,cost,inventory,daily_sales,supplier,lead_time_days
+TRVL-CABLE-3P,Travel cable pack,30,900,450,4,2,Shenzhen Brightline,10
+DESK-LAMP-MINI,Mini desk lamp,5,100,85,80,0.5,Guangzhou Northstar,15
+PACK-CUBE-SET,Packing cube set,60,600,540,100,1,Ningbo Packwell,30
+`
 </script>

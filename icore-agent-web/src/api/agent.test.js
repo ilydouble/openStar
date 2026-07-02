@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
-import { chatEventStream, chatStream } from './agent.js'
+import { chatEventStream, chatStream, createCommerceDiagnosis } from './agent.js'
 
 const originalFetch = globalThis.fetch
 
@@ -124,6 +124,39 @@ test('chatStream reports turn_failed error messages', async () => {
   )
 })
 
+test('createCommerceDiagnosis posts uploaded CSV file uuid to commerce API', async () => {
+  let request = null
+  globalThis.fetch = async (url, init) => {
+    request = { url, init }
+    return jsonResponse({
+      code: 200,
+      message: 'OK',
+      data: {
+        diagnosis_id: 'diagnosis-1',
+        agent_profile: 'commerce_diagnosis_v1',
+        source_file: { file_uuid: 'file-1', filename: 'orders.csv', row_count: 3 },
+        metrics: { sku_count: 3 },
+        risks: [],
+        tasks: [],
+        report_summary: 'done',
+      },
+      timestamp: '2026-01-01T00:00:00Z',
+    })
+  }
+
+  const report = await createCommerceDiagnosis('file-1', { locale: 'zh-CN' })
+
+  assert.equal(request.url, '/api/v1/commerce/diagnoses')
+  assert.equal(request.init.method, 'POST')
+  assert.equal(request.init.headers['Content-Type'], 'application/json')
+  assert.deepEqual(JSON.parse(request.init.body), {
+    file_uuid: 'file-1',
+    locale: 'zh-CN',
+  })
+  assert.equal(report.agent_profile, 'commerce_diagnosis_v1')
+  assert.equal(report.source_file.filename, 'orders.csv')
+})
+
 function mockChatStreamResponse(frames) {
   globalThis.fetch = async () => ({
     ok: true,
@@ -131,6 +164,16 @@ function mockChatStreamResponse(frames) {
     headers: { get: () => 'text/event-stream' },
     url: '/api/v1/agent/chat',
   })
+}
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    url: '/api/v1/commerce/diagnoses',
+    headers: { get: () => 'application/json' },
+    json: async () => payload,
+  }
 }
 
 function streamFromFrames(frames) {

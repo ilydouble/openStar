@@ -5,6 +5,7 @@ import { formatApiErrorMessage, readJsonResponse } from './client.js'
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'
 const PI_WORKSPACE_BASE = '/api/v1/pi/workspaces'
+const COMMERCE_BASE = '/api/v1/commerce'
 
 /**
  * Thrown when the backend returns 402 quota_exceeded.
@@ -486,6 +487,39 @@ export async function uploadFileAsset(file) {
     mode: assetMode(file.name || '', contentType),
     download_url: downloadUrl,
   }
+}
+
+/**
+ * Create a Commerce operating diagnosis for an uploaded CSV file asset.
+ * @param {string} fileUuid
+ * @param {{ locale?: string }} [options]
+ * @returns {Promise<{
+ *   diagnosis_id: string,
+ *   agent_profile: string,
+ *   source_file: Record<string, unknown>,
+ *   metrics: Record<string, unknown>,
+ *   risks: Array<Record<string, unknown>>,
+ *   tasks: Array<Record<string, unknown>>,
+ *   report_summary: string,
+ * }>}
+ */
+export async function createCommerceDiagnosis(fileUuid, options = {}) {
+  const locale = typeof options.locale === 'string' && options.locale.trim()
+    ? options.locale.trim()
+    : 'zh-CN'
+  const resp = await fetch(`${COMMERCE_BASE}/diagnoses`, {
+    method: 'POST',
+    headers: mergeAgentAuthHeaders(
+      { 'Content-Type': 'application/json' },
+      'commerce-diagnosis',
+    ),
+    body: JSON.stringify({
+      file_uuid: fileUuid,
+      locale,
+    }),
+  })
+  if (!resp.ok) await readAgentError(resp)
+  return readJsonResponse(resp)
 }
 
 /**

@@ -20,10 +20,29 @@
               >
                 {{ currentLocale === 'zh-CN' ? t('common.localeShortEnglish') : t('common.localeShortChinese') }}
               </button>
-              <button class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
+                :disabled="busy"
+                @click="emit('sample')"
+              >
+                <FileSpreadsheet class="h-4 w-4" aria-hidden="true" />
                 {{ t('commerce.shell.sampleButton') }}
               </button>
-              <button class="rounded-lg bg-zinc-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950">
+              <input
+                ref="fileInput"
+                class="hidden"
+                type="file"
+                accept=".csv,text/csv"
+                @change="handleFileChange"
+              >
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-lg bg-zinc-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950"
+                :disabled="busy"
+                @click="openCsvPicker"
+              >
+                <Upload class="h-4 w-4" aria-hidden="true" />
                 {{ t('commerce.shell.uploadButton') }}
               </button>
             </div>
@@ -50,6 +69,13 @@
                 <div class="rounded-lg border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-500 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-400">
                   {{ t('commerce.shell.assistantExample') }}
                 </div>
+                <div
+                  v-if="statusText || errorText"
+                  :class="errorText ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-300/20 dark:bg-rose-300/10 dark:text-rose-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200'"
+                  class="rounded-lg border px-3 py-2 text-xs font-medium leading-5"
+                >
+                  {{ errorText || statusText }}
+                </div>
               </div>
             </div>
           </aside>
@@ -60,18 +86,30 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Sparkles } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { FileSpreadsheet, Sparkles, Upload } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
 import CommerceSidebar from './CommerceSidebar.vue'
 
 const { t, locale } = useI18n()
 const currentLocale = computed(() => locale.value)
+const fileInput = ref(null)
+const emit = defineEmits(['sample', 'uploaded'])
 
 function toggleLocale() {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
   setLocalePreference(locale.value)
+}
+
+function openCsvPicker() {
+  fileInput.value?.click()
+}
+
+function handleFileChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (file) emit('uploaded', file)
 }
 
 defineProps({
@@ -82,6 +120,18 @@ defineProps({
   subtitle: {
     type: String,
     required: true,
+  },
+  busy: {
+    type: Boolean,
+    default: false,
+  },
+  statusText: {
+    type: String,
+    default: '',
+  },
+  errorText: {
+    type: String,
+    default: '',
   },
 })
 </script>

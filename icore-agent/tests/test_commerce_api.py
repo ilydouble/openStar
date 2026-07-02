@@ -48,6 +48,27 @@ class FakeCommerceDiagnosisService:
             report_summary="本次诊断覆盖 3 个 SKU，发现首要风险 SKU-A。",
         )
 
+    def create_diagnosis_for_files(self, **kwargs) -> CommerceDiagnosisReport:
+        """Return a deterministic multi-file diagnosis report."""
+        assert kwargs["user_id"] == "user-123"
+        assert kwargs["file_uuids"] == ["sales-file", "inventory-file"]
+        assert kwargs["locale"] == "zh-CN"
+        return CommerceDiagnosisReport(
+            diagnosis_id="diagnosis-multi-123",
+            agent_profile="commerce_diagnosis_v1",
+            source_file={
+                "file_uuids": ["sales-file", "inventory-file"],
+                "filename": "daily_sales_report.csv + 1",
+                "row_count": 3,
+                "available_sources": ["inventory", "sales"],
+                "missing_sources": ["ads", "logistics"],
+            },
+            metrics={"sku_count": 2, "total_revenue": 600.0},
+            risks=[{"type": "stockout", "sku": "SKU-A", "severity": "high"}],
+            tasks=[{"type": "replenishment", "sku": "SKU-A", "priority": "high"}],
+            report_summary="本次诊断覆盖 2 个 SKU，缺少 ads、logistics 数据。",
+        )
+
     def create_sample_diagnosis(self, **kwargs) -> CommerceDiagnosisReport:
         """Return a deterministic sample diagnosis report."""
         assert kwargs["locale"] == "zh-CN"
@@ -111,6 +132,44 @@ async def test_commerce_diagnosis_returns_agent_report_envelope() -> None:
     assert data["source_file"]["filename"] == "orders.csv"
     assert data["risks"][0]["sku"] == "SKU-A"
     assert data["tasks"][0]["type"] == "replenishment"
+
+
+@pytest.mark.asyncio
+async def test_commerce_diagnosis_accepts_multiple_file_uuids() -> None:
+    """Commerce diagnosis endpoint should accept a batch of uploaded CSV files."""
+    test_app = _build_app()
+
+    async def fake_current_user() -> AuthenticatedUser:
+        """Return the current test user."""
+        return AuthenticatedUser(
+            public_id="user-123",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
+
+    async def fake_service() -> FakeCommerceDiagnosisService:
+        """Return the fake Commerce diagnosis service."""
+        return FakeCommerceDiagnosisService()
+
+    test_app.dependency_overrides[get_commerce_current_user] = fake_current_user
+    test_app.dependency_overrides[get_commerce_diagnosis_service] = fake_service
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.post(
+            "/api/v1/commerce/diagnoses",
+            json={
+                "file_uuids": ["sales-file", "inventory-file"],
+                "locale": "zh-CN",
+            },
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = _api_data(resp)
+    assert data["source_file"]["file_uuids"] == [
+        "sales-file", "inventory-file"]
+    assert data["source_file"]["missing_sources"] == ["ads", "logistics"]
+    assert data["metrics"]["sku_count"] == 2
 
 
 @pytest.mark.asyncio

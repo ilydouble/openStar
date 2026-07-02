@@ -48,6 +48,35 @@ class FakeFileService:
         return self.body
 
 
+class MultiFileService:
+    """Fake uploaded-file service that returns several completed CSV assets."""
+
+    def __init__(self, files: dict[str, tuple[str, bytes]]) -> None:
+        """Initialize the fake with file UUIDs mapped to filenames and bytes."""
+        self.files = files
+
+    def get_owned_asset(
+        self,
+        *,
+        uploader_public_id: str,
+        file_uuid: str,
+        allow_pending: bool = False,
+    ) -> FileAsset:
+        """Return the requested fake owned file asset."""
+        assert uploader_public_id == "user-123"
+        assert allow_pending is False
+        filename, _body = self.files[file_uuid]
+        return FakeFileAsset(
+            file_uuid=file_uuid,
+            original_filename=filename,
+        )  # type: ignore[return-value]
+
+    def read_file_bytes(self, *, uploader_public_id: str, file_uuid: str) -> bytes:
+        """Return CSV bytes for the requested owned file."""
+        assert uploader_public_id == "user-123"
+        return self.files[file_uuid][1]
+
+
 def test_commerce_diagnosis_summarizes_metrics_risks_and_tasks() -> None:
     """Commerce diagnosis should turn uploaded CSV rows into an operating report."""
     csv_body = (
@@ -153,6 +182,72 @@ def test_commerce_diagnosis_maps_inventory_report_headers() -> None:
     assert report.risks[0]["sku"] == "TRVL-CABLE-3P"
     assert report.risks[0]["type"] == "stockout"
     assert report.risks[0]["days_left"] == 8.3
+
+
+def test_commerce_diagnosis_combines_available_csv_reports() -> None:
+    """Commerce diagnosis should analyze every uploaded report and flag missing ones."""
+    sales_csv = (
+        "sku,product,orders,revenue,cost\n"
+        "SKU-A,Widget A,10,500,300\n"
+        "SKU-B,Widget B,5,100,90\n"
+    ).encode()
+    inventory_csv = (
+        "sku,product,current_stock,daily_sales_avg,supplier,lead_time_days\n"
+        "SKU-A,Widget A,4,2,Supplier A,10\n"
+    ).encode()
+    service = CommerceDiagnosisService(
+        file_service=MultiFileService({
+            "sales-file": ("daily_sales_report.csv", sales_csv),
+            "inventory-file": ("inventory_replenishment_alert.csv", inventory_csv),
+        })
+    )
+
+    report = service.create_diagnosis(
+        user_id="user-123",
+        file_uuids=["sales-file", "inventory-file"],
+        locale="zh-CN",
+    )
+
+    assert report.source_file["file_uuids"] == ["sales-file", "inventory-file"]
+    assert report.source_file["row_count"] == 3
+    assert report.source_file["available_sources"] == ["inventory", "sales"]
+    assert report.source_file["missing_sources"] == ["ads", "logistics"]
+    assert report.metrics["sku_count"] == 2
+    assert report.metrics["total_revenue"] == 600.0
+    assert report.metrics["total_orders"] == 15
+    assert any(risk["type"] == "stockout" and risk["sku"]
+               == "SKU-A" for risk in report.risks)
+    assert "缺少 ads、logistics 数据" in report.report_summary
+
+
+def test_commerce_diagnosis_prefers_sales_metrics_when_ads_report_is_present() -> None:
+    """Top-level revenue should use sales data instead of adding ad-attributed revenue."""
+    ads_csv = (
+        "campaign_id,campaign_name,spend_usd,orders,revenue_usd\n"
+        "CAM-1,Launch Ads,20,2,1000\n"
+    ).encode()
+    sales_csv = (
+        "sku,product,orders,revenue,cost\n"
+        "SKU-A,Widget A,3,120,60\n"
+    ).encode()
+    service = CommerceDiagnosisService(
+        file_service=MultiFileService({
+            "ads-file": ("ads_traffic_performance.csv", ads_csv),
+            "sales-file": ("daily_sales_report.csv", sales_csv),
+        })
+    )
+
+    report = service.create_diagnosis(
+        user_id="user-123",
+        file_uuids=["ads-file", "sales-file"],
+        locale="zh-CN",
+    )
+
+    assert report.source_file["available_sources"] == ["ads", "sales"]
+    assert report.metrics["sku_count"] == 1
+    assert report.metrics["total_revenue"] == 120.0
+    assert report.metrics["total_orders"] == 3
+    assert report.metrics["gross_margin_rate"] == 0.5
 
 
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:

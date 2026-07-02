@@ -38,8 +38,8 @@ test('uploadCsvFilesBeforeDiagnosis waits for all uploads before analysis', asyn
         original_filename: file.name,
       }
     },
-    createCommerceDiagnosis: async (fileUuid, options) => {
-      events.push(`diagnose:${fileUuid}:${options.locale}`)
+    createCommerceDiagnosis: async (fileUuids, options) => {
+      events.push(`diagnose:${fileUuids.join('|')}:${options.locale}`)
       return { diagnosis_id: 'diagnosis-1' }
     },
   })
@@ -66,7 +66,7 @@ test('uploadCsvFilesBeforeDiagnosis waits for all uploads before analysis', asyn
     'upload-start:inventory.csv',
     'upload-done:orders.csv',
     'upload-done:inventory.csv',
-    'diagnose:uuid-orders.csv:zh-CN',
+    'diagnose:uuid-orders.csv|uuid-inventory.csv:zh-CN',
   ])
   assert.equal(result.report.diagnosis_id, 'diagnosis-1')
   assert.equal(result.sourceText, 'orders.csv + 1')

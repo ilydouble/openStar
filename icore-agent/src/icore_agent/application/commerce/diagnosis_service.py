@@ -14,6 +14,7 @@ from icore_agent.domain.identifiers import uuid7
 from .agent_profile import commerce_diagnosis_profile
 
 LOW_MARGIN_THRESHOLD = Decimal("0.20")
+EXPECTED_REPORT_TYPES = ("ads", "inventory", "logistics", "sales")
 SAMPLE_CSV = (
     "sku,product,orders,revenue,cost,inventory,daily_sales,supplier,lead_time_days\n"
     "TRVL-CABLE-3P,Travel cable pack,30,900,450,4,2,Shenzhen Brightline,10\n"
@@ -123,6 +124,7 @@ class CommerceRow:
     """Normalized row used by deterministic Commerce diagnostics."""
 
     sku: str
+    has_sku: bool
     product: str
     orders: int
     revenue: Decimal
@@ -147,6 +149,16 @@ class CommerceRow:
         return self.inventory / self.daily_sales
 
 
+@dataclass(frozen=True)
+class ParsedCommerceReport:
+    """Parsed uploaded Commerce CSV with report-level metadata."""
+
+    file_uuid: str
+    filename: str
+    report_type: str
+    rows: list[CommerceRow]
+
+
 class CommerceDiagnosisService:
     """Generate Commerce operating diagnoses from uploaded CSV files."""
 
@@ -158,10 +170,22 @@ class CommerceDiagnosisService:
         self,
         *,
         user_id: str,
-        file_uuid: str,
+        file_uuid: str | None = None,
+        file_uuids: list[str] | None = None,
         locale: str = "zh-CN",
     ) -> CommerceDiagnosisReport:
-        """Create a synchronous V1 diagnosis from one uploaded CSV file."""
+        """Create a synchronous V1 diagnosis from uploaded CSV files."""
+        requested_file_uuids = _requested_file_uuids(
+            file_uuid=file_uuid,
+            file_uuids=file_uuids,
+        )
+        if len(requested_file_uuids) > 1:
+            return self.create_diagnosis_for_files(
+                user_id=user_id,
+                file_uuids=requested_file_uuids,
+                locale=locale,
+            )
+        file_uuid = requested_file_uuids[0]
         asset = self._file_service.get_owned_asset(
             uploader_public_id=user_id,
             file_uuid=file_uuid,
@@ -181,6 +205,41 @@ class CommerceDiagnosisService:
                 "row_count": len(rows),
             },
             locale=locale,
+        )
+
+    def create_diagnosis_for_files(
+        self,
+        *,
+        user_id: str,
+        file_uuids: list[str],
+        locale: str = "zh-CN",
+    ) -> CommerceDiagnosisReport:
+        """Create one diagnosis from every available uploaded CSV file."""
+        reports: list[ParsedCommerceReport] = []
+        for file_uuid in _requested_file_uuids(file_uuids=file_uuids):
+            asset = self._file_service.get_owned_asset(
+                uploader_public_id=user_id,
+                file_uuid=file_uuid,
+                allow_pending=False,
+            )
+            rows = _parse_csv(
+                self._file_service.read_file_bytes(
+                    uploader_public_id=user_id,
+                    file_uuid=file_uuid,
+                )
+            )
+            reports.append(ParsedCommerceReport(
+                file_uuid=file_uuid,
+                filename=asset.original_filename,
+                report_type=_detect_report_type(asset.original_filename, rows),
+                rows=rows,
+            ))
+        rows = [row for report in reports for row in report.rows]
+        return _build_report(
+            rows,
+            source_file=_combined_source_file(reports),
+            locale=locale,
+            metric_rows=_metric_rows_for_reports(reports),
         )
 
     def create_sample_diagnosis(
@@ -206,9 +265,10 @@ def _build_report(
     *,
     source_file: dict[str, Any],
     locale: str,
+    metric_rows: list[CommerceRow] | None = None,
 ) -> CommerceDiagnosisReport:
     """Build a Commerce diagnosis report from normalized CSV rows."""
-    metrics = _summarize_metrics(rows)
+    metrics = _summarize_metrics(metric_rows or rows)
     risks = _detect_risks(rows)
     tasks = _build_tasks(risks)
     profile = commerce_diagnosis_profile()
@@ -219,7 +279,12 @@ def _build_report(
         metrics=metrics,
         risks=risks,
         tasks=tasks,
-        report_summary=_build_summary(metrics, risks, locale=locale),
+        report_summary=_build_summary(
+            metrics,
+            risks,
+            source_file=source_file,
+            locale=locale,
+        ),
     )
 
 
@@ -239,13 +304,15 @@ def _parse_csv(body: bytes) -> list[CommerceRow]:
 def _row_from_mapping(row: dict[str, str], line_no: int) -> CommerceRow:
     """Normalize one CSV row into the Commerce diagnosis schema."""
     normalized = {_normalize_key(key): value for key, value in row.items()}
-    sku = _text(normalized, "sku") or _row_identifier(normalized, line_no)
+    raw_sku = _text(normalized, "sku")
+    sku = raw_sku or _row_identifier(normalized, line_no)
     revenue = _decimal(normalized, "revenue")
     cost = _decimal(normalized, "cost")
     inventory = _decimal(normalized, "inventory")
     daily_sales = _decimal(normalized, "daily_sales")
     return CommerceRow(
         sku=sku,
+        has_sku=bool(raw_sku),
         product=_text(normalized, "product") or sku,
         orders=int(_decimal(normalized, "orders")),
         revenue=revenue,
@@ -262,13 +329,15 @@ def _summarize_metrics(rows: list[CommerceRow]) -> dict[str, Any]:
     total_revenue = sum((row.revenue for row in rows), Decimal("0"))
     total_cost = sum((row.cost for row in rows), Decimal("0"))
     total_orders = sum(row.orders for row in rows)
+    product_skus = {row.sku for row in rows if row.has_sku}
     margin_rate = (
         (total_revenue - total_cost) / total_revenue
         if total_revenue > 0
         else Decimal("0")
     )
     return {
-        "sku_count": len(rows),
+        "sku_count": len(product_skus) if product_skus else len(rows),
+        "row_count": len(rows),
         "total_revenue": _float(total_revenue),
         "total_orders": total_orders,
         "gross_margin_rate": _float(margin_rate, places=4),
@@ -344,26 +413,36 @@ def _build_summary(
     metrics: dict[str, Any],
     risks: list[dict[str, Any]],
     *,
+    source_file: dict[str, Any],
     locale: str,
 ) -> str:
     """Build a concise human-readable diagnosis summary."""
     primary = risks[0] if risks else None
+    missing_copy = _missing_source_copy(source_file)
     if locale == "zh-CN":
         if primary:
+            missing_suffix = f"，缺少 {missing_copy} 数据" if missing_copy else ""
             return (
                 f"本次诊断覆盖 {metrics['sku_count']} 个 SKU，销售额 "
                 f"{metrics['total_revenue']}，发现首要风险 {primary['sku']} "
-                f"({primary['type']})，建议优先处理。"
+                f"({primary['type']}){missing_suffix}，建议优先处理。"
             )
+        missing_suffix = f"，缺少 {missing_copy} 数据" if missing_copy else ""
         return (
-            f"本次诊断覆盖 {metrics['sku_count']} 个 SKU，暂未发现高优先级运营风险。"
+            f"本次诊断覆盖 {metrics['sku_count']} 个 SKU{missing_suffix}，"
+            "暂未发现高优先级运营风险。"
         )
     if primary:
+        missing_suffix = f" Missing {missing_copy} data." if missing_copy else ""
         return (
             f"Diagnosis covers {metrics['sku_count']} SKUs. The first priority is "
-            f"{primary['sku']} ({primary['type']})."
+            f"{primary['sku']} ({primary['type']}).{missing_suffix}"
         )
-    return f"Diagnosis covers {metrics['sku_count']} SKUs with no high-priority risk."
+    missing_suffix = f" Missing {missing_copy} data." if missing_copy else ""
+    return (
+        f"Diagnosis covers {metrics['sku_count']} SKUs with no high-priority risk."
+        f"{missing_suffix}"
+    )
 
 
 def _text(row: dict[str, str], key: str) -> str:
@@ -389,6 +468,100 @@ def _row_identifier(row: dict[str, str], line_no: int) -> str:
         if value:
             return value
     return f"row-{line_no}"
+
+
+def _requested_file_uuids(
+    *,
+    file_uuid: str | None = None,
+    file_uuids: list[str] | None = None,
+) -> list[str]:
+    """Return a de-duplicated upload UUID list for diagnosis."""
+    raw_values = list(file_uuids or [])
+    if file_uuid:
+        raw_values.append(file_uuid)
+    requested: list[str] = []
+    for raw_value in raw_values:
+        value = str(raw_value or "").strip()
+        if value and value not in requested:
+            requested.append(value)
+    if not requested:
+        raise ValueError("At least one CSV file is required")
+    return requested
+
+
+def _combined_source_file(reports: list[ParsedCommerceReport]) -> dict[str, Any]:
+    """Build public source metadata for a multi-report diagnosis."""
+    available_sources = [
+        report_type
+        for report_type in EXPECTED_REPORT_TYPES
+        if any(report.report_type == report_type for report in reports)
+    ]
+    missing_sources = [
+        report_type
+        for report_type in EXPECTED_REPORT_TYPES
+        if report_type not in available_sources
+    ]
+    first = reports[0]
+    filename = first.filename if len(
+        reports) == 1 else f"{first.filename} + {len(reports) - 1}"
+    return {
+        "file_uuid": first.file_uuid,
+        "file_uuids": [report.file_uuid for report in reports],
+        "filename": filename,
+        "row_count": sum(len(report.rows) for report in reports),
+        "files": [
+            {
+                "file_uuid": report.file_uuid,
+                "filename": report.filename,
+                "row_count": len(report.rows),
+                "report_type": report.report_type,
+            }
+            for report in reports
+        ],
+        "available_sources": available_sources,
+        "missing_sources": missing_sources,
+    }
+
+
+def _detect_report_type(filename: str, rows: list[CommerceRow]) -> str:
+    """Infer a Commerce report type from filename and normalized row signals."""
+    lowered = filename.lower()
+    if "ads" in lowered or "traffic" in lowered or "campaign" in lowered:
+        return "ads"
+    if "inventory" in lowered or "replenishment" in lowered or "stock" in lowered:
+        return "inventory"
+    if "logistics" in lowered or "shipment" in lowered or "supply" in lowered:
+        return "logistics"
+    if "sales" in lowered or "order" in lowered:
+        return "sales"
+    if any(row.revenue > 0 and not row.has_sku for row in rows):
+        return "ads"
+    if any(row.inventory > 0 and row.daily_sales > 0 for row in rows):
+        return "inventory"
+    if any(row.orders > 0 and row.revenue > 0 for row in rows):
+        return "sales"
+    return "unknown"
+
+
+def _metric_rows_for_reports(reports: list[ParsedCommerceReport]) -> list[CommerceRow]:
+    """Choose rows for top-level operating metrics without double-counting."""
+    sales_rows = [
+        row
+        for report in reports
+        if report.report_type == "sales"
+        for row in report.rows
+    ]
+    if sales_rows:
+        return sales_rows
+    return [row for report in reports for row in report.rows]
+
+
+def _missing_source_copy(source_file: dict[str, Any]) -> str:
+    """Return display copy for missing multi-report source types."""
+    missing_sources = source_file.get("missing_sources")
+    if not isinstance(missing_sources, list) or not missing_sources:
+        return ""
+    return "、".join(str(source) for source in missing_sources)
 
 
 def _normalize_key(key: str | None) -> str:

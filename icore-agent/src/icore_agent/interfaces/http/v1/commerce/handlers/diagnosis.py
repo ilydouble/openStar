@@ -46,11 +46,19 @@ async def create_commerce_diagnosis(
 ) -> CommerceDiagnosisResponse:
     """Create a Commerce diagnosis report for an uploaded CSV file."""
     try:
-        report = service.create_diagnosis(
-            user_id=user.public_id,
-            file_uuid=payload.file_uuid,
-            locale=payload.locale,
-        )
+        file_uuids = payload.normalized_file_uuids
+        if len(file_uuids) > 1:
+            report = service.create_diagnosis_for_files(
+                user_id=user.public_id,
+                file_uuids=file_uuids,
+                locale=payload.locale,
+            )
+        else:
+            report = service.create_diagnosis(
+                user_id=user.public_id,
+                file_uuid=file_uuids[0],
+                locale=payload.locale,
+            )
     except FileAssetNotFoundError as exc:
         raise HTTPException(status_code=404, detail="File not found") from exc
     except ValueError as exc:

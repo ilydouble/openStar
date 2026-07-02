@@ -490,8 +490,8 @@ export async function uploadFileAsset(file) {
 }
 
 /**
- * Create a Commerce operating diagnosis for an uploaded CSV file asset.
- * @param {string} fileUuid
+ * Create a Commerce operating diagnosis for uploaded CSV file assets.
+ * @param {string|string[]} fileUuidOrUuids
  * @param {{ locale?: string }} [options]
  * @returns {Promise<{
  *   diagnosis_id: string,
@@ -503,20 +503,23 @@ export async function uploadFileAsset(file) {
  *   report_summary: string,
  * }>}
  */
-export async function createCommerceDiagnosis(fileUuid, options = {}) {
+export async function createCommerceDiagnosis(fileUuidOrUuids, options = {}) {
   const locale = typeof options.locale === 'string' && options.locale.trim()
     ? options.locale.trim()
     : 'zh-CN'
+  const fileUuids = Array.isArray(fileUuidOrUuids)
+    ? fileUuidOrUuids.map((fileUuid) => String(fileUuid || '').trim()).filter(Boolean)
+    : [String(fileUuidOrUuids || '').trim()].filter(Boolean)
+  const body = fileUuids.length === 1
+    ? { file_uuid: fileUuids[0], locale }
+    : { file_uuids: fileUuids, locale }
   const resp = await fetch(`${COMMERCE_BASE}/diagnoses`, {
     method: 'POST',
     headers: mergeAgentAuthHeaders(
       { 'Content-Type': 'application/json' },
       'commerce-diagnosis',
     ),
-    body: JSON.stringify({
-      file_uuid: fileUuid,
-      locale,
-    }),
+    body: JSON.stringify(body),
   })
   if (!resp.ok) await readAgentError(resp)
   return readJsonResponse(resp)

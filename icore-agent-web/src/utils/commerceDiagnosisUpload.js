@@ -8,11 +8,11 @@ export function normalizeSelectedCsvFiles(selection) {
 }
 
 /**
- * Upload every selected Commerce CSV before starting the current single-file diagnosis.
+ * Upload every selected Commerce CSV before starting the batch diagnosis.
  * @param {FileList|File[]} selection
  * @param {{
  *   uploadFileAsset: (file: File) => Promise<Record<string, unknown>>,
- *   createCommerceDiagnosis: (fileUuid: string, options?: { locale?: string }) => Promise<Record<string, unknown>>,
+ *   createCommerceDiagnosis: (fileUuids: string[], options?: { locale?: string }) => Promise<Record<string, unknown>>,
  *   locale: string,
  * }} deps
  * @returns {Promise<{ report: Record<string, unknown>, uploadedFiles: Record<string, unknown>[], sourceText: string }|null>}
@@ -24,9 +24,11 @@ export async function uploadCsvFilesBeforeDiagnosis(selection, deps) {
   const uploadedFiles = await Promise.all(
     files.map((file) => deps.uploadFileAsset(file)),
   )
-  const primaryUpload = uploadedFiles[0]
+  const fileUuids = uploadedFiles
+    .map((upload) => String(upload.file_uuid || '').trim())
+    .filter(Boolean)
   const report = await deps.createCommerceDiagnosis(
-    String(primaryUpload.file_uuid || ''),
+    fileUuids,
     { locale: deps.locale },
   )
 

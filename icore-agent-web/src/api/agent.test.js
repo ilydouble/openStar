@@ -129,7 +129,7 @@ test('chatStream reports turn_failed error messages', async () => {
   )
 })
 
-test('createCommerceDiagnosis posts uploaded CSV file uuid to commerce API', async () => {
+test('createCommerceDiagnosis posts uploaded CSV file uuids to commerce API', async () => {
   let request = null
   globalThis.fetch = async (url, init) => {
     request = { url, init }
@@ -149,13 +149,13 @@ test('createCommerceDiagnosis posts uploaded CSV file uuid to commerce API', asy
     })
   }
 
-  const report = await createCommerceDiagnosis('file-1', { locale: 'zh-CN' })
+  const report = await createCommerceDiagnosis(['file-1', 'file-2'], { locale: 'zh-CN' })
 
   assert.equal(request.url, '/api/v1/commerce/diagnoses')
   assert.equal(request.init.method, 'POST')
   assert.equal(request.init.headers['Content-Type'], 'application/json')
   assert.deepEqual(JSON.parse(request.init.body), {
-    file_uuid: 'file-1',
+    file_uuids: ['file-1', 'file-2'],
     locale: 'zh-CN',
   })
   assert.equal(report.agent_profile, 'commerce_diagnosis_v1')

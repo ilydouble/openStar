@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import csv
+import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import Any
 
+from icore_agent.domain.agent.loop import ModelClient
+from icore_agent.domain.agent.prompt import PromptEnvelope
+from icore_agent.domain.agent.session import UserInput, UserInputType, UserMessageItem
+from icore_agent.domain.agent.tool import ToolChoice
 from icore_agent.domain.commerce import CommerceDiagnosisReport
 from icore_agent.domain.identifiers import uuid7
 
@@ -15,6 +21,13 @@ from .agent_profile import commerce_diagnosis_profile
 
 LOW_MARGIN_THRESHOLD = Decimal("0.20")
 EXPECTED_REPORT_TYPES = ("ads", "inventory", "logistics", "sales")
+COMMERCE_AGENT_SYSTEM_PROMPT = (
+    "You are the Commerce OS diagnosis agent. Analyze only the evidence packet "
+    "provided by the backend. Do not invent SKUs, files, metrics, or missing "
+    "tables. Return one JSON object only with optional keys: report_summary, "
+    "risks, tasks. Keep recommendations operational and explicit when data is "
+    "missing."
+)
 SAMPLE_CSV = (
     "sku,product,orders,revenue,cost,inventory,daily_sales,supplier,lead_time_days\n"
     "TRVL-CABLE-3P,Travel cable pack,30,900,450,4,2,Shenzhen Brightline,10\n"
@@ -162,9 +175,15 @@ class ParsedCommerceReport:
 class CommerceDiagnosisService:
     """Generate Commerce operating diagnoses from uploaded CSV files."""
 
-    def __init__(self, *, file_service: Any) -> None:
+    def __init__(
+        self,
+        *,
+        file_service: Any,
+        model_client_factory: Callable[..., ModelClient] | None = None,
+    ) -> None:
         """Create the service with a user-owned file asset reader."""
         self._file_service = file_service
+        self._model_client_factory = model_client_factory
 
     def create_diagnosis(
         self,
@@ -242,6 +261,47 @@ class CommerceDiagnosisService:
             metric_rows=_metric_rows_for_reports(reports),
         )
 
+    async def create_agent_diagnosis(
+        self,
+        *,
+        user_id: str,
+        file_uuids: list[str],
+        locale: str = "zh-CN",
+    ) -> CommerceDiagnosisReport:
+        """Create a Commerce diagnosis reviewed by the configured model agent."""
+        baseline = self.create_diagnosis_for_files(
+            user_id=user_id,
+            file_uuids=file_uuids,
+            locale=locale,
+        )
+        if self._model_client_factory is None:
+            return _report_with_source_metadata(
+                baseline,
+                {"analysis_mode": "deterministic"},
+            )
+        try:
+            model_client = self._model_client_factory(
+                session_id=f"commerce:{baseline.diagnosis_id}",
+                user_id=user_id,
+            )
+            result = await model_client.sample(
+                _build_agent_prompt_envelope(baseline, locale=locale)
+            )
+            return _apply_agent_review(
+                baseline,
+                result.assistant_item.text,
+                model=result.model,
+                provider=result.provider,
+            )
+        except Exception as exc:
+            return _report_with_source_metadata(
+                baseline,
+                {
+                    "analysis_mode": "deterministic_fallback",
+                    "agent_error": type(exc).__name__,
+                },
+            )
+
     def create_sample_diagnosis(
         self,
         *,
@@ -285,6 +345,115 @@ def _build_report(
             source_file=source_file,
             locale=locale,
         ),
+    )
+
+
+def _build_agent_prompt_envelope(
+    report: CommerceDiagnosisReport,
+    *,
+    locale: str,
+) -> PromptEnvelope:
+    """Build the model prompt for Commerce evidence review."""
+    evidence = _commerce_evidence_packet(report)
+    return PromptEnvelope(
+        base_instructions=COMMERCE_AGENT_SYSTEM_PROMPT,
+        current_user_item=UserMessageItem(content=[
+            UserInput(
+                type=UserInputType.TEXT,
+                text=(
+                    "Review this Commerce diagnosis evidence packet and return "
+                    f"JSON in locale {locale}.\n"
+                    f"{json.dumps(evidence, ensure_ascii=False)}"
+                ),
+            )
+        ]),
+        tools=[],
+        tool_choice=ToolChoice.NONE,
+    )
+
+
+def _commerce_evidence_packet(report: CommerceDiagnosisReport) -> dict[str, Any]:
+    """Return structured evidence sent to the Commerce diagnosis agent."""
+    return {
+        "source_file": report.source_file,
+        "metrics": report.metrics,
+        "risks": report.risks[:20],
+        "tasks": report.tasks[:20],
+        "baseline_summary": report.report_summary,
+        "rules": {
+            "must_not_invent_skus": True,
+            "must_state_missing_sources": bool(
+                report.source_file.get("missing_sources")
+            ),
+        },
+    }
+
+
+def _apply_agent_review(
+    report: CommerceDiagnosisReport,
+    text: str,
+    *,
+    model: str | None,
+    provider: str | None,
+) -> CommerceDiagnosisReport:
+    """Apply a validated model JSON review to the deterministic report."""
+    payload = _parse_agent_json(text)
+    summary = str(payload.get("report_summary") or "").strip()
+    risks = payload.get("risks")
+    tasks = payload.get("tasks")
+    return CommerceDiagnosisReport(
+        diagnosis_id=report.diagnosis_id,
+        agent_profile=report.agent_profile,
+        source_file={
+            **report.source_file,
+            "analysis_mode": "agent",
+            "agent_model": model or "",
+            "agent_provider": provider or "",
+        },
+        metrics=report.metrics,
+        risks=_dict_list_or_default(risks, report.risks),
+        tasks=_dict_list_or_default(tasks, report.tasks),
+        report_summary=summary or report.report_summary,
+    )
+
+
+def _parse_agent_json(text: str) -> dict[str, Any]:
+    """Parse a JSON object from the Commerce agent response."""
+    raw = str(text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.lower().startswith("json"):
+            raw = raw[4:].strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Commerce agent returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Commerce agent response must be a JSON object")
+    return payload
+
+
+def _dict_list_or_default(value: Any, default: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a JSON-object list from model output or keep the baseline list."""
+    if not isinstance(value, list):
+        return default
+    items = [item for item in value if isinstance(item, dict)]
+    return items or default
+
+
+def _report_with_source_metadata(
+    report: CommerceDiagnosisReport,
+    metadata: dict[str, Any],
+) -> CommerceDiagnosisReport:
+    """Return a copy of a diagnosis report with additional source metadata."""
+    return CommerceDiagnosisReport(
+        diagnosis_id=report.diagnosis_id,
+        agent_profile=report.agent_profile,
+        source_file={**report.source_file, **metadata},
+        metrics=report.metrics,
+        risks=report.risks,
+        tasks=report.tasks,
+        report_summary=report.report_summary,
     )
 
 

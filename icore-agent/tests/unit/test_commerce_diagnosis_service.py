@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from icore_agent.application.commerce import (
     CommerceDiagnosisService,
     commerce_diagnosis_profile,
 )
+from icore_agent.domain.agent.loop import ModelStepResult
+from icore_agent.domain.agent.session import AgentMessageItem
 from icore_agent.domain.files import FileAsset
 
 
@@ -75,6 +79,38 @@ class MultiFileService:
         """Return CSV bytes for the requested owned file."""
         assert uploader_public_id == "user-123"
         return self.files[file_uuid][1]
+
+
+class FakeCommerceModelClient:
+    """Fake model client that records Commerce evidence prompts."""
+
+    def __init__(self, text: str) -> None:
+        """Initialize the fake with one assistant response."""
+        self.text = text
+        self.envelopes = []
+
+    async def sample(self, envelope):
+        """Record the prompt envelope and return the scripted response."""
+        self.envelopes.append(envelope)
+        return ModelStepResult(
+            assistant_item=AgentMessageItem(text=self.text),
+            model="fake-commerce-model",
+            provider="fake",
+        )
+
+
+class FakeCommerceModelFactory:
+    """Fake model client factory for Commerce agent tests."""
+
+    def __init__(self, text: str) -> None:
+        """Initialize the factory with a scripted model client."""
+        self.client = FakeCommerceModelClient(text)
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        """Record factory kwargs and return the fake model client."""
+        self.calls.append(kwargs)
+        return self.client
 
 
 def test_commerce_diagnosis_summarizes_metrics_risks_and_tasks() -> None:
@@ -248,6 +284,42 @@ def test_commerce_diagnosis_prefers_sales_metrics_when_ads_report_is_present() -
     assert report.metrics["total_revenue"] == 120.0
     assert report.metrics["total_orders"] == 3
     assert report.metrics["gross_margin_rate"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_commerce_agent_uses_model_to_review_evidence_packet() -> None:
+    """Commerce diagnosis should invoke the model agent with structured evidence."""
+    sales_csv = (
+        "sku,product,orders,revenue,cost\n"
+        "SKU-A,Widget A,3,120,60\n"
+    ).encode()
+    model_factory = FakeCommerceModelFactory(
+        '{"report_summary":"智能体判断：SKU-A 应优先补货。",'
+        '"tasks":[{"type":"agent_follow_up","title":"检查 SKU-A 补货",'
+        '"priority":"high","body":"基于销售和库存证据处理 SKU-A。","sku":"SKU-A"}]}'
+    )
+    service = CommerceDiagnosisService(
+        file_service=MultiFileService({
+            "sales-file": ("daily_sales_report.csv", sales_csv),
+        }),
+        model_client_factory=model_factory,
+    )
+
+    report = await service.create_agent_diagnosis(
+        user_id="user-123",
+        file_uuids=["sales-file"],
+        locale="zh-CN",
+    )
+
+    assert model_factory.calls[0]["user_id"] == "user-123"
+    assert model_factory.client.envelopes
+    prompt_text = model_factory.client.envelopes[0].current_user_item.to_text()
+    assert '"available_sources": ["sales"]' in prompt_text
+    assert '"missing_sources": ["ads", "inventory", "logistics"]' in prompt_text
+    assert report.report_summary == "智能体判断：SKU-A 应优先补货。"
+    assert report.tasks[0]["type"] == "agent_follow_up"
+    assert report.source_file["analysis_mode"] == "agent"
+    assert report.source_file["agent_model"] == "fake-commerce-model"
 
 
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:

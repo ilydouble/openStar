@@ -32,6 +32,27 @@ def _api_data(resp) -> dict:
 class FakeCommerceDiagnosisService:
     """Fake Commerce diagnosis service for HTTP contract tests."""
 
+    def __init__(self) -> None:
+        """Initialize fake call recording."""
+        self.agent_calls = []
+
+    async def create_agent_diagnosis(self, **kwargs) -> CommerceDiagnosisReport:
+        """Return a deterministic agent-backed diagnosis report."""
+        self.agent_calls.append(kwargs)
+        assert kwargs["user_id"] == "user-123"
+        assert kwargs["file_uuids"] in (
+            ["file-123"],
+            ["sales-file", "inventory-file"],
+        )
+        assert kwargs["locale"] == "zh-CN"
+        if kwargs["file_uuids"] == ["sales-file", "inventory-file"]:
+            return self.create_diagnosis_for_files(**kwargs)
+        return self.create_diagnosis(
+            user_id=kwargs["user_id"],
+            file_uuid=kwargs["file_uuids"][0],
+            locale=kwargs["locale"],
+        )
+
     def create_diagnosis(self, **kwargs) -> CommerceDiagnosisReport:
         """Return a deterministic diagnosis report."""
         assert kwargs["user_id"] == "user-123"

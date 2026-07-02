@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/api/accountCopy.test.js src/api/agent.test.js src/api/commerceCopy.test.js src/api/landingCopy.test.js src/router.test.js src/stores/preferences.test.js src/utils/sessionMessageHydration.test.js src/utils/sessionTimeline.test.js src/utils/sanitizeHtml.test.js src/composables/useVirtualList.test.js"
+    "test": "node --test src/api/accountCopy.test.js src/api/agent.test.js src/api/commerceCopy.test.js src/api/landingCopy.test.js src/router.test.js src/stores/preferences.test.js src/utils/sessionMessageHydration.test.js src/utils/sessionTimeline.test.js src/utils/sanitizeHtml.test.js src/utils/simulatedCheckout.test.js src/composables/useVirtualList.test.js"
   },
   "dependencies": {
     "dompurify": "^3.4.7",

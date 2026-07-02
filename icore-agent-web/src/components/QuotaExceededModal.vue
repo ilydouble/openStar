@@ -90,13 +90,20 @@
       </div>
     </Transition>
   </Teleport>
+  <SimulatedPaymentModal
+    :show="showPaymentModal"
+    :plan-key="selectedPaymentPlan"
+    @dismiss="showPaymentModal = false"
+    @paid="handlePaymentPaid"
+  />
 </template>
 
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import SimulatedPaymentModal from './SimulatedPaymentModal.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -108,6 +115,8 @@ const emit = defineEmits(['dismiss'])
 
 const { t } = useI18n()
 const router = useRouter()
+const showPaymentModal = ref(false)
+const selectedPaymentPlan = ref('pilot')
 
 /** Task limit per plan tier — mirrors backend Plan enum for display only. */
 const TASK_LIMITS = { trial: 10, pro: 200, team: 1000, premium: 5000, byok: null }
@@ -140,6 +149,7 @@ const plans = computed(() => [
     badge: t('quotaModal.plans.team.badge'),
     featured: true,
     route: '/#plans',
+    paymentPlan: 'pilot',
   },
   {
     key: 'premium',
@@ -151,6 +161,7 @@ const plans = computed(() => [
     badge: t('quotaModal.plans.premium.badge'),
     featured: false,
     route: '/#plans',
+    paymentPlan: 'ops',
   },
   {
     key: 'byok',
@@ -165,8 +176,24 @@ const plans = computed(() => [
   },
 ])
 
-/** Navigate to the upgrade page and close the modal. */
+/** Open the development-only simulated payment modal for a paid upgrade. */
+function openSimulatedPayment(planKey) {
+  selectedPaymentPlan.value = planKey
+  showPaymentModal.value = true
+}
+
+/** Close both upgrade surfaces after a simulated payment succeeds. */
+function handlePaymentPaid() {
+  showPaymentModal.value = false
+  emit('dismiss')
+}
+
+/** Navigate to the upgrade page or open the simulated payment modal. */
 function handleUpgrade(plan) {
+  if (plan.paymentPlan) {
+    openSimulatedPayment(plan.paymentPlan)
+    return
+  }
   emit('dismiss')
   router.push(plan.route)
 }

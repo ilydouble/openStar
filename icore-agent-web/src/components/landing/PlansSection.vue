@@ -70,29 +70,70 @@
           </ul>
 
           <div class="mt-8">
+            <button
+              v-if="canSimulatePayment(tier, tiers.indexOf(tier))"
+              type="button"
+              :class="tierButtonClass(tier)"
+              @click="openSimulatedPayment(tier, tiers.indexOf(tier))"
+            >
+              {{ tier.cta }}
+            </button>
             <RouterLink
+              v-else
               :to="tier.link || '/auth'"
-              :class="tier.featured
-                ? 'inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:scale-[1.02] dark:bg-zinc-950 dark:text-white'
-                : 'inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-100'"
+              :class="tierButtonClass(tier)"
             >
               {{ tier.cta }}
             </RouterLink>
           </div>
         </article>
       </div>
+      <SimulatedPaymentModal
+        :show="showPaymentModal"
+        :plan-key="selectedPaymentPlan"
+        @dismiss="showPaymentModal = false"
+      />
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { isAuthenticated } from '../../auth/session.js'
+import SimulatedPaymentModal from '../SimulatedPaymentModal.vue'
 
 const { t, tm } = useI18n()
+const showPaymentModal = ref(false)
+const selectedPaymentPlan = ref('pilot')
 const tiers = computed(() => {
   const raw = tm('landing.plans.tiers')
   return Array.isArray(raw) ? raw : []
 })
+
+/** Return whether a landing plan should open simulated checkout for signed-in users. */
+function canSimulatePayment(tier, index) {
+  return isAuthenticated() && Boolean(paymentPlanForTier(tier, index))
+}
+
+/** Map a displayed Commerce OS tier to the simulated backend plan code. */
+function paymentPlanForTier(_tier, index) {
+  if (index === 1) return 'pilot'
+  if (index === 2) return 'ops'
+  return ''
+}
+
+/** Open simulated checkout from a landing plan card. */
+function openSimulatedPayment(tier, index) {
+  selectedPaymentPlan.value = paymentPlanForTier(tier, index) || 'pilot'
+  showPaymentModal.value = true
+}
+
+/** Keep tier CTA styling consistent across links and payment buttons. */
+function tierButtonClass(tier) {
+  return tier.featured
+    ? 'inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:scale-[1.02] dark:bg-zinc-950 dark:text-white'
+    : 'inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-100'
+}
 </script>

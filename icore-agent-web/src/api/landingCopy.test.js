@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import enUS from '../locales/en-US.js'
 import zhCN from '../locales/zh-CN.js'
@@ -42,4 +43,11 @@ test('english plans sell diagnosis outcomes instead of generic seats', () => {
   assert.equal(pilot.price, '¥499-1999')
   assert.equal(pilot.period, '/report or /mo')
   assert.ok(pilot.features.includes('Diagnosis with real operating data'))
+})
+
+test('authenticated landing plans can open the simulated payment flow', () => {
+  const content = readFileSync(new URL('../components/landing/PlansSection.vue', import.meta.url), 'utf8')
+
+  assert.match(content, /SimulatedPaymentModal/)
+  assert.match(content, /openSimulatedPayment\(tier/)
 })

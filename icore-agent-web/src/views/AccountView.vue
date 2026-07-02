@@ -11,9 +11,13 @@
           <RouterLink to="/commerce" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
             {{ t('account.openWorkspace') }}
           </RouterLink>
-          <RouterLink to="/#plans" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]"
+            @click="openSimulatedPayment('pilot')"
+          >
             {{ t('account.upgrade') }}
-          </RouterLink>
+          </button>
           <button
             type="button"
             class="inline-flex min-h-11 items-center justify-center rounded-full bg-zinc-950 px-4 py-2 text-center text-sm font-semibold text-white dark:bg-white dark:text-zinc-950"
@@ -30,6 +34,13 @@
 
       <div v-else class="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <section class="space-y-6">
+          <div
+            v-if="paymentNotice"
+            class="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
+          >
+            {{ paymentNotice }}
+          </div>
+
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0 flex-1">
@@ -273,6 +284,12 @@
         </section>
       </div>
     </div>
+    <SimulatedPaymentModal
+      :show="showPaymentModal"
+      :plan-key="selectedPaymentPlan"
+      @dismiss="showPaymentModal = false"
+      @paid="handleSimulatedPaymentPaid"
+    />
   </div>
 </template>
 
@@ -292,6 +309,7 @@ import {
   updateKnowledgeScope,
 } from '../api/account.js'
 import MemoryManagerSection from '../components/MemoryManagerSection.vue'
+import SimulatedPaymentModal from '../components/SimulatedPaymentModal.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -302,6 +320,9 @@ const plan = ref(null)
 const adminOverview = ref(null)
 const team = ref(null)
 const saved = ref(false)
+const showPaymentModal = ref(false)
+const selectedPaymentPlan = ref('pilot')
+const paymentNotice = ref('')
 const byokForm = reactive({
   api_key: '',
   api_base: '',
@@ -472,6 +493,19 @@ async function inviteMember() {
 function handleSignOut() {
   signOut()
   router.push({ name: 'auth' })
+}
+
+/** Open the development-only payment simulation for a Commerce OS service plan. */
+function openSimulatedPayment(planKey) {
+  selectedPaymentPlan.value = planKey
+  showPaymentModal.value = true
+}
+
+/** Show a local success message after the simulated provider callback completes. */
+function handleSimulatedPaymentPaid(checkout) {
+  const planName = t(`paymentSimulation.plans.${checkout.planKey}.name`)
+  paymentNotice.value = t('account.paymentSimulatedNotice', { plan: planName })
+  loadAccount({ silent: true })
 }
 
 onMounted(async () => {

@@ -20,6 +20,86 @@ SAMPLE_CSV = (
     "DESK-LAMP-MINI,Mini desk lamp,5,100,85,80,0.5,Guangzhou Northstar,15\n"
     "PACK-CUBE-SET,Packing cube set,60,600,540,100,1,Ningbo Packwell,30\n"
 ).encode()
+HEADER_ALIASES = {
+    "sku": "sku",
+    "sku_id": "sku",
+    "skuid": "sku",
+    "product_sku": "sku",
+    "productsku": "sku",
+    "商品编号": "sku",
+    "商品编码": "sku",
+    "商品sku": "sku",
+    "货号": "sku",
+    "产品编号": "sku",
+    "product": "product",
+    "product_name": "product",
+    "productname": "product",
+    "name": "product",
+    "title": "product",
+    "商品名称": "product",
+    "产品名称": "product",
+    "品名": "product",
+    "orders": "orders",
+    "order_count": "orders",
+    "ordercount": "orders",
+    "units_sold": "orders",
+    "unitssold": "orders",
+    "quantity": "orders",
+    "qty": "orders",
+    "销量": "orders",
+    "订单量": "orders",
+    "销售数量": "orders",
+    "revenue": "revenue",
+    "sales": "revenue",
+    "sales_amount": "revenue",
+    "salesamount": "revenue",
+    "amount": "revenue",
+    "gmv": "revenue",
+    "销售额": "revenue",
+    "销售金额": "revenue",
+    "收入": "revenue",
+    "cost": "cost",
+    "cogs": "cost",
+    "landed_cost": "cost",
+    "landedcost": "cost",
+    "成本": "cost",
+    "商品成本": "cost",
+    "采购成本": "cost",
+    "inventory": "inventory",
+    "inventory_qty": "inventory",
+    "inventoryqty": "inventory",
+    "stock": "inventory",
+    "stock_qty": "inventory",
+    "stockqty": "inventory",
+    "on_hand": "inventory",
+    "onhand": "inventory",
+    "库存": "inventory",
+    "库存数量": "inventory",
+    "现有库存": "inventory",
+    "daily_sales": "daily_sales",
+    "dailysales": "daily_sales",
+    "avg_daily_sales": "daily_sales",
+    "avgdailysales": "daily_sales",
+    "daily_units_sold": "daily_sales",
+    "dailyunitssold": "daily_sales",
+    "日均销量": "daily_sales",
+    "日销量": "daily_sales",
+    "平均日销量": "daily_sales",
+    "supplier": "supplier",
+    "vendor": "supplier",
+    "factory": "supplier",
+    "供应商": "supplier",
+    "厂商": "supplier",
+    "工厂": "supplier",
+    "lead_time_days": "lead_time_days",
+    "leadtimedays": "lead_time_days",
+    "lead_time": "lead_time_days",
+    "leadtime": "lead_time_days",
+    "交期": "lead_time_days",
+    "交期天数": "lead_time_days",
+    "供应商交期": "lead_time_days",
+    "补货周期": "lead_time_days",
+}
 
 
 @dataclass(frozen=True)
@@ -290,7 +370,19 @@ def _decimal(row: dict[str, str], key: str) -> Decimal:
 
 def _normalize_key(key: str | None) -> str:
     """Normalize CSV headers into snake-like lookup keys."""
-    return str(key or "").strip().lower().replace(" ", "_").replace("-", "_")
+    normalized = (
+        str(key or "")
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("/", "_")
+    )
+    compact = normalized.replace("_", "")
+    return HEADER_ALIASES.get(
+        normalized,
+        HEADER_ALIASES.get(compact, normalized),
+    )
 
 
 def _float(value: Decimal, *, places: int = 2) -> float:

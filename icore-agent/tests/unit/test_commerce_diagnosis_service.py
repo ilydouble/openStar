@@ -92,6 +92,27 @@ def test_sample_commerce_diagnosis_does_not_require_file_service() -> None:
     assert any(task["type"] == "replenishment" for task in report.tasks)
 
 
+def test_commerce_diagnosis_accepts_common_chinese_csv_headers() -> None:
+    """Commerce diagnosis should map common Chinese CSV headers to canonical fields."""
+    csv_body = (
+        "商品编号,商品名称,订单量,销售额,成本,库存,日均销量,供应商,交期天数\n"
+        "SKU-A,旅行线缆套装,30,900,450,4,2,深圳供应商,10\n"
+        "SKU-B,桌面小灯,5,100,85,80,0.5,广州供应商,15\n"
+    ).encode()
+    service = CommerceDiagnosisService(file_service=FakeFileService(csv_body))
+
+    report = service.create_diagnosis(
+        user_id="user-123",
+        file_uuid="file-123",
+        locale="zh-CN",
+    )
+
+    assert report.metrics["sku_count"] == 2
+    assert report.metrics["total_revenue"] == 1000.0
+    assert report.risks[0]["sku"] == "SKU-A"
+    assert report.risks[0]["type"] == "stockout"
+
+
 def test_commerce_agent_profile_declares_workflow_and_tools() -> None:
     """Commerce agent profile should describe its dedicated workflow and tools."""
     profile = commerce_diagnosis_profile()

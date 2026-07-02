@@ -34,8 +34,8 @@ services:
       STORAGE_SERVICE_MAX_UPLOAD_BYTES: ${STORAGE_SERVICE_MAX_UPLOAD_BYTES:-536870912}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},minio,storage-service,icore-minio,icore-storage-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},minio,storage-service,icore-minio,icore-storage-service
-    expose:
-      - '8090'
+    ports:
+      - '${STORAGE_SERVICE_PORT_BIND:-127.0.0.1:18090:8090}'
     depends_on:
       minio:
         condition: service_healthy

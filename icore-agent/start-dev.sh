@@ -8,15 +8,17 @@ cd "$SCRIPT_DIR"
 
 # 加载所有环境变量文件
 env_files=(
-  "dotenv/.env.app"
-  "dotenv/.env.database"
-  "dotenv/.env.llm"
-  "dotenv/.env.sequential"
-  "dotenv/.env.memory"
-  "dotenv/.env.auth"
-  "dotenv/.env.rag"
-  "dotenv/.env.tools"
-  "dotenv/.env.media"
+  "dotenv/dev/.env.app"
+  "dotenv/dev/.env.agent"
+  "dotenv/dev/.env.database"
+  "dotenv/dev/.env.llm"
+  "dotenv/dev/.env.memory"
+  "dotenv/dev/.env.auth"
+  "dotenv/dev/.env.rag"
+  "dotenv/dev/.env.tools"
+  "dotenv/dev/.env.media"
+  "dotenv/dev/.env.storage"
+  "dotenv/dev/.env.logging"
 )
 
 echo "📦 加载环境变量..."
@@ -33,6 +35,17 @@ done
 
 # Redis 使用宿主机映射端口（Docker 映射到 127.0.0.1:16379）
 export REDIS_URL=redis://localhost:16379/0
+
+# Local uvicorn runs outside Docker, so Compose service DNS names are not
+# resolvable here. Use the host-published helper-service ports by default.
+if [[ "${STORAGE_SERVICE_URL:-}" == "" || "${STORAGE_SERVICE_URL:-}" == "http://storage-service:8090" ]]; then
+  export STORAGE_SERVICE_URL=http://127.0.0.1:18090
+fi
+if [[ "${LOGGING_SERVICE_URL:-}" == "" || "${LOGGING_SERVICE_URL:-}" == "http://logging-service:8091" ]]; then
+  export LOGGING_SERVICE_URL=http://127.0.0.1:18091
+fi
+export STORAGE_SERVICE_TOKEN="${STORAGE_SERVICE_TOKEN:-dev-storage-service-token}"
+export LOGGING_SERVICE_TOKEN="${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}"
 
 # 设置 PYTHONPATH
 export PYTHONPATH="$SCRIPT_DIR/src:${PYTHONPATH:-}"

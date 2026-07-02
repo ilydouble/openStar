@@ -193,7 +193,7 @@
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.plan.title') }}</p>
             <ul class="mt-5 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
               <li>{{ t('account.plan.tasks') }}: {{ plan?.usage?.tasks ?? 0 }} / {{ formatPlanLimit(plan?.limits?.tasks) }}</li>
-              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }}</li>
+              <li>{{ t('account.plan.aiUsage') }}: {{ plan?.usage?.tokens ?? 0 }} {{ t('account.plan.notQuota') }}</li>
               <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ formatPlanLimit(plan?.limits?.attachments) }}</li>
             </ul>
           </div>
@@ -351,6 +351,12 @@ function estimatedCostFromTokenCount(tokenCount) {
 
 const planUsage = computed(() => plan.value?.usage || {})
 
+function remainingQuotaText(used, limit) {
+  if (limit == null) return t('account.plan.unlimited')
+  const remaining = Math.max(Number(limit) - Number(used || 0), 0)
+  return t('account.plan.remaining', { remaining })
+}
+
 const usageCards = computed(() => {
   const usage = planUsage.value
   const tokenCount = Number(usage.tokens) || 0
@@ -358,11 +364,21 @@ const usageCards = computed(() => {
     usage.estimated_cost != null
       ? Number(usage.estimated_cost) || 0
       : estimatedCostFromTokenCount(tokenCount)
+  const taskLimit = plan.value?.limits?.tasks
+  const attachmentLimit = plan.value?.limits?.attachments
   return [
-    { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
-    { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.tasks'), value: usage.tasks ?? 0, helper: t('account.plan.tasks') },
-    { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
+    { label: t('account.cards.serviceTier'), value: plan.value?.label || '-', helper: plan.value?.plan || '-' },
+    {
+      label: t('account.cards.diagnosisQuota'),
+      value: `${usage.tasks ?? 0} / ${formatPlanLimit(taskLimit)}`,
+      helper: remainingQuotaText(usage.tasks, taskLimit),
+    },
+    {
+      label: t('account.cards.fileQuota'),
+      value: `${usage.attachments ?? 0} / ${formatPlanLimit(attachmentLimit)}`,
+      helper: remainingQuotaText(usage.attachments, attachmentLimit),
+    },
+    { label: t('account.cards.aiUsage'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.notQuota') },
   ]
 })
 

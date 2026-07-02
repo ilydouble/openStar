@@ -48,3 +48,16 @@ test('account page and quota modal expose simulated payment upgrades', () => {
   assert.match(api, /simulatePaymentSuccess/)
   assert.match(api, /\/billing\/simulated-payment-success/)
 })
+
+test('account usage cards focus on entitlements instead of token counts', () => {
+  const content = readFileSync(new URL('../views/AccountView.vue', import.meta.url), 'utf8')
+
+  assert.equal(zhCN.account.cards.serviceTier, '当前服务')
+  assert.equal(zhCN.account.cards.diagnosisQuota, '诊断额度')
+  assert.equal(zhCN.account.cards.aiUsage, 'AI 成本观测')
+  assert.equal(enUS.account.cards.serviceTier, 'Current service')
+  assert.equal(enUS.account.cards.diagnosisQuota, 'Diagnosis quota')
+  assert.equal(enUS.account.cards.aiUsage, 'AI cost signal')
+  assert.match(content, /remainingQuotaText/)
+  assert.doesNotMatch(content, /label: t\('account\.cards\.totalTokens'\)/)
+})

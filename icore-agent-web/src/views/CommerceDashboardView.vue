@@ -1,9 +1,9 @@
 <template>
   <CommerceShell
-    title="AI Operations Diagnosis"
-    subtitle="V1 starts with sample CSVs: products, orders, inventory, and suppliers. The output is a report, SKU risks, and today&apos;s tasks."
+    :title="t('commerce.dashboard.title')"
+    :subtitle="t('commerce.dashboard.subtitle')"
   >
-    <section class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" aria-label="Commerce metrics">
+    <section class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" :aria-label="t('commerce.dashboard.metricsLabel')">
       <article
         v-for="metric in metrics"
         :key="metric.label"
@@ -21,17 +21,17 @@
     <section class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
       <article class="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
         <div class="border-b border-zinc-200 px-5 py-4 dark:border-white/10">
-          <p class="text-sm font-semibold text-zinc-950 dark:text-white">SKU risk queue</p>
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Sample CSV data shows what the first diagnosis will surface after upload.</p>
+          <p class="text-sm font-semibold text-zinc-950 dark:text-white">{{ t('commerce.dashboard.skuQueueTitle') }}</p>
+          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ t('commerce.dashboard.skuQueueSubtitle') }}</p>
         </div>
         <div class="overflow-x-auto">
           <table class="min-w-full text-left text-sm">
             <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-white/[0.03] dark:text-zinc-400">
               <tr>
-                <th class="px-5 py-3 font-semibold">SKU</th>
-                <th class="px-5 py-3 font-semibold">Risk</th>
-                <th class="px-5 py-3 font-semibold">Days left</th>
-                <th class="px-5 py-3 font-semibold">Action</th>
+                <th class="px-5 py-3 font-semibold">{{ t('commerce.dashboard.table.sku') }}</th>
+                <th class="px-5 py-3 font-semibold">{{ t('commerce.dashboard.table.risk') }}</th>
+                <th class="px-5 py-3 font-semibold">{{ t('commerce.dashboard.table.daysLeft') }}</th>
+                <th class="px-5 py-3 font-semibold">{{ t('commerce.dashboard.table.action') }}</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-zinc-200 dark:divide-white/10">
@@ -47,9 +47,9 @@
       </article>
 
       <article class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-        <p class="text-sm font-semibold text-zinc-950 dark:text-white">AI diagnosis report</p>
+        <p class="text-sm font-semibold text-zinc-950 dark:text-white">{{ t('commerce.dashboard.reportTitle') }}</p>
         <p class="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          The uploaded sample sheets are enough to flag two stockout risks, one margin review, and one supplier follow-up. This report is the first conversion hook for prospects.
+          {{ t('commerce.dashboard.reportBody') }}
         </p>
         <div class="mt-5 space-y-3">
           <div
@@ -70,25 +70,30 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CommerceShell from '../components/commerce/CommerceShell.vue'
 
-const metrics = [
-  { label: 'CSV templates', value: '4', badge: 'Required', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200', body: 'Products, orders, inventory, and suppliers are enough for the first diagnosis.' },
-  { label: 'Diagnosis score', value: '72', badge: 'Review', badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-300/15 dark:text-sky-200', body: 'A simple sample score summarizing margin, stock, and supplier risk.' },
-  { label: 'SKU risks', value: '6', badge: '2 urgent', badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-300/15 dark:text-rose-200', body: 'Risks discovered from uploaded inventory and order history.' },
-  { label: 'Today tasks', value: '9', badge: 'Generated', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-300/15 dark:text-amber-200', body: 'Suggested actions created from the diagnosis report.' },
+const { t, tm } = useI18n()
+
+const metricBadgeClasses = [
+  'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200',
+  'bg-sky-100 text-sky-800 dark:bg-sky-300/15 dark:text-sky-200',
+  'bg-rose-100 text-rose-800 dark:bg-rose-300/15 dark:text-rose-200',
+  'bg-amber-100 text-amber-800 dark:bg-amber-300/15 dark:text-amber-200',
 ]
 
-const skuRisks = [
-  { sku: 'TRVL-CABLE-3P', risk: 'Fast seller, low stock', daysLeft: '9 days', action: 'Ask supplier for 500 units' },
-  { sku: 'DESK-LAMP-MINI', risk: 'Margin dropped', daysLeft: '18 days', action: 'Review freight cost' },
-  { sku: 'PACK-CUBE-SET', risk: 'Supplier lead-time risk', daysLeft: '13 days', action: 'Confirm production slot' },
-  { sku: 'USB-HUB-6IN1', risk: 'Refund rate rising', daysLeft: '22 days', action: 'Check support tickets' },
-]
+function localizedArray(path) {
+  const value = tm(path)
+  return Array.isArray(value) ? value : []
+}
 
-const tasks = [
-  { title: 'Replenish TRVL-CABLE-3P', status: 'Suggested', body: 'Current sell-through suggests stockout before the next supplier lead-time window closes.' },
-  { title: 'Send supplier follow-up', status: 'Draft', body: 'Ask Shenzhen Brightline to confirm MOQ, updated quote, and earliest ship date.' },
-  { title: 'Review low-margin desk lamp', status: 'Suggested', body: 'Recent freight allocation moved estimated gross margin below the pilot threshold.' },
-]
+const metrics = computed(() =>
+  localizedArray('commerce.dashboard.metrics').map((metric, index) => ({
+    ...metric,
+    badgeClass: metricBadgeClasses[index] || metricBadgeClasses[0],
+  })),
+)
+const skuRisks = computed(() => localizedArray('commerce.dashboard.skuRisks'))
+const tasks = computed(() => localizedArray('commerce.dashboard.tasks'))
 </script>

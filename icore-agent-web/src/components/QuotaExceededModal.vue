@@ -128,7 +128,7 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.pro.cta'),
     badge: t('quotaModal.plans.pro.badge'),
     featured: false,
-    route: '/account?tab=plan&upgrade=pro',
+    route: '/commerce',
   },
   {
     key: 'team',
@@ -139,7 +139,7 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.team.cta'),
     badge: t('quotaModal.plans.team.badge'),
     featured: true,
-    route: '/account?tab=plan&upgrade=team',
+    route: '/#plans',
   },
   {
     key: 'premium',
@@ -150,7 +150,7 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.premium.cta'),
     badge: t('quotaModal.plans.premium.badge'),
     featured: false,
-    route: '/account?tab=plan&upgrade=premium',
+    route: '/#plans',
   },
   {
     key: 'byok',
@@ -161,7 +161,7 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.byok.cta'),
     badge: t('quotaModal.plans.byok.badge'),
     featured: false,
-    route: '/account?tab=byok',
+    route: '/enterprise?intent=diagnosis-advisor',
   },
 ])
 

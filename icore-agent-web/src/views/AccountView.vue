@@ -8,10 +8,10 @@
           <p class="mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-300">{{ t('account.subtitle') }}</p>
         </div>
         <div class="flex w-full shrink-0 flex-col gap-2 min-[520px]:w-auto min-[520px]:flex-row min-[520px]:flex-wrap min-[520px]:items-center min-[520px]:justify-end">
-          <RouterLink to="/app" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
+          <RouterLink to="/commerce" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
             {{ t('account.openWorkspace') }}
           </RouterLink>
-          <RouterLink to="/enterprise?intent=upgrade-enterprise" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
+          <RouterLink to="/#plans" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
             {{ t('account.upgrade') }}
           </RouterLink>
           <button

@@ -3,11 +3,11 @@ import { getBrowserStorage, readStoredString, writeStoredString } from './browse
 export const LOCALE_STORAGE_KEY = 'locale'
 
 /**
- * Read the currently persisted locale, defaulting to Simplified Chinese.
+ * Read the currently persisted locale, defaulting to English for international users.
  * @param {Storage | null | undefined} [storage]
  */
 export function getLocalePreference(storage = getBrowserStorage()) {
-  return readStoredString(storage, LOCALE_STORAGE_KEY, 'zh-CN') || 'zh-CN'
+  return readStoredString(storage, LOCALE_STORAGE_KEY, 'en-US') || 'en-US'
 }
 
 /**

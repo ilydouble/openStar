@@ -8,7 +8,7 @@ class LoggingSettings(DomainSettings):
 
     env_domains = ("logging",)
 
-    logging_service_url: str = "http://logging-service:8091"
+    logging_service_url: str = "http://127.0.0.1:18091"
     logging_service_token: str = "dev-logging-service-token"
     logging_service_timeout: float = 2.0
 

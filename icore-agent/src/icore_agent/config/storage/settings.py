@@ -10,7 +10,7 @@ class StorageSettings(DomainSettings):
 
     env_domains = ("storage",)
 
-    storage_service_url: str = "http://storage-service:8090"
+    storage_service_url: str = "http://127.0.0.1:18090"
     storage_service_token: str = "dev-storage-service-token"
     storage_service_timeout: float = 30
     file_storage_bucket: str = "icore-files"

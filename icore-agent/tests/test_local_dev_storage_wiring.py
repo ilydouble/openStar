@@ -31,3 +31,16 @@ def test_dev_storage_and_logging_services_publish_host_ports() -> None:
     assert "127.0.0.1:18090:8090" in storage_compose
     assert "LOGGING_SERVICE_PORT_BIND" in logging_compose
     assert "127.0.0.1:18091:8091" in logging_compose
+
+
+def test_python_service_defaults_target_local_dev_ports() -> None:
+    """Python defaults should work when uvicorn is launched outside Compose."""
+    storage_settings = (
+        PROJECT_ROOT / "src/icore_agent/config/storage/settings.py"
+    ).read_text(encoding="utf-8")
+    logging_settings = (
+        PROJECT_ROOT / "src/icore_agent/config/logging/settings.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'storage_service_url: str = "http://127.0.0.1:18090"' in storage_settings
+    assert 'logging_service_url: str = "http://127.0.0.1:18091"' in logging_settings

@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import httpx
+import pytest
+from fastapi import FastAPI
+
+from icore_agent.domain.commerce import CommerceDiagnosisReport
+from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.interfaces.http.v1.commerce.handlers import (
+    get_commerce_current_user,
+    get_commerce_diagnosis_service,
+)
+from icore_agent.interfaces.http.v1.router import include_api_routers
+
+
+def _build_app() -> FastAPI:
+    """Build a router-only test app without global auth middleware."""
+    test_app = FastAPI()
+    include_api_routers(test_app)
+    return test_app
+
+
+def _api_data(resp) -> dict:
+    """Return the ApiEnvelope data object from a test response."""
+    payload = resp.json()
+    assert payload["code"] == resp.status_code
+    assert payload["message"]
+    assert payload["timestamp"]
+    return payload["data"]
+
+
+class FakeCommerceDiagnosisService:
+    """Fake Commerce diagnosis service for HTTP contract tests."""
+
+    def create_diagnosis(self, **kwargs) -> CommerceDiagnosisReport:
+        """Return a deterministic diagnosis report."""
+        assert kwargs["user_id"] == "user-123"
+        assert kwargs["file_uuid"] == "file-123"
+        assert kwargs["locale"] == "zh-CN"
+        return CommerceDiagnosisReport(
+            diagnosis_id="diagnosis-123",
+            agent_profile="commerce_diagnosis_v1",
+            source_file={"file_uuid": "file-123",
+                         "filename": "orders.csv", "row_count": 3},
+            metrics={"sku_count": 3, "total_revenue": 1600.0},
+            risks=[{"type": "stockout", "sku": "SKU-A", "severity": "high"}],
+            tasks=[{"type": "replenishment", "sku": "SKU-A", "priority": "high"}],
+            report_summary="本次诊断覆盖 3 个 SKU，发现首要风险 SKU-A。",
+        )
+
+
+@pytest.mark.asyncio
+async def test_commerce_diagnosis_requires_auth() -> None:
+    """Commerce diagnosis endpoint should be protected."""
+    test_app = _build_app()
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.post(
+            "/api/v1/commerce/diagnoses",
+            json={"file_uuid": "file-123"},
+        )
+
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_commerce_diagnosis_returns_agent_report_envelope() -> None:
+    """Commerce diagnosis endpoint should return a structured agent report."""
+    test_app = _build_app()
+
+    async def fake_current_user() -> AuthenticatedUser:
+        """Return the current test user."""
+        return AuthenticatedUser(
+            public_id="user-123",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
+
+    async def fake_service() -> FakeCommerceDiagnosisService:
+        """Return the fake Commerce diagnosis service."""
+        return FakeCommerceDiagnosisService()
+
+    test_app.dependency_overrides[get_commerce_current_user] = fake_current_user
+    test_app.dependency_overrides[get_commerce_diagnosis_service] = fake_service
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.post(
+            "/api/v1/commerce/diagnoses",
+            json={"file_uuid": "file-123", "locale": "zh-CN"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = _api_data(resp)
+    assert data["agent_profile"] == "commerce_diagnosis_v1"
+    assert data["source_file"]["filename"] == "orders.csv"
+    assert data["risks"][0]["sku"] == "SKU-A"
+    assert data["tasks"][0]["type"] == "replenishment"

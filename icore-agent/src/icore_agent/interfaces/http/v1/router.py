@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from .account import router as account_router
 from .agent import router as agent_router
+from .commerce import router as commerce_router
 from .envelope import install_api_envelope
 from .files import router as files_router
 from .health import router as health_router
@@ -18,6 +19,7 @@ def include_api_routers(app: FastAPI) -> None:
     app.include_router(health_router)
     app.include_router(account_router)
     app.include_router(agent_router)
+    app.include_router(commerce_router)
     app.include_router(files_router)
     app.include_router(knowledge_router)
     app.include_router(payment_router)

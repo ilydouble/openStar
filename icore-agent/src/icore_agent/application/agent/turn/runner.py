@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from icore_agent.application.agent.context import AgentPromptContextManager
+from icore_agent.application.agent.context import AgentTurnPromptBuilder
 from icore_agent.application.agent.loop import AgentLoopRequest
 from icore_agent.application.agent.tool import ToolRuntime
 from icore_agent.application.agent.tool.catalog import (
@@ -57,8 +57,6 @@ class AgentTurnRunnerFactory:
             file_service=self._file_service,
         )
         if pi_workspace_dir:
-            # Pi mode delegates the whole turn (tool selection and execution)
-            # to pi-source-service, so our ToolRuntime stays empty for it.
             model_client = create_pi_model_client(
                 session_id=command.session_id,
                 workspace_dir=pi_workspace_dir,
@@ -75,9 +73,9 @@ class AgentTurnRunnerFactory:
             session_id=command.session_id,
             turn_id=turn.id,
             turn=turn,
-            context_manager=AgentPromptContextManager(
+            context_manager=AgentTurnPromptBuilder(
                 command=command,
-                context=context,
+                sources=context,
             ),
             model_client=model_client,
             tool_runtime=ToolRuntime(tool_definitions),
@@ -99,7 +97,11 @@ class AgentTurnRunnerFactory:
         try:
             from icore_agent.config import settings
 
-            sandbox_root = Path(settings.pi_workspace_sandbox_root) / command.user_id / workspace_id
+            sandbox_root = (
+                Path(settings.pi_workspace_sandbox_root)
+                / command.user_id
+                / workspace_id
+            )
             resolved = self._pi_workspace_service.extract_into_sandbox(
                 owner_user_id=command.user_id,
                 workspace_id=workspace_id,

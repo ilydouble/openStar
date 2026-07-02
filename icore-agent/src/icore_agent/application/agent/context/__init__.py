@@ -1,12 +1,12 @@
 """Agent context assembly package."""
 
 from .attachments import dedupe_file_uuids
-from .loader import load_agent_context
-from .manager import AgentPromptContextManager
+from .builder import AgentTurnPromptBuilder
+from .loader import load_turn_prompt_sources
 from icore_agent.domain.agent.context import (
-    AgentContext,
     AgentFileAttachment,
     AgentImageAttachment,
+    TurnPromptSources,
 )
 from .ports import (
     AgentSessionReader,
@@ -16,14 +16,14 @@ from .ports import (
 )
 
 __all__ = [
-    "AgentContext",
     "AgentFileAttachment",
     "AgentImageAttachment",
-    "AgentPromptContextManager",
+    "AgentTurnPromptBuilder",
     "AgentSessionReader",
     "ConversationMemory",
     "FileContextReader",
+    "TurnPromptSources",
     "UserMemoryPromptBuilder",
     "dedupe_file_uuids",
-    "load_agent_context",
+    "load_turn_prompt_sources",
 ]

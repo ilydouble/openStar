@@ -14,17 +14,17 @@
 
         <div class="mt-7 flex flex-col gap-3 sm:flex-row">
           <RouterLink
-            to="/auth"
+            to="/commerce"
             class="inline-flex min-h-12 items-center justify-center rounded-full bg-zinc-950 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-900/15 transition hover:scale-[1.02] dark:bg-white dark:text-zinc-950"
           >
             {{ t('landing.hero.primaryCta') }}
           </RouterLink>
-          <a
-            href="#plans"
+          <RouterLink
+            to="/auth?intent=commerce-diagnosis"
             class="inline-flex min-h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 py-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:text-white"
           >
             {{ t('landing.hero.secondaryCta') }}
-          </a>
+          </RouterLink>
         </div>
 
         <div class="hide-scrollbar mt-7 flex snap-x snap-mandatory items-center gap-3 overflow-x-auto pb-1 text-sm text-zinc-500 dark:text-zinc-400 sm:flex-wrap sm:overflow-visible sm:pb-0">

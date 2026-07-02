@@ -140,16 +140,12 @@ PI_WORKSPACE_SANDBOX_ROOT=/workspace/projects
 
 ```bash
 cd icore-agent
-source venv/bin/activate  # 激活虚拟环境
-
-# 开发模式
-icore-agent
-
-# 或使用 uvicorn 直接运行
-uvicorn icore_agent.main:app --reload --host 0.0.0.0 --port 8080
+./start-dev.sh
 ```
 
-后端将在 http://localhost:10001 启动
+脚本自动加载 `dotenv/` 下所有环境变量，并将 DB/Redis 连接覆盖为宿主机映射端口，后端将在 http://localhost:8080 启动。
+
+> ⚠️ 不要直接用 `uvicorn` 启动——env 变量不会被正确加载，DB 和 Redis 会使用 Docker 内部主机名导致连接失败。
 
 ### 启动前端
 
@@ -219,7 +215,7 @@ iCore/
 
 ## 🔌 API 文档
 
-启动后端服务后，访问 http://localhost:10001/docs 查看 Swagger API 文档。
+启动后端服务后，访问 http://localhost:8080/docs 查看 Swagger API 文档。
 
 ### 主要 API 端点
 

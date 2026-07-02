@@ -8,7 +8,7 @@ from typing import Any
 from icore_agent.application.agent.context import (
     ConversationMemory,
     dedupe_file_uuids,
-    load_agent_context,
+    load_turn_prompt_sources,
 )
 from icore_agent.domain.agent.loop import ModelClient
 from icore_agent.application.agent.loop.agent_loop import AgentLoop
@@ -228,8 +228,8 @@ class AgentTurnService:
         return lifecycle, user_event
 
     async def _load_context(self, command: AgentTurnCommand):
-        """Load prompt context for one prepared command."""
-        return await load_agent_context(
+        """Load prompt sources for one prepared command."""
+        return await load_turn_prompt_sources(
             session_id=command.session_id,
             file_uuids=command.file_uuids,
             user_id=command.user_id,

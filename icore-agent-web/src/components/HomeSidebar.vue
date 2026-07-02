@@ -92,6 +92,35 @@
       </button>
 
       <RouterLink
+        :to="{ name: 'commerce' }"
+        custom
+        v-slot="{ href, navigate, isActive }"
+      >
+        <a
+          :href="href"
+          class="flex w-full items-center rounded-xl py-2 text-left text-sm font-medium transition-colors duration-200"
+          :class="[navSurfaceClass(isActive), navRowClass]"
+          @click.prevent="
+            () => {
+              navigate()
+              emitNavigate()
+            }
+          "
+        >
+          <span :class="iconWrapClass(isActive)">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 6.5h16M6 6.5v11A2.5 2.5 0 008.5 20h7a2.5 2.5 0 002.5-2.5v-11M9 11h6M9 15h4"
+              />
+            </svg>
+          </span>
+          <span v-if="!sidebarCollapsed" class="min-w-0 truncate">{{ t('home.sidebar.commerce') }}</span>
+        </a>
+      </RouterLink>
+
+      <RouterLink
         :to="{ name: 'workspace' }"
         custom
         v-slot="{ href, navigate, isExactActive }"

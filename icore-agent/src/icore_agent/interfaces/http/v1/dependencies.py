@@ -101,6 +101,12 @@ file_asset_service = FileAssetService(
     bucket=settings.file_storage_bucket,
     default_expires_in=settings.file_upload_url_expires_in,
 )
+agent_run_store = RedisAgentRunStore(
+    redis_url=settings.redis_url,
+    lock_ttl_seconds=settings.agent_runtime_lock_ttl_seconds,
+    state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
+)
+agent_runtime = AgentRuntime(run_store=agent_run_store)
 pi_workspace_service = PiWorkspaceService(
     repository=SqlAlchemyPiWorkspaceRepository(),
     storage_client=StorageServiceClient(
@@ -113,12 +119,6 @@ pi_workspace_service = PiWorkspaceService(
     max_size_mb=settings.pi_workspace_max_size_mb,
     max_files=settings.pi_workspace_max_files,
 )
-agent_run_store = RedisAgentRunStore(
-    redis_url=settings.redis_url,
-    lock_ttl_seconds=settings.agent_runtime_lock_ttl_seconds,
-    state_ttl_seconds=settings.agent_runtime_state_ttl_seconds,
-)
-agent_runtime = AgentRuntime(run_store=agent_run_store)
 
 
 def get_account_service() -> AccountService:
@@ -175,8 +175,8 @@ def get_agent_turn_service() -> AgentTurnService:
         model_client_factory=create_chat_completions_model_client,
         usage_service=usage_service,
         user_memory_service=user_memory_service,
-        pi_workspace_service=pi_workspace_service,
         agent_runtime=agent_runtime,
+        pi_workspace_service=pi_workspace_service,
     )
 
 

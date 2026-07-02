@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from icore_agent.shared.logging.app_logger import get_logger
-from icore_agent.domain.agent.context import AgentContext
+from icore_agent.domain.agent.context import TurnPromptSources
 
 from .attachments import load_attachment_context
 from .history import load_history_context, to_model_visible_items
@@ -18,7 +18,7 @@ from .ports import (
 log = get_logger(__name__)
 
 
-async def load_agent_context(
+async def load_turn_prompt_sources(
     *,
     session_id: str,
     file_uuids: tuple[str, ...],
@@ -29,8 +29,8 @@ async def load_agent_context(
     agent_session: AgentSessionReader,
     conversation_memory: ConversationMemory,
     user_memory_service: UserMemoryPromptBuilder | None = None,
-) -> AgentContext:
-    """Load cached history, durable history fallback, files, and memory prompt."""
+) -> TurnPromptSources:
+    """Load prompt sources from memory, durable history, files, and user memory."""
     try:
         summary, history = await load_history_context(
             session_id=session_id,
@@ -43,7 +43,7 @@ async def load_agent_context(
     except Exception as exc:
         log.warning("load_context_fallback",
                     session_id=session_id, error=str(exc))
-        return AgentContext.empty()
+        return TurnPromptSources.empty()
 
     image_refs, file_refs = load_attachment_context(
         file_uuids=file_uuids,
@@ -57,10 +57,9 @@ async def load_agent_context(
         incognito=incognito,
         user_memory_service=user_memory_service,
     )
-    return AgentContext(
+    return TurnPromptSources(
         summary=summary,
         history_items=to_model_visible_items(history),
-        has_rag=False,
         image_attachments=image_refs,
         file_attachments=file_refs,
         user_memory_prompt=user_memory_prompt,

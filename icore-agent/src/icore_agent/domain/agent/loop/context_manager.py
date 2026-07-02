@@ -1,4 +1,4 @@
-"""Prompt context manager protocol for agent loop execution."""
+"""Per-step prompt envelope builder protocol for agent loop execution."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from icore_agent.domain.agent.turn import Turn
 
 
 class PromptContextManager(Protocol):
-    """Build model-visible prompts from loaded context and current turn state."""
+    """Build model-visible prompts from loaded sources and turn-local items."""
 
     def build_prompt(
         self,

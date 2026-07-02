@@ -90,13 +90,22 @@
       </div>
     </Transition>
   </Teleport>
+  <SimulatedPaymentModal
+    :show="showPaymentModal"
+    :plan-key="selectedPaymentPlan"
+    @dismiss="showPaymentModal = false"
+    @paid="handlePaymentPaid"
+  />
 </template>
 
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import SimulatedPaymentModal from './SimulatedPaymentModal.vue'
+import { simulatePaymentSuccess } from '../api/account.js'
+import { persistSimulatedEntitlement } from '../utils/simulatedCheckout.js'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -108,6 +117,8 @@ const emit = defineEmits(['dismiss'])
 
 const { t } = useI18n()
 const router = useRouter()
+const showPaymentModal = ref(false)
+const selectedPaymentPlan = ref('pilot')
 
 /** Task limit per plan tier — mirrors backend Plan enum for display only. */
 const TASK_LIMITS = { trial: 10, pro: 200, team: 1000, premium: 5000, byok: null }
@@ -128,7 +139,7 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.pro.cta'),
     badge: t('quotaModal.plans.pro.badge'),
     featured: false,
-    route: '/account?tab=plan&upgrade=pro',
+    route: '/commerce',
   },
   {
     key: 'team',
@@ -139,7 +150,8 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.team.cta'),
     badge: t('quotaModal.plans.team.badge'),
     featured: true,
-    route: '/account?tab=plan&upgrade=team',
+    route: '/#plans',
+    paymentPlan: 'pilot',
   },
   {
     key: 'premium',
@@ -150,7 +162,8 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.premium.cta'),
     badge: t('quotaModal.plans.premium.badge'),
     featured: false,
-    route: '/account?tab=plan&upgrade=premium',
+    route: '/#plans',
+    paymentPlan: 'ops',
   },
   {
     key: 'byok',
@@ -161,12 +174,33 @@ const plans = computed(() => [
     cta: t('quotaModal.plans.byok.cta'),
     badge: t('quotaModal.plans.byok.badge'),
     featured: false,
-    route: '/account?tab=byok',
+    route: '/enterprise?intent=diagnosis-advisor',
   },
 ])
 
-/** Navigate to the upgrade page and close the modal. */
+/** Open the development-only simulated payment modal for a paid upgrade. */
+function openSimulatedPayment(planKey) {
+  selectedPaymentPlan.value = planKey
+  showPaymentModal.value = true
+}
+
+/** Close both upgrade surfaces after a simulated payment succeeds. */
+async function handlePaymentPaid(checkout) {
+  try {
+    await simulatePaymentSuccess(checkout)
+  } catch {
+    persistSimulatedEntitlement(checkout)
+  }
+  showPaymentModal.value = false
+  emit('dismiss')
+}
+
+/** Navigate to the upgrade page or open the simulated payment modal. */
 function handleUpgrade(plan) {
+  if (plan.paymentPlan) {
+    openSimulatedPayment(plan.paymentPlan)
+    return
+  }
   emit('dismiss')
   router.push(plan.route)
 }

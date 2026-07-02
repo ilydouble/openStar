@@ -8,12 +8,16 @@
           <p class="mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-300">{{ t('account.subtitle') }}</p>
         </div>
         <div class="flex w-full shrink-0 flex-col gap-2 min-[520px]:w-auto min-[520px]:flex-row min-[520px]:flex-wrap min-[520px]:items-center min-[520px]:justify-end">
-          <RouterLink to="/app" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
+          <RouterLink to="/commerce" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
             {{ t('account.openWorkspace') }}
           </RouterLink>
-          <RouterLink to="/enterprise?intent=upgrade-enterprise" class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]">
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-center text-sm font-medium transition hover:border-zinc-300 dark:border-white/10 dark:bg-white/[0.04]"
+            @click="openSimulatedPayment('pilot')"
+          >
             {{ t('account.upgrade') }}
-          </RouterLink>
+          </button>
           <button
             type="button"
             class="inline-flex min-h-11 items-center justify-center rounded-full bg-zinc-950 px-4 py-2 text-center text-sm font-semibold text-white dark:bg-white dark:text-zinc-950"
@@ -30,6 +34,13 @@
 
       <div v-else class="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <section class="space-y-6">
+          <div
+            v-if="paymentNotice"
+            class="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
+          >
+            {{ paymentNotice }}
+          </div>
+
           <div class="rounded-[2rem] border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0 flex-1">
@@ -182,7 +193,7 @@
             <p class="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{{ t('account.plan.title') }}</p>
             <ul class="mt-5 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
               <li>{{ t('account.plan.tasks') }}: {{ plan?.usage?.tasks ?? 0 }} / {{ formatPlanLimit(plan?.limits?.tasks) }}</li>
-              <li>{{ t('account.plan.tokens') }}: {{ plan?.usage?.tokens ?? 0 }}</li>
+              <li>{{ t('account.plan.aiUsage') }}: {{ plan?.usage?.tokens ?? 0 }} {{ t('account.plan.notQuota') }}</li>
               <li>{{ t('account.plan.attachments') }}: {{ plan?.usage?.attachments ?? 0 }} / {{ formatPlanLimit(plan?.limits?.attachments) }}</li>
             </ul>
           </div>
@@ -273,6 +284,12 @@
         </section>
       </div>
     </div>
+    <SimulatedPaymentModal
+      :show="showPaymentModal"
+      :plan-key="selectedPaymentPlan"
+      @dismiss="showPaymentModal = false"
+      @paid="handleSimulatedPaymentPaid"
+    />
   </div>
 </template>
 
@@ -287,11 +304,14 @@ import {
   fetchPlan,
   fetchTeam,
   renameTeam,
+  simulatePaymentSuccess,
   signOut,
   updateByok,
   updateKnowledgeScope,
 } from '../api/account.js'
 import MemoryManagerSection from '../components/MemoryManagerSection.vue'
+import SimulatedPaymentModal from '../components/SimulatedPaymentModal.vue'
+import { persistSimulatedEntitlement } from '../utils/simulatedCheckout.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -302,6 +322,9 @@ const plan = ref(null)
 const adminOverview = ref(null)
 const team = ref(null)
 const saved = ref(false)
+const showPaymentModal = ref(false)
+const selectedPaymentPlan = ref('pilot')
+const paymentNotice = ref('')
 const byokForm = reactive({
   api_key: '',
   api_base: '',
@@ -328,6 +351,12 @@ function estimatedCostFromTokenCount(tokenCount) {
 
 const planUsage = computed(() => plan.value?.usage || {})
 
+function remainingQuotaText(used, limit) {
+  if (limit == null) return t('account.plan.unlimited')
+  const remaining = Math.max(Number(limit) - Number(used || 0), 0)
+  return t('account.plan.remaining', { remaining })
+}
+
 const usageCards = computed(() => {
   const usage = planUsage.value
   const tokenCount = Number(usage.tokens) || 0
@@ -335,11 +364,21 @@ const usageCards = computed(() => {
     usage.estimated_cost != null
       ? Number(usage.estimated_cost) || 0
       : estimatedCostFromTokenCount(tokenCount)
+  const taskLimit = plan.value?.limits?.tasks
+  const attachmentLimit = plan.value?.limits?.attachments
   return [
-    { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
-    { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.tasks'), value: usage.tasks ?? 0, helper: t('account.plan.tasks') },
-    { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
+    { label: t('account.cards.serviceTier'), value: plan.value?.label || '-', helper: plan.value?.plan || '-' },
+    {
+      label: t('account.cards.diagnosisQuota'),
+      value: `${usage.tasks ?? 0} / ${formatPlanLimit(taskLimit)}`,
+      helper: remainingQuotaText(usage.tasks, taskLimit),
+    },
+    {
+      label: t('account.cards.fileQuota'),
+      value: `${usage.attachments ?? 0} / ${formatPlanLimit(attachmentLimit)}`,
+      helper: remainingQuotaText(usage.attachments, attachmentLimit),
+    },
+    { label: t('account.cards.aiUsage'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.notQuota') },
   ]
 })
 
@@ -472,6 +511,24 @@ async function inviteMember() {
 function handleSignOut() {
   signOut()
   router.push({ name: 'auth' })
+}
+
+/** Open the development-only payment simulation for a Commerce OS service plan. */
+function openSimulatedPayment(planKey) {
+  selectedPaymentPlan.value = planKey
+  showPaymentModal.value = true
+}
+
+/** Show a local success message after the simulated provider callback completes. */
+async function handleSimulatedPaymentPaid(checkout) {
+  try {
+    await simulatePaymentSuccess(checkout)
+  } catch {
+    persistSimulatedEntitlement(checkout)
+  }
+  const planName = t(`paymentSimulation.plans.${checkout.planKey}.name`)
+  paymentNotice.value = t('account.paymentSimulatedNotice', { plan: planName })
+  loadAccount({ silent: true })
 }
 
 onMounted(async () => {

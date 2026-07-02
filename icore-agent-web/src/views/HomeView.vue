@@ -142,7 +142,7 @@
 
           <div
             v-else-if="isHomeRoute"
-            class="flex min-h-0 flex-1 flex-col items-center justify-[safe_center] overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-10"
           >
             <div class="flex w-full max-w-5xl flex-col items-center text-center">
               <div class="flex flex-col items-center gap-4 animate-home-hero-in">
@@ -163,7 +163,7 @@
                 </p>
               </div>
 
-              <div class="mt-6 w-full max-w-4xl">
+              <div class="mt-6 w-full max-w-3xl">
                 <SearchBar
                   ref="searchRefHome"
                   :placeholder="activeShortcut?.placeholder || ''"
@@ -179,73 +179,6 @@
                   @clear-mode="clearShortcut"
                   @select-mode="setComposerMode"
                   @toggle-incognito="toggleIncognitoMode"
-                />
-
-                <!-- Pi mode: pick / upload the sandboxed project Pi should analyze -->
-                <div v-if="activeShortcutId === 'pi'" class="mt-2 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    @click="triggerPiProjectUpload"
-                    class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    <span aria-hidden="true">📁</span>
-                    {{ t('home.pi.uploadProject') }}
-                  </button>
-                  <div class="relative">
-                    <button
-                      type="button"
-                      @click="togglePiWorkspacePicker"
-                      class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
-                             border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <span class="max-w-[180px] truncate">{{ activePiWorkspace?.title || t('home.pi.selectProject') }}</span>
-                      <span aria-hidden="true">▾</span>
-                    </button>
-                    <div
-                      v-if="piWorkspacePickerOpen"
-                      class="absolute left-0 z-20 mt-1 w-64 max-h-72 overflow-auto rounded-xl border border-zinc-200 bg-white p-1.5 text-xs shadow-lg dark:border-white/10 dark:bg-zinc-900"
-                    >
-                      <div v-if="piWorkspacesLoading" class="px-2 py-1.5 text-zinc-400">…</div>
-                      <div v-else-if="!piWorkspaces.length" class="px-2 py-1.5 text-zinc-400">{{ t('home.pi.noProjects') }}</div>
-                      <button
-                        v-for="ws in piWorkspaces"
-                        :key="ws.id"
-                        type="button"
-                        @click="selectPiWorkspace(ws)"
-                        :class="['flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800',
-                                 ws.id === activePiWorkspaceId ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'text-zinc-700 dark:text-zinc-300']"
-                      >
-                        <span class="truncate">{{ ws.title }}</span>
-                        <span
-                          role="button"
-                          aria-label="remove"
-                          @click.stop="removePiWorkspace(ws)"
-                          class="shrink-0 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400"
-                        >✕</span>
-                      </button>
-                      <button
-                        v-if="activePiWorkspaceId"
-                        type="button"
-                        @click="clearActivePiWorkspace"
-                        class="mt-0.5 flex w-full items-center rounded-lg px-2 py-1.5 text-left text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                      >{{ t('home.pi.clearSelection') }}</button>
-                    </div>
-                  </div>
-                  <span v-if="piUploadState && piUploadState.stage !== 'error'" class="text-xs text-zinc-400">
-                    {{ t(`home.pi.${piUploadState.stage}`) }}
-                  </span>
-                  <span v-else-if="piUploadState && piUploadState.stage === 'error'" class="text-xs text-red-500">
-                    {{ t('home.pi.uploadError', { msg: piUploadState.error }) }}
-                  </span>
-                  <span v-if="activePiWorkspace" class="text-[11px] text-zinc-400">{{ t('home.pi.activeHint') }}</span>
-                </div>
-                <input
-                  ref="piProjectInputEl"
-                  type="file"
-                  webkitdirectory
-                  multiple
-                  class="hidden"
-                  @change="handlePiProjectFolderSelected"
                 />
 
                 <!-- 附件列表（首页）：会话中的文档/RAG 等；图片与数据文件仅在气泡内展示 -->
@@ -288,7 +221,7 @@
                 </div>
               </div>
 
-              <div class="mt-7 grid w-full max-w-4xl gap-3 text-left sm:grid-cols-2 xl:grid-cols-3">
+              <div class="mt-7 grid w-full max-w-4xl gap-3 text-left sm:grid-cols-2">
                 <div
                   v-for="item in homeShortcutItems"
                   :key="item.id"
@@ -469,74 +402,6 @@
               @clear-mode="clearShortcut"
               @select-mode="setComposerMode"
               @toggle-incognito="toggleIncognitoMode"
-              @composer-resize="handleComposerResize"
-            />
-
-            <!-- Pi mode: pick / upload the sandboxed project Pi should analyze -->
-            <div v-if="activeShortcutId === 'pi'" class="mt-2 flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                @click="triggerPiProjectUpload"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                <span aria-hidden="true">📁</span>
-                {{ t('home.pi.uploadProject') }}
-              </button>
-              <div class="relative">
-                <button
-                  type="button"
-                  @click="togglePiWorkspacePicker"
-                  class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium
-                         border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  <span class="max-w-[180px] truncate">{{ activePiWorkspace?.title || t('home.pi.selectProject') }}</span>
-                  <span aria-hidden="true">▾</span>
-                </button>
-                <div
-                  v-if="piWorkspacePickerOpen"
-                  class="absolute left-0 z-20 mt-1 w-64 max-h-72 overflow-auto rounded-xl border border-zinc-200 bg-white p-1.5 text-xs shadow-lg dark:border-white/10 dark:bg-zinc-900"
-                >
-                  <div v-if="piWorkspacesLoading" class="px-2 py-1.5 text-zinc-400">…</div>
-                  <div v-else-if="!piWorkspaces.length" class="px-2 py-1.5 text-zinc-400">{{ t('home.pi.noProjects') }}</div>
-                  <button
-                    v-for="ws in piWorkspaces"
-                    :key="ws.id"
-                    type="button"
-                    @click="selectPiWorkspace(ws)"
-                    :class="['flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800',
-                             ws.id === activePiWorkspaceId ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'text-zinc-700 dark:text-zinc-300']"
-                  >
-                    <span class="truncate">{{ ws.title }}</span>
-                    <span
-                      role="button"
-                      aria-label="remove"
-                      @click.stop="removePiWorkspace(ws)"
-                      class="shrink-0 rounded p-0.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400"
-                    >✕</span>
-                  </button>
-                  <button
-                    v-if="activePiWorkspaceId"
-                    type="button"
-                    @click="clearActivePiWorkspace"
-                    class="mt-0.5 flex w-full items-center rounded-lg px-2 py-1.5 text-left text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                  >{{ t('home.pi.clearSelection') }}</button>
-                </div>
-              </div>
-              <span v-if="piUploadState && piUploadState.stage !== 'error'" class="text-xs text-zinc-400">
-                {{ t(`home.pi.${piUploadState.stage}`) }}
-              </span>
-              <span v-else-if="piUploadState && piUploadState.stage === 'error'" class="text-xs text-red-500">
-                {{ t('home.pi.uploadError', { msg: piUploadState.error }) }}
-              </span>
-              <span v-if="activePiWorkspace" class="text-[11px] text-zinc-400">{{ t('home.pi.activeHint') }}</span>
-            </div>
-            <input
-              ref="piProjectInputEl"
-              type="file"
-              webkitdirectory
-              multiple
-              class="hidden"
-              @change="handlePiProjectFolderSelected"
             />
           </div>
         </div>
@@ -549,7 +414,6 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { getBrowserStorage, readStoredString, writeStoredString, removeStoredKey } from '../stores/browserStorage.js'
 import {
   chatEventStream,
   clearSession,
@@ -562,13 +426,6 @@ import {
   uploadFileAsset,
   searchSessions,
   QuotaExceededError,
-  uploadPiProjectFolder,
-  listPiWorkspaces,
-  deletePiWorkspace,
-  piUndoChange,
-  piSaveAllChanges,
-  downloadPiWorkspace,
-  listPiChanges,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
@@ -671,11 +528,6 @@ const UI_BY_ID = {
     emoji: '\u{1F4CA}',
     panel:
       'bg-gradient-to-br from-emerald-100 to-emerald-50 border-emerald-200/80 dark:from-emerald-500/35 dark:to-emerald-950/55 dark:border-emerald-400/20',
-  },
-  pi: {
-    emoji: '\u{1F916}',
-    panel:
-      'bg-gradient-to-br from-indigo-100 to-indigo-50 border-indigo-200/80 dark:from-indigo-500/35 dark:to-indigo-950/55 dark:border-indigo-400/20',
   },
 }
 
@@ -910,18 +762,8 @@ function toggleIncognitoMode() {
 
 watch(
   () => route.name,
-  (name, oldName) => {
-    // Guard against killing an in-flight SSE stream: `ensureChatRoute()`
-    // (called right when a message is sent) replaces the route from
-    // 'workspace' to 'workspace-session', and other internal navigations
-    // can transiently report 'workspace' too. Resetting on every such blip
-    // used to abort the user's own just-started stream ~instantly, with no
-    // visible error (AbortError is swallowed silently below). Only treat
-    // this as a genuine "go to a fresh workspace" navigation when the name
-    // actually changed AND there's no active stream to protect.
-    if (name === 'workspace' && name !== oldName && !streamAbortController.value) {
-      resetConversationState()
-    }
+  (name) => {
+    if (name === 'workspace') resetConversationState()
   },
 )
 
@@ -938,7 +780,6 @@ const PILL_BY_ID = {
   chat:     'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:ring-violet-400/30',
   image:    'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-900/40 dark:text-fuchsia-200 dark:ring-fuchsia-400/30',
   data:     'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-400/30',
-  pi:       'bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:ring-indigo-400/30',
 }
 
 const shortcutItems = computed(() => {
@@ -980,120 +821,7 @@ const scenarioTemplates = computed(() => {
   }))
 })
 
-// Per-session localStorage helpers — key format: icore:pi-mode:{sessionId}
-// and icore:pi-ws:{sessionId}. This lets each session independently remember
-// which Pi mode and workspace were active so a page refresh restores state.
-const _piStorage = getBrowserStorage()
-function _piModeKey(sid) { return `icore:pi-mode:${sid}` }
-function _piWsKey(sid)   { return `icore:pi-ws:${sid}` }
-
-const activeShortcutId = ref(
-  readStoredString(_piStorage, _piModeKey(sessionId.value), ''),
-)
-watch(activeShortcutId, (val) => {
-  writeStoredString(_piStorage, _piModeKey(sessionId.value), val)
-})
-
-// --- Pi mode: uploaded-project workspace selection -------------------------
-// Lets the user upload a whole project folder and have Pi analyze it inside
-// a strictly sandboxed, per-project workspace (server enforces ownership and
-// containment — see PiWorkspaceService). `activePiWorkspaceId` travels with
-// every chat call while in Pi mode so the backend knows which sandbox to
-// extract/point Pi at; it is cleared whenever the user leaves Pi mode.
-const piWorkspaces = ref([])
-const piWorkspacesLoading = ref(false)
-const activePiWorkspaceId = ref(
-  readStoredString(_piStorage, _piWsKey(sessionId.value), ''),
-)
-watch(activePiWorkspaceId, (val) => {
-  if (val) writeStoredString(_piStorage, _piWsKey(sessionId.value), val)
-  else removeStoredKey(_piStorage, _piWsKey(sessionId.value))
-})
-const piWorkspacePickerOpen = ref(false)
-const piProjectInputEl = ref(null)
-const piUploadState = ref(null) // { stage, error? } | null
-
-const activePiWorkspace = computed(
-  () => piWorkspaces.value.find((item) => item.id === activePiWorkspaceId.value) || null,
-)
-
-async function loadPiWorkspaces() {
-  piWorkspacesLoading.value = true
-  try {
-    piWorkspaces.value = await listPiWorkspaces()
-  } catch {
-    // Non-fatal — the picker simply shows an empty list; upload still works.
-  } finally {
-    piWorkspacesLoading.value = false
-  }
-}
-
-function togglePiWorkspacePicker() {
-  piWorkspacePickerOpen.value = !piWorkspacePickerOpen.value
-  if (piWorkspacePickerOpen.value && !piWorkspaces.value.length) {
-    loadPiWorkspaces()
-  }
-}
-
-function selectPiWorkspace(workspace) {
-  activePiWorkspaceId.value = workspace?.id || ''
-  piWorkspacePickerOpen.value = false
-}
-
-function clearActivePiWorkspace() {
-  activePiWorkspaceId.value = ''
-  piWorkspacePickerOpen.value = false
-}
-
-async function removePiWorkspace(workspace) {
-  if (!workspace?.id) return
-  try {
-    await deletePiWorkspace(workspace.id)
-    piWorkspaces.value = piWorkspaces.value.filter((item) => item.id !== workspace.id)
-    if (activePiWorkspaceId.value === workspace.id) clearActivePiWorkspace()
-  } catch {
-    // Leave the list as-is; user can retry from the picker.
-  }
-}
-
-function triggerPiProjectUpload() {
-  piWorkspacePickerOpen.value = false
-  piProjectInputEl.value?.click()
-}
-
-async function handlePiProjectFolderSelected(event) {
-  const files = Array.from(event?.target?.files || [])
-  if (event?.target) event.target.value = ''
-  if (!files.length) return
-
-  const firstRelPath = files[0]?.webkitRelativePath || files[0]?.name || ''
-  const projectTitle = firstRelPath.split('/')[0] || 'Untitled project'
-
-  piUploadState.value = { stage: 'zipping' }
-  try {
-    const workspace = await uploadPiProjectFolder(files, projectTitle, (progress) => {
-      piUploadState.value = { stage: progress.stage }
-    })
-    piWorkspaces.value = [workspace, ...piWorkspaces.value.filter((item) => item.id !== workspace.id)]
-    activePiWorkspaceId.value = workspace.id
-    piUploadState.value = null
-  } catch (err) {
-    piUploadState.value = { stage: 'error', error: err?.message || String(err) }
-  }
-}
-
-// Leaving Pi mode clears the active project — re-entering starts fresh and
-// the user explicitly re-selects which project Pi should see.
-watch(activeShortcutId, (next, prev) => {
-  if (next === 'pi' && prev !== 'pi') {
-    loadPiWorkspaces()
-  }
-  if (prev === 'pi' && next !== 'pi') {
-    activePiWorkspaceId.value = ''
-    piWorkspacePickerOpen.value = false
-  }
-})
-
+const activeShortcutId = ref('')
 const activeShortcut = computed(
   () => shortcutItems.value.find((it) => it.id === activeShortcutId.value) || null,
 )
@@ -1107,9 +835,8 @@ const templateLabelById = computed(() =>
 const activeShortcutPill = computed(() => {
   const it = activeShortcut.value
   if (!it) return null
-  const projectName = it.id === 'pi' ? activePiWorkspace.value?.title || '' : ''
   return {
-    label: projectName ? `${it.label} · ${projectName}` : it.label,
+    label: it.label,
     emoji: it.emoji,
     pillClass: PILL_BY_ID[it.id] || '',
   }
@@ -1163,9 +890,7 @@ watch(
     attachmentList.value = []
     resetTimelineState(resolved)
     uploadError.value = ''
-    // Restore Pi mode/workspace for the new session from localStorage (or reset)
-    activeShortcutId.value = readStoredString(_piStorage, _piModeKey(resolved), '')
-    activePiWorkspaceId.value = readStoredString(_piStorage, _piWsKey(resolved), '')
+    activeShortcutId.value = ''
     await loadPlanSummary()
     await hydrateCurrentSession()
   },
@@ -1210,18 +935,11 @@ function isChatScrollNearBottom(thresholdPx = 120) {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx
 }
 
-/**
- * The composer grows taller as the user types multi-line messages. Its
- * wrapper sits at the bottom of the same flex column as the message list, so
- * a taller composer shrinks the list's visible height — without re-syncing
- * scroll position, the latest message ends up sliding behind the composer.
- * Re-pin to the bottom only when the user was already reading the latest
- * messages, so scrolling through history isn't interrupted.
- */
 function handleComposerResize() {
   if (!isChatScrollNearBottom()) return
   requestAnimationFrame(() => applyChatScrollBottom())
 }
+
 
 // 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
 const SHORTCUT_HINT = {
@@ -1231,7 +949,6 @@ const SHORTCUT_HINT = {
   chat: 'chat',
   image: 'image',
   data: 'data',
-  pi:   'pi',
 }
 
 function mapSessionSummary(item) {
@@ -1358,29 +1075,6 @@ async function hydrateCurrentSession() {
       subtitle: state.summary || sessionEntry?.subtitle || t('home.subtitle'),
       attachmentCount: (state.attachments || []).length,
     })
-    // Restore Pi file changes: if this session had Pi mode active, fetch any
-    // pending changes from pi-source-service and attach them to the last
-    // assistant message so Undo / Save All / Download buttons reappear.
-    const restoredWsId = activePiWorkspaceId.value
-      || readStoredString(_piStorage, _piWsKey(sessionId.value), '')
-    if (restoredWsId) {
-      try {
-        const { changes } = await listPiChanges(sessionId.value)
-        if (changes?.length) {
-          // Find the last assistant message and attach all changes to it
-          const lastAssistIdx = [...messages.value].reverse().findIndex((m) => m.role === 'assistant')
-          if (lastAssistIdx !== -1) {
-            const realIdx = messages.value.length - 1 - lastAssistIdx
-            messages.value[realIdx] = {
-              ...messages.value[realIdx],
-              fileChanges: changes.map((c) => ({ ...c, undone: false })),
-            }
-          }
-        }
-      } catch {
-        // Non-fatal — changes just won't show after refresh
-      }
-    }
     if (messages.value.length > 0) {
       await scrollBottom()
     }
@@ -1435,9 +1129,6 @@ async function sendUserMessage(msg, agentHint = '', {
       agentMessage: agentMessage !== bubbleText ? agentMessage : '',
       templateId,
       ...(captionForApi ? { displayCaption: captionForApi } : {}),
-      ...(activeShortcutId.value === 'pi' && activePiWorkspaceId.value
-        ? { piWorkspaceId: activePiWorkspaceId.value }
-        : {}),
       incognito: incognitoMode.value,
     })) {
       if (!evt) continue
@@ -1474,62 +1165,6 @@ async function sendUserMessage(msg, agentHint = '', {
       sessionSubtitle: text.slice(0, 80),
     })
     await scrollBottom()
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pi Agent file-change actions — Undo and Save All
-// ---------------------------------------------------------------------------
-
-async function handlePiUndo(msg, change) {
-  if (!change || change.undone || change.savedAt > 0) return
-  try {
-    await piUndoChange(sessionId.value, change.changeId)
-    // Mark as undone in the message so the UI updates immediately
-    const msgIdx = messages.value.findIndex((m) => m.id === msg.id)
-    if (msgIdx !== -1) {
-      const updated = {
-        ...messages.value[msgIdx],
-        fileChanges: messages.value[msgIdx].fileChanges.map((c) =>
-          c.changeId === change.changeId ? { ...c, undone: true } : c,
-        ),
-      }
-      messages.value[msgIdx] = updated
-    }
-  } catch (e) {
-    console.error('Pi undo failed', e)
-  }
-}
-
-async function handlePiSaveAll(msg) {
-  if (!msg.fileChanges?.length) return
-  const unsaved = msg.fileChanges.filter((c) => !c.undone && c.savedAt === 0)
-  if (!unsaved.length) return
-  try {
-    await piSaveAllChanges(sessionId.value)
-    // Mark all pending changes for this message as saved
-    const now = Date.now()
-    const msgIdx = messages.value.findIndex((m) => m.id === msg.id)
-    if (msgIdx !== -1) {
-      const updated = {
-        ...messages.value[msgIdx],
-        fileChanges: messages.value[msgIdx].fileChanges.map((c) =>
-          c.savedAt === 0 && !c.undone ? { ...c, savedAt: now } : c,
-        ),
-      }
-      messages.value[msgIdx] = updated
-    }
-  } catch (e) {
-    console.error('Pi save-all failed', e)
-  }
-}
-
-async function handlePiDownload() {
-  if (!sessionId.value) return
-  try {
-    await downloadPiWorkspace(sessionId.value)
-  } catch (e) {
-    console.error('Pi download failed', e)
   }
 }
 

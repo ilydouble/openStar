@@ -25,20 +25,22 @@ _DOMAINS = (
 
 
 def dotenv_dir() -> Path:
+    """Return the directory that contains domain .env.* files.
+
+    Resolution order:
+    1. ICORE_AGENT_DOTENV_DIR env var (explicit override, used by Docker Compose
+       to point at dotenv/dev or dotenv/production)
+    2. <cwd>/dotenv  (local dev: run from icore-agent/, picks up dotenv/)
+    3. <package-root>/dotenv  (fallback for installed packages / containers
+       where env vars are injected directly and dotenv files are optional)
+    """
     configured = os.getenv("ICORE_AGENT_DOTENV_DIR")
     if configured:
         return Path(configured)
     cwd_dotenv = Path.cwd() / "dotenv"
-    cwd_dev_dotenv = cwd_dotenv / "dev"
-    if cwd_dev_dotenv.is_dir():
-        return cwd_dev_dotenv
     if cwd_dotenv.is_dir():
         return cwd_dotenv
-    repo_dotenv = Path(__file__).resolve().parents[3] / "dotenv"
-    repo_dev_dotenv = repo_dotenv / "dev"
-    if repo_dev_dotenv.is_dir():
-        return repo_dev_dotenv
-    return repo_dotenv
+    return Path(__file__).resolve().parents[3] / "dotenv"
 
 
 def domain_env_files(*domains: str) -> tuple[str, ...]:

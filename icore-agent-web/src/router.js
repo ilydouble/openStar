@@ -1,6 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isAuthenticated } from './auth/session.js'
 
+export const authenticatedHomeRouteName = 'commerce'
+
+export function resolvePostAuthRoute(query = {}) {
+  const redirect = typeof query.redirect === 'string' ? query.redirect : ''
+  if (redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.startsWith('/auth')) {
+    return redirect
+  }
+  return { name: authenticatedHomeRouteName }
+}
+
 export const routes = [
   { path: '/', name: 'landing', component: () => import('./views/LandingView.vue') },
   { path: '/auth', name: 'auth', component: () => import('./views/AuthView.vue') },
@@ -9,6 +19,12 @@ export const routes = [
     path: '/account',
     name: 'account',
     component: () => import('./views/AccountView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/commerce',
+    name: 'commerce',
+    component: () => import('./views/CommerceDashboardView.vue'),
     meta: { requiresAuth: true },
   },
   {
@@ -54,7 +70,7 @@ export function createAppRouter() {
       }
     }
     if (to.name === 'auth' && isAuthenticated()) {
-      return { name: 'workspace' }
+      return resolvePostAuthRoute(to.query)
     }
     return true
   })

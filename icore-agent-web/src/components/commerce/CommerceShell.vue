@@ -34,6 +34,7 @@
                 class="hidden"
                 type="file"
                 accept=".csv,text/csv"
+                multiple
                 @change="handleFileChange"
               >
               <button
@@ -90,6 +91,7 @@ import { computed, ref } from 'vue'
 import { FileSpreadsheet, Sparkles, Upload } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences.js'
+import { normalizeSelectedCsvFiles } from '../../utils/commerceDiagnosisUpload.js'
 import CommerceSidebar from './CommerceSidebar.vue'
 
 const { t, locale } = useI18n()
@@ -107,9 +109,9 @@ function openCsvPicker() {
 }
 
 function handleFileChange(event) {
-  const file = event.target.files?.[0]
+  const files = normalizeSelectedCsvFiles(event.target.files)
   event.target.value = ''
-  if (file) emit('uploaded', file)
+  if (files.length > 0) emit('uploaded', files)
 }
 
 defineProps({

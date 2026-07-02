@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
@@ -22,6 +23,8 @@ from ..schemas import (
     UploadURLRequest,
     UploadURLResponse,
 )
+
+_STORAGE_UNAVAILABLE_DETAIL = "File storage service is unavailable"
 
 
 async def get_files_current_user(
@@ -60,6 +63,11 @@ async def create_upload_url(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=_STORAGE_UNAVAILABLE_DETAIL,
+        ) from exc
     return UploadURLResponse(
         file_uuid=result.file_uuid,
         upload_url=result.upload_url,
@@ -86,6 +94,11 @@ async def complete_upload(
         raise HTTPException(status_code=404, detail="File not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=_STORAGE_UNAVAILABLE_DETAIL,
+        ) from exc
     return _serialize_asset(asset)
 
 
@@ -104,6 +117,11 @@ async def create_download_url(
         )
     except FileAssetNotFoundError as exc:
         raise HTTPException(status_code=404, detail="File not found") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=_STORAGE_UNAVAILABLE_DETAIL,
+        ) from exc
     return DownloadURLResponse(
         file_uuid=file_uuid,
         download_url=download_url,
@@ -124,6 +142,11 @@ async def delete_file(
         )
     except FileAssetNotFoundError as exc:
         raise HTTPException(status_code=404, detail="File not found") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=_STORAGE_UNAVAILABLE_DETAIL,
+        ) from exc
     return DeleteFileResponse(
         file_uuid=asset.file_uuid,
         deleted=asset.deleted_at is not None,

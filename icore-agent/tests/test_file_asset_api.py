@@ -97,6 +97,14 @@ class FakeFileAssetService:
         return self.asset
 
 
+class UnavailableFileAssetService(FakeFileAssetService):
+    """Fake service that simulates an unavailable storage-service dependency."""
+
+    def create_upload_url(self, **kwargs):
+        """Raise the same HTTP client family used by the storage-service client."""
+        raise httpx.ConnectError("storage-service unavailable")
+
+
 @pytest.mark.asyncio
 async def test_files_upload_url_requires_auth() -> None:
     """The files upload URL endpoint should be protected."""
@@ -183,3 +191,43 @@ async def test_legacy_agent_attach_routes_are_removed() -> None:
         assert (await client.post("/api/v1/agent/attach/image")).status_code == 404
         assert (await client.post("/api/v1/agent/attach/data")).status_code == 404
         assert (await client.get("/api/v1/agent/attachments/session-1")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_files_upload_url_returns_503_when_storage_service_is_unavailable() -> None:
+    """Storage-service connection failures should not escape as ASGI 500s."""
+    test_app = _build_app()
+
+    async def fake_current_user() -> AuthenticatedUser:
+        """Return the current test user."""
+        return AuthenticatedUser(
+            public_id="user-public-id",
+            email="user@example.com",
+            name="User One",
+            roles=("owner",),
+        )
+
+    async def unavailable_file_asset_service() -> UnavailableFileAssetService:
+        """Return a fake service that cannot reach object storage."""
+        return UnavailableFileAssetService()
+
+    test_app.dependency_overrides[get_files_current_user] = fake_current_user
+    test_app.dependency_overrides[
+        get_files_file_asset_service
+    ] = unavailable_file_asset_service
+    transport = httpx.ASGITransport(app=test_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resp = await client.post(
+            "/api/v1/files/upload-url/",
+            json={
+                "original_filename": "orders.csv",
+                "content_type": "text/csv",
+                "checksum_sha256": "a" * 64,
+            },
+        )
+
+    payload = resp.json()
+    assert resp.status_code == 503
+    assert payload["code"] == 503
+    assert payload["data"] is None
+    assert payload["message"] == "File storage service is unavailable"

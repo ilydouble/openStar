@@ -40,7 +40,10 @@ test('commerce workspace upload controls are wired to the diagnosis API', () => 
 
   assert.match(shell, /type="file"/)
   assert.ok(shell.includes('accept=".csv,text/csv"'))
+  assert.match(shell, /\bmultiple\b/)
   assert.match(shell, /@change="handleFileChange"/)
+  assert.match(shell, /normalizeSelectedCsvFiles/)
+  assert.match(dashboard, /uploadCsvFilesBeforeDiagnosis/)
   assert.match(dashboard, /createCommerceDiagnosis/)
   assert.match(dashboard, /@uploaded="handleCsvUploaded"/)
 })

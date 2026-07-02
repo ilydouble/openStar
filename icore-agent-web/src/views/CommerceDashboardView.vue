@@ -83,6 +83,7 @@ import {
   uploadFileAsset,
 } from '../api/agent.js'
 import CommerceShell from '../components/commerce/CommerceShell.vue'
+import { uploadCsvFilesBeforeDiagnosis } from '../utils/commerceDiagnosisUpload.js'
 
 const { t, tm, locale } = useI18n()
 
@@ -173,24 +174,26 @@ const diagnosisTasks = computed(() =>
   })),
 )
 
-async function handleCsvUploaded(file) {
-  await runDiagnosis(file)
+async function handleCsvUploaded(files) {
+  await runDiagnosis(files)
 }
 
 async function handleSampleDiagnosis() {
   await runSampleDiagnosis()
 }
 
-async function runDiagnosis(file) {
+async function runDiagnosis(files) {
   diagnosisLoading.value = true
   diagnosisError.value = ''
   try {
-    const uploaded = await uploadFileAsset(file)
-    const report = await createCommerceDiagnosis(uploaded.file_uuid, {
+    const result = await uploadCsvFilesBeforeDiagnosis(files, {
+      uploadFileAsset,
+      createCommerceDiagnosis,
       locale: locale.value,
     })
-    diagnosisReport.value = report
-    diagnosisSource.value = uploaded.original_filename || uploaded.filename || file.name
+    if (!result) return
+    diagnosisReport.value = result.report
+    diagnosisSource.value = result.sourceText
   } catch (err) {
     diagnosisError.value = err?.message || t('commerce.dashboard.status.failed')
   } finally {

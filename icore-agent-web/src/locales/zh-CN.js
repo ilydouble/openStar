@@ -701,11 +701,11 @@ export default {
   account: {
     eyebrow: '账户',
     title: '账户与诊断服务',
-    subtitle: '查看 Commerce OS 诊断方案、使用信号和服务升级路径。',
+    subtitle: '查看 Commerce OS 诊断额度、使用信号和可升级的付费服务。',
     loading: '正在加载账户信息...',
     profile: '账户信息',
     openWorkspace: '打开 Commerce OS',
-    upgrade: '查看诊断方案',
+    upgrade: '升级服务',
     signOut: '退出登录',
     usageBreakdown: '报告背后的 AI 使用',
     emptyUsage: '还没有使用记录。',
@@ -863,7 +863,7 @@ export default {
   },
   quotaModal: {
     title: '诊断额度已用完',
-    subtitle: '您的 {plan} 方案包含 {limit} 次诊断任务。选择试点服务或持续运营后即可继续使用。',
+    subtitle: '您的 {plan} 方案包含 {limit} 次诊断任务。升级后可获得更多诊断额度和持续运营服务。',
     currentPlan: '当前套餐',
     plans: {
       pro: {
@@ -879,7 +879,7 @@ export default {
         tasks: '完整诊断报告',
         price: '¥499-1999',
         desc: '使用真实运营数据，获得 SKU 风险、市场背景和行动清单。',
-        cta: '预约试点服务',
+        cta: '升级试点服务',
         badge: '推荐',
       },
       premium: {
@@ -887,7 +887,7 @@ export default {
         tasks: '周期运营报告',
         price: '¥999-2999/月',
         desc: '按周或按月输出 Commerce OS 报告，持续跟进商品、库存、供应商和市场变化。',
-        cta: '了解持续运营',
+        cta: '升级持续运营',
         badge: '',
       },
       byok: {

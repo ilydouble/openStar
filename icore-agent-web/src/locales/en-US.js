@@ -703,11 +703,11 @@ export default {
   account: {
     eyebrow: 'Account',
     title: 'Account and diagnosis services',
-    subtitle: 'Review your Commerce OS diagnosis plan, usage signals, and service upgrade path.',
+    subtitle: 'Review your Commerce OS diagnosis quota, usage signals, and paid service upgrades.',
     loading: 'Loading account information...',
     profile: 'Profile',
     openWorkspace: 'Open Commerce OS',
-    upgrade: 'View diagnosis plans',
+    upgrade: 'Upgrade service',
     signOut: 'Sign out',
     usageBreakdown: 'AI usage behind reports',
     emptyUsage: 'No usage records yet.',
@@ -866,7 +866,7 @@ export default {
   },
   quotaModal: {
     title: 'Your diagnosis quota is used up',
-    subtitle: 'Your {plan} plan includes {limit} diagnosis tasks. Choose a pilot or continuous operations service to keep working.',
+    subtitle: 'Your {plan} plan includes {limit} diagnosis tasks. Upgrade to unlock more diagnosis quota and ongoing operations services.',
     currentPlan: 'Current plan',
     plans: {
       pro: {
@@ -882,7 +882,7 @@ export default {
         tasks: 'Full diagnosis report',
         price: '¥499-1999',
         desc: 'Use real operating data to receive SKU risks, market context, and an action list.',
-        cta: 'Book pilot service',
+        cta: 'Upgrade to Pilot Service',
         badge: 'Recommended',
       },
       premium: {
@@ -890,7 +890,7 @@ export default {
         tasks: 'Recurring operating reports',
         price: '¥999-2999/mo',
         desc: 'Weekly or monthly Commerce OS reports with product, inventory, supplier, and market follow-up.',
-        cta: 'Explore continuous ops',
+        cta: 'Upgrade to Continuous Ops',
         badge: '',
       },
       byok: {

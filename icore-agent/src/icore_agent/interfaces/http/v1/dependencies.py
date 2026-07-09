@@ -11,7 +11,7 @@ from icore_agent.contexts.agent.application import (
     AgentSessionService,
     AgentTurnService,
 )
-from icore_agent.application.files import FileAssetService
+from icore_agent.contexts.files.application import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
@@ -27,7 +27,7 @@ from icore_agent.contexts.agent.infrastructure.chat_completions import (
     create_chat_completions_model_client,
 )
 from icore_agent.contexts.agent.infrastructure.runtime import RedisAgentRunStore
-from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
+from icore_agent.contexts.files.infrastructure.persistence import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (
     add_documents,

@@ -22,7 +22,7 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnStatus
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.persistence.sessions import repository as search_repo
 from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers

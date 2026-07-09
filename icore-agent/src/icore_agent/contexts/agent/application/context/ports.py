@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.domain.memory import TurnMemoryContext
 
 AgentHistoryMessage = dict[str, Any]

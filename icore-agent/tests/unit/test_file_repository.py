@@ -7,8 +7,8 @@ from uuid import uuid4
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.files.models import FileAsset
-from icore_agent.infrastructure.persistence.files.sqlalchemy_repository import (
+from icore_agent.contexts.files.domain.models import FileAsset
+from icore_agent.contexts.files.infrastructure.persistence.sqlalchemy_repository import (
     SqlAlchemyFileRepository,
 )
 from icore_agent.infrastructure.persistence.sqlalchemy.models import Base

@@ -594,10 +594,6 @@ def test_http_interface_layer_is_split_by_business_domain():
             "schemas": {"auth.py", "billing.py", "lead.py", "project.py", "team.py"},
             "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
         },
-        "files": {
-            "schemas": {"files.py"},
-            "handlers": {"files.py"},
-        },
         "health": {
             "schemas": {"probe.py"},
             "handlers": {"probe.py"},
@@ -637,6 +633,23 @@ def test_http_interface_layer_is_split_by_business_domain():
     }
     assert {"chat.py", "runtime.py", "session.py", "transcribe.py"} <= {
         path.name for path in (agent_v1_dir / "schemas").glob("*.py")
+    }
+    files_v1_dir = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "contexts"
+        / "files"
+        / "interfaces"
+        / "http"
+        / "v1"
+    )
+    assert (files_v1_dir / "router.py").is_file()
+    assert {"files.py"} <= {
+        path.name for path in (files_v1_dir / "handlers").glob("*.py")
+    }
+    assert {"files.py"} <= {
+        path.name for path in (files_v1_dir / "schemas").glob("*.py")
     }
 
 

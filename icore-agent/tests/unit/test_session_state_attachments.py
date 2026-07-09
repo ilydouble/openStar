@@ -17,7 +17,7 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.turn import AgentTurnCommand, Turn, TurnStatus
-from icore_agent.domain.files.models import FileAsset
+from icore_agent.contexts.files.domain.models import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.contexts.agent.interfaces.http.v1.handlers.session import (
     _asset_mode,

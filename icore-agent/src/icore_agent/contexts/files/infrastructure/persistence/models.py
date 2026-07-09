@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..sqlalchemy.base import Base
+from icore_agent.infrastructure.persistence.sqlalchemy.base import Base
 
 FileUUIDType = UUID(as_uuid=False).with_variant(String(36), "sqlite")
 

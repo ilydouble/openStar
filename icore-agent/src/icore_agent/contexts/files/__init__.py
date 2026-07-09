@@ -1,0 +1,1 @@
+"""File asset bounded context."""

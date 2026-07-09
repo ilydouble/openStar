@@ -8,9 +8,11 @@ from contextlib import AbstractContextManager
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 
-from ..sqlalchemy.sync_session import sync_session_scope
+from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
+    sync_session_scope,
+)
 from .models import FileAssetRecord
 
 SessionScope = Callable[[], AbstractContextManager[Session]]

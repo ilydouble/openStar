@@ -26,7 +26,7 @@ from icore_agent.contexts.agent.application.turn import (
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.application.files import FileAssetService
+from icore_agent.contexts.files.application import FileAssetService
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage import UsageService
 from icore_agent.contexts.agent.domain.session import UserMessageItem

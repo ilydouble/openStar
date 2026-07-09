@@ -9,13 +9,13 @@ from typing import Protocol
 
 import pandas as pd
 
-from icore_agent.application.files import FileAssetNotFoundError
+from icore_agent.contexts.files.application import FileAssetNotFoundError
 from icore_agent.application.knowledge.parsers import (
     SUPPORTED_EXTENSIONS,
     parse_file,
 )
 from icore_agent.config import settings
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)

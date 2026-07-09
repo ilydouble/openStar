@@ -5,15 +5,18 @@ from __future__ import annotations
 from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
-from icore_agent.application.files import (
+from icore_agent.contexts.files.application import (
     ChecksumMismatchError,
     FileAssetNotFoundError,
     FileAssetService,
 )
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 
-from ...dependencies import account_service, file_asset_service
+from icore_agent.interfaces.http.v1.dependencies import (
+    account_service,
+    file_asset_service,
+)
 from ..schemas import (
     CompleteUploadRequest,
     DeleteFileResponse,

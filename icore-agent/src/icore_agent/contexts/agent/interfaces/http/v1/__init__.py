@@ -1,5 +1,1 @@
-"""Agent API domain."""
-
-from .router import router
-
-__all__ = ["router"]
+"""Agent HTTP v1 adapter package."""

@@ -9,7 +9,7 @@ from icore_agent.contexts.agent.application.tool.catalog import (
 from icore_agent.contexts.agent.domain.tool import (
     ToolExecutionContext,
 )
-from icore_agent.domain.files.models import FileAsset
+from icore_agent.contexts.files.domain.models import FileAsset
 
 
 def test_read_uploaded_file_definition_reads_owned_asset_by_uuid() -> None:

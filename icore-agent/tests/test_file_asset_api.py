@@ -7,9 +7,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from icore_agent.domain.files import FileAsset
+from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.interfaces.http.v1.files.handlers.files import (
+from icore_agent.contexts.files.interfaces.http.v1.handlers.files import (
     get_files_current_user,
     get_files_file_asset_service,
 )

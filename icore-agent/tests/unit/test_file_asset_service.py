@@ -7,13 +7,13 @@ from io import BytesIO
 
 import pytest
 
-from icore_agent.application.files.service import (
+from icore_agent.contexts.files.application.service import (
     ChecksumMismatchError,
     FileAssetService,
 )
 from icore_agent.domain.identifiers import uuid7 as shared_uuid7
-from icore_agent.domain.files.models import FileAsset
-from icore_agent.domain.files.uuid import uuid7
+from icore_agent.contexts.files.domain.models import FileAsset
+from icore_agent.contexts.files.domain.uuid import uuid7
 
 
 class MemoryFileRepository:

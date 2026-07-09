@@ -22,7 +22,7 @@ from icore_agent.contexts.agent.domain.session import (
     ToolFunction,
     UserMessageItem,
 )
-from icore_agent.domain.files.models import FileAsset
+from icore_agent.contexts.files.domain.models import FileAsset
 from icore_agent.contexts.agent.domain.turn import (
     AgentTurnCommand,
     Turn,

@@ -21,7 +21,7 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.tool import ToolChoice
-from icore_agent.domain.files.models import FileAsset
+from icore_agent.contexts.files.domain.models import FileAsset
 
 
 def test_dedupe_file_uuids_preserves_first_seen_order() -> None:

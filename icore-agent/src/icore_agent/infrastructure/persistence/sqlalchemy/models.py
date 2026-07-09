@@ -1,7 +1,9 @@
 """SQLAlchemy model registry imports."""
 
 # Import ORM models so Alembic sees them through Base.metadata.
-from ..files.models import FileAssetRecord as FileAssetRecord  # noqa: E402,F401
+from icore_agent.contexts.files.infrastructure.persistence.models import (  # noqa: E402,F401
+    FileAssetRecord as FileAssetRecord,
+)
 from ..organizations.models import Organization as Organization  # noqa: E402,F401
 from ..organizations.models import OrgMember as OrgMember  # noqa: E402,F401
 from ..projects.models import Project as Project  # noqa: E402,F401

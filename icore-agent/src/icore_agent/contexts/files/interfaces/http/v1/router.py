@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from ..envelope import ApiEnvelopeRoute
+from icore_agent.interfaces.http.v1.envelope import ApiEnvelopeRoute
 from .handlers import (
     complete_upload,
     create_download_url,

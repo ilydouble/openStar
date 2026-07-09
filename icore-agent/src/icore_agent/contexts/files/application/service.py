@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from icore_agent.domain.files import FileAsset, FileRepository, uuid7
+from icore_agent.contexts.files.domain import FileAsset, FileRepository, uuid7
 
 _CHECKSUM_RE = re.compile(r"^[0-9a-f]{64}$")
 

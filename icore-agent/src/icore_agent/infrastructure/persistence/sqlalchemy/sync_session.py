@@ -67,7 +67,9 @@ def reset_sync_engine() -> None:
 def ensure_user_schema() -> None:
     """Create account and file tables when running against ephemeral test databases."""
     if os.getenv("ICORE_TEST_SYNC_DATABASE_URL", "").strip():
-        from ..files.models import FileAssetRecord  # noqa: F401
+        from icore_agent.contexts.files.infrastructure.persistence.models import (  # noqa: F401
+            FileAssetRecord,
+        )
         from ..memory.models import UserMemoryFactRecord, UserMemoryProfileRecord  # noqa: F401
         from ..organizations.models import Organization, OrgMember  # noqa: F401
         from ..payment_event_models import ProcessedPaymentEvent  # noqa: F401

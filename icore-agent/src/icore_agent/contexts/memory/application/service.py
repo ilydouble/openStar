@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from icore_agent.application.usage.policy import current_timestamp
+from icore_agent.contexts.account.application.usage.policy import current_timestamp
 from icore_agent.contexts.memory.domain import (
     MemoryExtractionResult,
     MemoryFactCandidate,

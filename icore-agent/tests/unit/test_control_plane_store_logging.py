@@ -28,7 +28,7 @@ class CapturingLoggingClient(LoggingServiceClient):
 
 def _build_store(tmp_path, monkeypatch, *, debug: bool):
     """Build a store instance with deterministic code generation and captured logs."""
-    import icore_agent.infrastructure.control_plane.json_store as store_module
+    import icore_agent.contexts.account.infrastructure.control_plane.json_store as store_module
 
     logging_client = CapturingLoggingClient()
     monkeypatch.setattr(
@@ -45,7 +45,7 @@ def _build_store(tmp_path, monkeypatch, *, debug: bool):
         store_module,
         "log",
         get_logger(
-            "icore_agent.infrastructure.control_plane.json_store", client=logging_client),
+            "icore_agent.contexts.account.infrastructure.control_plane.json_store", client=logging_client),
     )
 
     return store_module.ControlPlaneStore(), logging_client

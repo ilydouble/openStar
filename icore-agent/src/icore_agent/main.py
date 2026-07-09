@@ -15,8 +15,14 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.contexts.account.application.usage.recording import (
+    buffer_litellm_usage_event,
+    build_litellm_usage_event,
+    resolve_litellm_user_id,
+)
+
 from .config import settings
-from .infrastructure.control_plane.json_store import control_plane_store
 from .interfaces.http.v1.dependencies import usage_service
 from .interfaces.http.v1.envelope import install_api_envelope
 from .interfaces.http.v1.router import include_api_routers
@@ -26,11 +32,6 @@ from .shared.http.middleware import (
     RequestIdMiddleware,
 )
 from .shared.logging.app_logger import get_logger
-from .application.usage.recording import (
-    buffer_litellm_usage_event,
-    build_litellm_usage_event,
-    resolve_litellm_user_id,
-)
 
 
 log = get_logger(__name__)
@@ -92,7 +93,7 @@ async def lifespan(_: FastAPI):
         model=settings.model_id,
     )
     if settings.import_json_users_on_startup:
-        from .infrastructure.persistence.users.json_import import import_legacy_users_from_store
+        from icore_agent.contexts.account.infrastructure.persistence.users.json_import import import_legacy_users_from_store
 
         imported = import_legacy_users_from_store(control_plane_store)
         if imported:

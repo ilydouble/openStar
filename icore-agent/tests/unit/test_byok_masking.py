@@ -1,5 +1,5 @@
-from icore_agent.application.account.byok import resolve_api_key_for_update
-from icore_agent.interfaces.http.v1.users.serializers import (
+from icore_agent.contexts.account.application.byok import resolve_api_key_for_update
+from icore_agent.contexts.account.interfaces.http.v1.users.serializers import (
     mask_api_key,
     serialize_byok,
 )

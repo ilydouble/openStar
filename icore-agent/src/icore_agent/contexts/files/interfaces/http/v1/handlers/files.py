@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from fastapi import Depends, Header, HTTPException
 
-from icore_agent.application.account import AccountService
+from icore_agent.contexts.account.application import AccountService
 from icore_agent.contexts.files.application import (
     ChecksumMismatchError,
     FileAssetNotFoundError,
     FileAssetService,
 )
 from icore_agent.contexts.files.domain import FileAsset
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 from icore_agent.interfaces.http.v1.dependencies import (
     account_service,

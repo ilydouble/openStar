@@ -6,7 +6,7 @@ import httpx
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 
 from icore_agent.config import settings
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.shared.audio_convert import AudioConversionError, prepare_audio_for_zai_asr
 from icore_agent.shared.logging.app_logger import get_logger
 

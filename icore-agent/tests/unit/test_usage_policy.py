@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from icore_agent.application.usage.policy import (
+from icore_agent.contexts.account.application.usage.policy import (
     admin_usage_overview,
     consume_quota,
     plan_usage_analytics,
     usage_key,
 )
-from icore_agent.application.usage.recording import (
+from icore_agent.contexts.account.application.usage.recording import (
     active_turn_usage_events,
     begin_turn_usage_capture,
     build_litellm_usage_event,
@@ -16,8 +16,8 @@ from icore_agent.application.usage.recording import (
     flush_turn_usage_capture,
     resolve_litellm_user_id,
 )
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import UserProfile
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.domain.user import UserProfile
 
 
 def test_usage_key_maps_v2_quota_resources():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from icore_agent.contexts.memory.application import policy
 from icore_agent.contexts.memory.application.consolidation import parse_extract_response
-from icore_agent.application.usage.policy import current_timestamp
+from icore_agent.contexts.account.application.usage.policy import current_timestamp
 from icore_agent.contexts.memory.domain import TurnMemoryContext, UserMemoryFact
 
 

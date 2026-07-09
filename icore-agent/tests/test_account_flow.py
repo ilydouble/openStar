@@ -112,7 +112,7 @@ def _register_trial_direct(
     name: str = "Trial User",
 ) -> dict:
     """在测试中绕过验证码和 IP 限流，直接向 store 注入验证码 + 清理 IP 记录后注册。"""
-    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+    from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 
     email = email or f"trial-{uuid4().hex[:8]}@example.com"
     code = "123456"
@@ -162,7 +162,7 @@ def test_email_login_persists_token_for_protected_routes(client: TestClient):
 
     code = "888888"
 
-    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+    from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -214,7 +214,7 @@ def test_email_login_unregistered_email_returns_english_message(client: TestClie
     email = f"missing-{uuid4().hex[:8]}@example.com"
     code = "654321"
 
-    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+    from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -287,10 +287,10 @@ def test_send_register_verification_code_rejects_registered_email(client: TestCl
     )
 
 
-@patch("icore_agent.infrastructure.control_plane.json_store.settings.debug", True)
-@patch("icore_agent.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
+@patch("icore_agent.contexts.account.infrastructure.control_plane.json_store.settings.debug", True)
+@patch("icore_agent.contexts.account.infrastructure.control_plane.json_store._send_verification_email", return_value=False)
 def test_send_verification_code_falls_back_in_debug_when_email_delivery_fails(mock_send, client: TestClient):
-    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+    from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 
     with control_plane_store._lock:
         data = control_plane_store._load()
@@ -422,7 +422,7 @@ def _grant_platform_admin_role(email: str) -> None:
     from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
         sync_session_scope,
     )
-    from icore_agent.infrastructure.persistence.users.sqlalchemy_repository import (
+    from icore_agent.contexts.account.infrastructure.persistence.users.sqlalchemy_repository import (
         SqlAlchemyUserRepository,
     )
 

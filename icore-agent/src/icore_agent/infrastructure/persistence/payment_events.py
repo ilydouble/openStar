@@ -8,12 +8,14 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from icore_agent.application.usage.policy import current_timestamp
-from icore_agent.domain.account.plans import Plan
+from icore_agent.contexts.account.application.usage.policy import current_timestamp
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.infrastructure.persistence.users.sqlalchemy_repository import (
+    SqlAlchemyUserRepository,
+)
 
 from .payment_event_models import ProcessedPaymentEvent
 from .sqlalchemy.sync_session import sync_session_scope
-from .users.sqlalchemy_repository import SqlAlchemyUserRepository
 
 
 class ControlPlaneEventStore(Protocol):

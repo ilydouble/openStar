@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import icore_agent.infrastructure.control_plane.adapters as adapters_module
-from icore_agent.infrastructure.control_plane.adapters import (
+import icore_agent.contexts.account.infrastructure.control_plane.adapters as adapters_module
+from icore_agent.contexts.account.infrastructure.control_plane.adapters import (
     ControlPlaneBillingRepository,
     ControlPlaneBillingSummaryRepository,
     ControlPlaneIdentityRepository,

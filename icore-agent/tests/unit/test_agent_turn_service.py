@@ -29,7 +29,7 @@ from icore_agent.contexts.agent.domain.turn import (
     TurnEventKind,
     TurnStatus,
 )
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 
 def test_classify_turn_intent_classifies_task_keywords() -> None:

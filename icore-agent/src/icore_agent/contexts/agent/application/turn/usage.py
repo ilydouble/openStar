@@ -9,7 +9,7 @@ from icore_agent.contexts.agent.domain.loop import (
     ModelStepResult,
     ModelTextDelta,
 )
-from icore_agent.application.usage.recording import (
+from icore_agent.contexts.account.application.usage.recording import (
     begin_turn_usage_capture,
     end_turn_usage_capture,
     flush_turn_usage_capture,

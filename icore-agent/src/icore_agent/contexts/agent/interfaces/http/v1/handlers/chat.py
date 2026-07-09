@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from icore_agent.contexts.agent.application import AgentTurnService
 from icore_agent.contexts.agent.application.runtime import AgentRunConflict
 from icore_agent.contexts.agent.domain.turn import AgentTurnCommand
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 from icore_agent.interfaces.http.v1.dependencies import (
     get_agent_turn_service,

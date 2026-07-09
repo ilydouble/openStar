@@ -6,7 +6,7 @@ from fastapi import Depends, File, Form, HTTPException, Query, UploadFile
 
 from icore_agent.application.knowledge import SUPPORTED_EXTENSIONS
 from icore_agent.application.knowledge.service import KnowledgeService
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.shared.logging.app_logger import get_logger
 
 from ...dependencies import get_current_user, get_knowledge_service

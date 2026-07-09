@@ -74,11 +74,11 @@ def ensure_user_schema() -> None:
             UserMemoryFactRecord,
             UserMemoryProfileRecord,
         )
-        from ..organizations.models import Organization, OrgMember  # noqa: F401
+        from icore_agent.contexts.account.infrastructure.persistence.organizations.models import Organization, OrgMember  # noqa: F401
         from ..payment_event_models import ProcessedPaymentEvent  # noqa: F401
-        from ..projects.models import Project, ProjectSession  # noqa: F401
+        from icore_agent.contexts.account.infrastructure.persistence.projects.models import Project, ProjectSession  # noqa: F401
         from ..sessions.models import ChatSession  # noqa: F401
-        from ..users.models import User  # noqa: F401
+        from icore_agent.contexts.account.infrastructure.persistence.users.models import User  # noqa: F401
 
         Base.metadata.create_all(get_sync_engine())
 

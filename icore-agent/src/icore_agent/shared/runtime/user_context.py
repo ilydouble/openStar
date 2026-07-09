@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 _runtime_user: ContextVar[AuthenticatedUser | None] = ContextVar(
     "runtime_user", default=None)

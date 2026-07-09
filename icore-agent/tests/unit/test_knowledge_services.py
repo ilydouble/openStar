@@ -8,7 +8,7 @@ import pytest
 from icore_agent.application.knowledge.parsers import SUPPORTED_EXTENSIONS, parse_file
 from icore_agent.application.knowledge.service import KnowledgeService
 from icore_agent.application.knowledge.text import chunk_text
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 
 def test_chunk_text_splits_on_boundaries():

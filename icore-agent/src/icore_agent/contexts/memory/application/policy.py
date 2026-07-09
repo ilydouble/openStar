@@ -6,7 +6,7 @@ import math
 import re
 from typing import Any
 
-from icore_agent.application.usage.policy import current_timestamp
+from icore_agent.contexts.account.application.usage.policy import current_timestamp
 from icore_agent.contexts.memory.domain import TurnMemoryContext, UserMemoryFact
 
 PROFILE_MAX_KEYS = 8

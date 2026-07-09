@@ -28,7 +28,7 @@ from icore_agent.contexts.agent.application.turn import (
 )
 from icore_agent.contexts.files.application import FileAssetService
 from icore_agent.contexts.memory.application import UserMemoryService
-from icore_agent.application.usage import UsageService
+from icore_agent.contexts.account.application.usage import UsageService
 from icore_agent.contexts.agent.domain.session import UserMessageItem
 from icore_agent.contexts.agent.domain.turn import (
     AgentTurnCommand,

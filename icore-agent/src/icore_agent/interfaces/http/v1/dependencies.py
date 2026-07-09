@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import Depends, Header, HTTPException
 
-from icore_agent.application.account import AccountService
-from icore_agent.application.billing import BillingService
+from icore_agent.contexts.account.application import AccountService
+from icore_agent.contexts.account.application.billing import BillingService
 from icore_agent.contexts.agent.application import (
     AgentRuntime,
     AgentSessionService,
@@ -14,15 +14,15 @@ from icore_agent.contexts.agent.application import (
 from icore_agent.contexts.files.application import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
 from icore_agent.contexts.memory.application import UserMemoryService
-from icore_agent.application.usage import UsageService
-from icore_agent.application.workspace import WorkspaceMetadataService
+from icore_agent.contexts.account.application.usage import UsageService
+from icore_agent.contexts.account.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
-from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.infrastructure.control_plane import (
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.infrastructure.control_plane import (
     ControlPlaneLeadRepository,
     ControlPlaneVerificationRepository,
 )
-from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 from icore_agent.contexts.agent.infrastructure.chat_completions import (
     create_chat_completions_model_client,
 )
@@ -35,7 +35,7 @@ from icore_agent.infrastructure.memory.chroma_store import (
     list_documents,
 )
 from icore_agent.contexts.memory.infrastructure.persistence import SqlAlchemyUserMemoryRepository
-from icore_agent.infrastructure.persistence.users.postgres_repositories import (
+from icore_agent.contexts.account.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,
     PostgresIdentityRepository,

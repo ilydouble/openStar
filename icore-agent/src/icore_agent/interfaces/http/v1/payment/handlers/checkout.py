@@ -2,8 +2,8 @@
 
 from fastapi import Depends
 
-from icore_agent.application.billing import BillingService
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.application.billing import BillingService
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 from ...dependencies import get_billing_service, get_current_user
 from ..schemas.checkout import CheckoutSessionResponse, CreateCheckoutSessionRequest

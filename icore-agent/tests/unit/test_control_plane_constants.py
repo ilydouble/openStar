@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import asdict
 
-import icore_agent.domain.account.plans as constants
-from icore_agent.domain.account.plans import Plan, PlanLimits, Usage
+import icore_agent.contexts.account.domain.account.plans as constants
+from icore_agent.contexts.account.domain.account.plans import Plan, PlanLimits, Usage
 
 os.environ["DEBUG"] = "false"
 

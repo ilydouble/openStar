@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from icore_agent.application.usage.policy import (
+from icore_agent.contexts.account.application.usage.policy import (
     default_usage,
     ensure_current_usage,
     quota_period_start,
 )
-from icore_agent.application.usage.service import UsageService
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import UserProfile
+from icore_agent.contexts.account.application.usage.service import UsageService
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.domain.user import UserProfile
 
 
 def _user_profile(user_id: str = "u1") -> UserProfile:

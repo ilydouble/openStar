@@ -590,10 +590,6 @@ def test_http_interface_layer_is_split_by_business_domain():
     assert (v1_dir / "router.py").is_file()
 
     expected_domains = {
-        "account": {
-            "schemas": {"auth.py", "billing.py", "lead.py", "project.py", "team.py"},
-            "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
-        },
         "health": {
             "schemas": {"probe.py"},
             "handlers": {"probe.py"},
@@ -615,7 +611,25 @@ def test_http_interface_layer_is_split_by_business_domain():
             layer_dir = domain_dir / layer
             assert (layer_dir / "__init__.py").is_file()
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
-    assert (v1_dir / "users" / "serializers.py").is_file()
+
+    account_v1_dir = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "contexts"
+        / "account"
+        / "interfaces"
+        / "http"
+        / "v1"
+    )
+    assert (account_v1_dir / "router.py").is_file()
+    assert {"auth.py", "billing.py", "lead.py", "memory.py", "project.py", "team.py"} <= {
+        path.name for path in (account_v1_dir / "schemas").glob("*.py")
+    }
+    assert {"auth.py", "billing.py", "lead.py", "memory.py", "profile.py", "project.py", "team.py"} <= {
+        path.name for path in (account_v1_dir / "handlers").glob("*.py")
+    }
+    assert (account_v1_dir / "users" / "serializers.py").is_file()
 
     agent_v1_dir = (
         AGENT_ROOT
@@ -1034,13 +1048,15 @@ def test_fastapi_app_uses_http_interface_router_composition_entrypoint():
 def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
     """Keep domain rules, infrastructure adapters, and shared helpers separated."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
+    account_context = package_dir / "contexts" / "account"
+    account_persistence = account_context / "infrastructure" / "persistence"
 
-    assert (package_dir / "domain" / "account" / "plans.py").is_file()
-    assert (package_dir / "domain" / "user" / "user_repository.py").is_file()
-    assert (package_dir / "domain" / "user" / "models.py").is_file()
+    assert (account_context / "domain" / "account" / "plans.py").is_file()
+    assert (account_context / "domain" / "user" /
+            "user_repository.py").is_file()
+    assert (account_context / "domain" / "user" / "models.py").is_file()
     assert (
-        package_dir / "infrastructure" / "persistence" / "users" /
-        "sqlalchemy_repository.py"
+        account_persistence / "users" / "sqlalchemy_repository.py"
     ).is_file()
     assert (package_dir / "shared" / "runtime" / "user_context.py").is_file()
     assert (package_dir / "shared" / "auth" / "jwt.py").is_file()
@@ -1050,10 +1066,10 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
         "persistence" / "sqlalchemy" / "sync_session.py"
     ).is_file()
     assert not (
-        package_dir / "infrastructure" / "persistence" / "users" / "repository.py"
+        account_persistence / "users" / "repository.py"
     ).exists()
     assert (
-        package_dir / "infrastructure" / "control_plane" / "json_store.py"
+        account_context / "infrastructure" / "control_plane" / "json_store.py"
     ).is_file()
     assert (
         package_dir / "infrastructure" / "memory" / "conversation.py"
@@ -1064,7 +1080,7 @@ def test_domain_user_repository_is_abstract_not_sqlalchemy_bound():
     """Keep the domain repository free of concrete persistence and API serialization."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     repository = (
-        package_dir / "domain" / "user" / "user_repository.py"
+        package_dir / "contexts" / "account" / "domain" / "user" / "user_repository.py"
     ).read_text(encoding="utf-8")
 
     assert "Protocol" in repository
@@ -1078,15 +1094,14 @@ def test_domain_user_repository_is_abstract_not_sqlalchemy_bound():
 def test_http_v1_owns_user_serialization():
     """Keep user HTTP payload formatting out of domain and persistence layers."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
+    account_context = package_dir / "contexts" / "account"
     serializer = (
-        package_dir / "interfaces" / "http" / "v1" /
-        "users" / "serializers.py"
+        account_context / "interfaces" / "http" / "v1" / "users" / "serializers.py"
     ).read_text(encoding="utf-8")
     auth_schema = (
-        package_dir / "interfaces" / "http" / "v1" /
-        "account" / "schemas" / "auth.py"
+        account_context / "interfaces" / "http" / "v1" / "schemas" / "auth.py"
     ).read_text(encoding="utf-8")
-    persistence_dir = package_dir / "infrastructure" / "persistence" / "users"
+    persistence_dir = account_context / "infrastructure" / "persistence" / "users"
 
     assert "serialize_user_profile" in serializer
     assert "UserProfile" in serializer
@@ -1098,15 +1113,15 @@ def test_http_v1_owns_user_serialization():
 def test_usage_policy_and_user_import_live_in_application_layer():
     """Keep quota rules and legacy import mapping out of repositories."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
-    usage_policy = package_dir / "application" / "usage" / "policy.py"
-    user_import = package_dir / "application" / "user_import" / "service.py"
+    account_context = package_dir / "contexts" / "account"
+    usage_policy = account_context / "application" / "usage" / "policy.py"
+    user_import = account_context / "application" / "user_import" / "service.py"
     postgres_repositories = (
-        package_dir / "infrastructure" / "persistence" /
+        account_context / "infrastructure" / "persistence" /
         "users" / "postgres_repositories.py"
     ).read_text(encoding="utf-8")
     json_import = (
-        package_dir / "infrastructure" / "persistence" /
-        "users" / "json_import.py"
+        account_context / "infrastructure" / "persistence" / "users" / "json_import.py"
     ).read_text(encoding="utf-8")
 
     assert usage_policy.is_file()

@@ -34,7 +34,7 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.turn import Turn, TurnError, TurnEvent, TurnStatus
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 
 def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:

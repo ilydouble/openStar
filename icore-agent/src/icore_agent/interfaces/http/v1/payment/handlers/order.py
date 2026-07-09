@@ -2,7 +2,7 @@
 
 from fastapi import Depends
 
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 from ...dependencies import get_current_user
 

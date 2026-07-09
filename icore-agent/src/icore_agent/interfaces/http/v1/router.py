@@ -3,9 +3,9 @@
 from fastapi import FastAPI
 
 from icore_agent.contexts.agent.interfaces.http.v1.router import router as agent_router
+from icore_agent.contexts.account.interfaces.http.v1.router import router as account_router
 from icore_agent.contexts.files.interfaces.http.v1.router import router as files_router
 
-from .account import router as account_router
 from .envelope import install_api_envelope
 from .health import router as health_router
 from .knowledge import router as knowledge_router

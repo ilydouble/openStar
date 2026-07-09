@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from icore_agent.config import Settings
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.shared.runtime.user_context import clear_runtime_user, set_runtime_user
 
 

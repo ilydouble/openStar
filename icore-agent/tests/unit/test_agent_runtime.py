@@ -17,7 +17,7 @@ from icore_agent.contexts.agent.application.runtime import (
     QueuedAgentInput,
 )
 from icore_agent.contexts.agent.domain.turn import TurnEvent
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 
 @pytest.mark.asyncio

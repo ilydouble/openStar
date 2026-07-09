@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from icore_agent.application.usage.policy import default_usage
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import UserProfile
+from icore_agent.contexts.account.application.usage.policy import default_usage
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.domain.user import UserProfile
 from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
     ensure_user_schema,
     sync_session_scope,
 )
-from icore_agent.infrastructure.persistence.users.sqlalchemy_repository import (
+from icore_agent.contexts.account.infrastructure.persistence.users.sqlalchemy_repository import (
     SqlAlchemyUserRepository,
 )
 

@@ -6,7 +6,7 @@ Status: draft for discussion. This document records the phase 1 WeChat Pay Nativ
 
 The backend already keeps Go microservices under `icore-agent/src/icore_agent/services/`, with `gateway`, `logging-service`, `storage-service`, and shared helpers in `lib-go`. The new payment service should follow the same location and module style.
 
-Current account plans live in `icore-agent/src/icore_agent/domain/account/plans.py`:
+Current account plans live in `icore-agent/src/icore_agent/contexts/account/domain/account/plans.py`:
 
 - `trial`: free, 10 tasks/month
 - `pro`: USD 29/month, 200 tasks/month
@@ -14,7 +14,7 @@ Current account plans live in `icore-agent/src/icore_agent/domain/account/plans.
 - `premium`: USD 299/month, 5000 tasks/month
 - `byok`: USD 9/month, unlimited tasks with user-owned API key
 
-The current Python payment API is still a mock/Stripe-shaped facade under `interfaces/http/v1/payment`, and `application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow. The gateway should enforce runtime JWT authentication for payment HTTP routes, while the Python backend remains responsible for issuing tokens, account entitlements, and plan/quota application.
+The current Python payment API is still a mock/Stripe-shaped facade under `interfaces/http/v1/payment`, and `contexts/account/application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow. The gateway should enforce runtime JWT authentication for payment HTTP routes, while the Python backend remains responsible for issuing tokens, account entitlements, and plan/quota application.
 
 ## Source Review
 

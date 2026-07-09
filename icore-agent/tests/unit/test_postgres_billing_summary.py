@@ -3,10 +3,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
-from icore_agent.application.usage.policy import quota_period_start
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import UserProfile
-from icore_agent.infrastructure.persistence.users.postgres_repositories import (
+from icore_agent.contexts.account.application.usage.policy import quota_period_start
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.domain.user import UserProfile
+from icore_agent.contexts.account.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingSummaryRepository,
 )
 
@@ -45,10 +45,10 @@ def test_get_plan_summary_returns_v2_quota_shape():
         yield session
 
     with patch(
-        "icore_agent.infrastructure.persistence.users.postgres_repositories.sync_session_scope",
+        "icore_agent.contexts.account.infrastructure.persistence.users.postgres_repositories.sync_session_scope",
         fake_scope,
     ), patch(
-        "icore_agent.infrastructure.persistence.users.postgres_repositories.SqlAlchemyUserRepository",
+        "icore_agent.contexts.account.infrastructure.persistence.users.postgres_repositories.SqlAlchemyUserRepository",
         return_value=repo_mock,
     ):
         summary = PostgresBillingSummaryRepository(

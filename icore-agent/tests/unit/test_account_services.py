@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from icore_agent.application.account.service import AccountService
-from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.user import AuthenticatedUser, UserProfile
+from icore_agent.contexts.account.application.service import AccountService
+from icore_agent.contexts.account.domain.account.plans import Plan
+from icore_agent.contexts.account.domain.user import AuthenticatedUser, UserProfile
 
 
 def _user(user_id: str = "u1", email: str = "trial@example.com") -> UserProfile:

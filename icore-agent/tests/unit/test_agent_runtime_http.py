@@ -9,7 +9,7 @@ from icore_agent.contexts.agent.application.runtime import (
     AgentRunControlResult,
     AgentRunNotActive,
 )
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.contexts.agent.interfaces.http.v1.handlers.runtime import (
     abort_session_run,
     follow_up_session_run,

@@ -17,12 +17,12 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from icore_agent.config import settings
+from icore_agent.contexts.account.application.workspace import WorkspaceMetadataService
+from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
+from icore_agent.contexts.account.infrastructure.persistence.users.postgres_repositories import PostgresIdentityRepository
 from icore_agent.shared.logging.app_logger import get_logger
 
-from ....config import settings
-from ....application.workspace import WorkspaceMetadataService
-from ....infrastructure.control_plane.json_store import control_plane_store
-from ....infrastructure.persistence.users.postgres_repositories import PostgresIdentityRepository
 from ...auth.jwt import JWTValidationError, verify_access_token
 
 log = get_logger(__name__)

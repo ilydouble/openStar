@@ -7,8 +7,9 @@ from typing import Any
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from icore_agent.contexts.account.infrastructure.persistence.users.models import JsonObject
+
 from .sqlalchemy.base import Base
-from .users.models import JsonObject
 
 
 class ProcessedPaymentEvent(Base):

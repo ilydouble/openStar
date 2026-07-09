@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException
 
 from icore_agent.contexts.agent.application import AgentTurnService
 from icore_agent.contexts.agent.application.runtime import AgentRunNotActive
-from icore_agent.domain.user import AuthenticatedUser
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 from icore_agent.interfaces.http.v1.dependencies import (
     get_agent_turn_service,

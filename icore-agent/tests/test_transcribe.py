@@ -37,7 +37,7 @@ def _register_trial_direct(
     email: str | None = None,
     name: str = "Trial User",
 ) -> dict:
-    from icore_agent.infrastructure.control_plane.json_store import control_plane_store
+    from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 
     email = email or f"trial-{uuid4().hex[:8]}@example.com"
     code = "123456"

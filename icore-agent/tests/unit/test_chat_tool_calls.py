@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
     SessionItemStatus,
@@ -19,7 +19,7 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnEventKind, TurnStatus
+from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnEventKind, TurnStatus
 from icore_agent.infrastructure.persistence.sessions.models import (
     ChatSessionEvent,
     ChatSessionItem,

@@ -33,7 +33,7 @@ def test_wrap_success_response_preserves_background_tasks() -> None:
 @pytest.mark.asyncio
 async def test_finalize_session_schedules_background_extract() -> None:
     """Finalize should return immediately and schedule extraction as a background task."""
-    from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
+    from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers
 
     user = MagicMock(public_id="user-1")
     agent_session = MagicMock()
@@ -65,7 +65,7 @@ async def test_finalize_session_schedules_background_extract() -> None:
 @pytest.mark.asyncio
 async def test_clear_session_schedules_background_extract() -> None:
     """Clear session should snapshot context, delete immediately, and schedule extract."""
-    from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
+    from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers
 
     user = MagicMock(public_id="user-1")
     agent_session = MagicMock()

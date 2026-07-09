@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.domain.agent.prompt import build_base_instructions
+from icore_agent.contexts.agent.domain.prompt import build_base_instructions
 from icore_agent.application.memory import UserMemoryService
 from icore_agent.application.usage.policy import current_timestamp, default_usage
 from icore_agent.domain.account.plans import Plan

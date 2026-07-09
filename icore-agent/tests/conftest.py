@@ -25,7 +25,7 @@ def use_in_memory_agent_runtime(monkeypatch):
         "icore_agent.interfaces.http.v1.dependencies")
     if dependencies is None:
         return
-    from icore_agent.application.agent.runtime import (
+    from icore_agent.contexts.agent.application.runtime import (
         AgentRuntime,
         InMemoryAgentRunStore,
     )

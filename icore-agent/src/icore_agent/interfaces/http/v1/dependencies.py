@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException
 
 from icore_agent.application.account import AccountService
 from icore_agent.application.billing import BillingService
-from icore_agent.application.agent import (
+from icore_agent.contexts.agent.application import (
     AgentRuntime,
     AgentSessionService,
     AgentTurnService,
@@ -23,10 +23,10 @@ from icore_agent.infrastructure.control_plane import (
     ControlPlaneVerificationRepository,
 )
 from icore_agent.infrastructure.control_plane.json_store import control_plane_store
-from icore_agent.infrastructure.agent.chat_completions import (
+from icore_agent.contexts.agent.infrastructure.chat_completions import (
     create_chat_completions_model_client,
 )
-from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
+from icore_agent.contexts.agent.infrastructure.runtime import RedisAgentRunStore
 from icore_agent.infrastructure.persistence.files import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
 from icore_agent.infrastructure.memory.chroma_store import (

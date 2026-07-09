@@ -9,7 +9,7 @@ from contextlib import suppress
 
 from fastapi.responses import StreamingResponse
 
-from icore_agent.domain.agent.turn import (
+from icore_agent.contexts.agent.domain.turn import (
     Turn,
     TurnError,
     TurnEvent,

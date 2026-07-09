@@ -8,9 +8,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from icore_agent.domain.agent.loop import ModelStepResult
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import AgentMessageItem
+from icore_agent.contexts.agent.domain.loop import ModelStepResult
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.session import AgentMessageItem
 from icore_agent.main import app
 
 
@@ -360,11 +360,11 @@ def test_can_update_byok_and_read_plan_summary(client: TestClient):
     assert me_payload["byok"]["api_key"] == "****-key"
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.session.memory")
 def test_can_fetch_session_state(mock_memory, client: TestClient):
     user_payload = _register_trial_direct(client)
     headers = {"Authorization": f"Bearer {user_payload['access_token']}"}
-    from icore_agent.application.agent import AgentSessionService
+    from icore_agent.contexts.agent.application import AgentSessionService
 
     AgentSessionService().ensure_owned_session(
         "demo-session",

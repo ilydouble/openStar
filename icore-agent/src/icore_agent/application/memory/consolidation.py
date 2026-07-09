@@ -9,7 +9,7 @@ from typing import Any
 import litellm
 
 from icore_agent.config import settings
-from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.contexts.agent.domain import ChatCompletionRole
 from icore_agent.domain.memory import MemoryExtractionResult, MemoryFactCandidate
 from icore_agent.shared.logging.app_logger import get_logger
 

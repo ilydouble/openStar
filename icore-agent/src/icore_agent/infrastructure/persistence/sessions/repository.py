@@ -9,9 +9,9 @@ from typing import Any
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import SessionItem
-from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
+from icore_agent.contexts.agent.domain import ChatCompletionRole
+from icore_agent.contexts.agent.domain.session import SessionItem
+from icore_agent.contexts.agent.domain.turn import Turn, TurnError, TurnEvent, TurnStatus
 
 from .models import ChatSession, ChatSessionEvent, ChatSessionItem, ChatTurn
 

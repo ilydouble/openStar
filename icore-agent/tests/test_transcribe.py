@@ -66,8 +66,8 @@ def _trial_headers(client: ASGISyncTestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {payload['access_token']}"}
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.prepare_audio_for_zai_asr")
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe._zai_transcribe", new_callable=AsyncMock)
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.prepare_audio_for_zai_asr")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe._zai_transcribe", new_callable=AsyncMock)
 def test_transcribe_converts_webm_before_zai(mock_zai, mock_prepare, client):
     mock_prepare.return_value = (b"RIFFwav", "speech.wav", "audio/wav")
     mock_zai.return_value = "hello world"
@@ -85,8 +85,8 @@ def test_transcribe_converts_webm_before_zai(mock_zai, mock_prepare, client):
     assert mock_zai.await_args.kwargs["mime"] == "audio/wav"
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.prepare_audio_for_zai_asr")
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe._zai_transcribe", new_callable=AsyncMock)
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.prepare_audio_for_zai_asr")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe._zai_transcribe", new_callable=AsyncMock)
 def test_transcribe_zai_returns_text(mock_zai, mock_prepare, client):
     mock_zai.return_value = "hello world"
     mock_prepare.return_value = (b"RIFFwav", "speech.wav", "audio/wav")
@@ -104,15 +104,15 @@ def test_transcribe_zai_returns_text(mock_zai, mock_prepare, client):
     assert call_kw["language"] == "zh"
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.settings")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.settings")
 def test_zai_transcribe_url_uses_configured_base(mock_settings):
-    from icore_agent.interfaces.http.v1.agent.handlers.transcribe import _zai_transcribe_url
+    from icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe import _zai_transcribe_url
 
     mock_settings.zai_base_url = "https://open.bigmodel.cn/api/paas/v4/"
     assert _zai_transcribe_url() == "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
 
 
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.settings")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.settings")
 def test_zai_transcribe_requires_api_key(mock_settings, client):
     mock_settings.zai_api_key = ""
     headers = _trial_headers(client)
@@ -126,9 +126,9 @@ def test_zai_transcribe_requires_api_key(mock_settings, client):
 
 
 @pytest.mark.asyncio
-@patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.settings")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.settings")
 async def test_zai_transcribe_calls_glm_asr_endpoint(mock_settings):
-    from icore_agent.interfaces.http.v1.agent.handlers.transcribe import _zai_transcribe
+    from icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe import _zai_transcribe
 
     mock_settings.zai_api_key = "sk-test"
     mock_settings.zai_base_url = "https://open.bigmodel.cn/api/paas/v4/"
@@ -140,7 +140,7 @@ async def test_zai_transcribe_calls_glm_asr_endpoint(mock_settings):
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_resp)
 
-    with patch("icore_agent.interfaces.http.v1.agent.handlers.transcribe.httpx.AsyncClient") as mock_client_cls:
+    with patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.transcribe.httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
         mock_client_cls.return_value.__aexit__.return_value = None
 

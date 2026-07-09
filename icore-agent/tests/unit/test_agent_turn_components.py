@@ -7,21 +7,21 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent.turn import (
+from icore_agent.contexts.agent.application.turn import (
     AgentTurnRunnerFactory,
     TurnLifecycle,
     TurnPersistence,
     TurnTranscriptRecorder,
     TurnUsageRecorder,
 )
-from icore_agent.domain.agent.context import (
+from icore_agent.contexts.agent.domain.context import (
     AgentFileAttachment,
     AgentImageAttachment,
 )
-from icore_agent.domain.agent.turn import AgentTurnCommand
-from icore_agent.domain.agent.loop import ModelStepResult
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.turn import AgentTurnCommand
+from icore_agent.contexts.agent.domain.loop import ModelStepResult
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
     SessionItemStatus,
@@ -33,7 +33,7 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnError, TurnEvent, TurnStatus
+from icore_agent.contexts.agent.domain.turn import Turn, TurnError, TurnEvent, TurnStatus
 from icore_agent.domain.user import AuthenticatedUser
 
 
@@ -181,11 +181,11 @@ def test_turn_usage_recorder_handles_quota_and_model_usage(monkeypatch) -> None:
     recorder.record_attachment_quota(command, context)
     recorder.consume_task(command)
     monkeypatch.setattr(
-        "icore_agent.application.agent.turn.usage.settings",
+        "icore_agent.contexts.agent.application.turn.usage.settings",
         StubSettings(),
     )
     monkeypatch.setattr(
-        "icore_agent.application.agent.turn.usage.token_counter",
+        "icore_agent.contexts.agent.application.turn.usage.token_counter",
         lambda **kwargs: 3,
     )
     recorder.record_estimated_turn_usage(

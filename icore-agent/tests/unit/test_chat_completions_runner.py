@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain import ChatCompletionRole
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ToolCallItem,
     ToolCallResult,
@@ -18,14 +18,14 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
-from icore_agent.domain.agent.loop import (
+from icore_agent.contexts.agent.domain.tool import ToolChoice, ToolDefinition
+from icore_agent.contexts.agent.domain.loop import (
     ModelStepResult,
     ModelToolCallCompleted,
     ModelToolCallDelta,
     ModelToolCallStarted,
 )
-from icore_agent.infrastructure.agent.chat_completions import (
+from icore_agent.contexts.agent.infrastructure.chat_completions import (
     ChatCompletionsModelClient,
     render_chat_completions_messages,
 )
@@ -64,7 +64,7 @@ async def test_chat_completions_model_client_samples_once_without_running_tools(
         }
 
     monkeypatch.setattr(
-        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
         fake_completion,
     )
     tool_definition = _tool_definition()
@@ -132,7 +132,7 @@ async def test_chat_completions_model_client_collects_streaming_deltas(
         return chunks()
 
     monkeypatch.setattr(
-        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
         fake_completion,
     )
     client = ChatCompletionsModelClient(
@@ -197,7 +197,7 @@ async def test_chat_completions_model_client_streams_tool_call_deltas(
         return chunks()
 
     monkeypatch.setattr(
-        "icore_agent.infrastructure.agent.chat_completions.runner.litellm.acompletion",
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
         fake_completion,
     )
     client = ChatCompletionsModelClient(

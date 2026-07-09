@@ -23,7 +23,7 @@ import litellm
 import redis.asyncio as aioredis
 
 from icore_agent.config import settings
-from icore_agent.domain.agent import ChatCompletionRole
+from icore_agent.contexts.agent.domain import ChatCompletionRole
 from icore_agent.shared.logging.app_logger import get_logger
 
 log = get_logger(__name__)

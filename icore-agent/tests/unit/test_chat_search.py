@@ -9,8 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi.responses import StreamingResponse
 
-from icore_agent.application.agent.session import AgentSessionService
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.application.session import AgentSessionService
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     SessionItemStatus,
     ToolCallItem,
@@ -21,14 +21,14 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn, TurnEvent, TurnStatus
+from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnStatus
 from icore_agent.domain.files import FileAsset
 from icore_agent.domain.user import AuthenticatedUser
 from icore_agent.infrastructure.persistence.sessions import repository as search_repo
-from icore_agent.interfaces.http.v1.agent.handlers import session as session_handlers
-from icore_agent.interfaces.http.v1.agent.handlers.chat import chat
-from icore_agent.interfaces.http.v1.agent.handlers.session import _session_attachment_refs
-from icore_agent.interfaces.http.v1.agent.schemas.chat import ChatRequest, ChatResponse
+from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers
+from icore_agent.contexts.agent.interfaces.http.v1.handlers.chat import chat
+from icore_agent.contexts.agent.interfaces.http.v1.handlers.session import _session_attachment_refs
+from icore_agent.contexts.agent.interfaces.http.v1.schemas.chat import ChatRequest, ChatResponse
 
 
 def test_search_user_sessions_empty_query_returns_no_results() -> None:

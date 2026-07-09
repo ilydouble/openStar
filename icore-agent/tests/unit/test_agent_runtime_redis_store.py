@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent.runtime import AgentRunRecord
-from icore_agent.infrastructure.agent.runtime import RedisAgentRunStore
+from icore_agent.contexts.agent.application.runtime import AgentRunRecord
+from icore_agent.contexts.agent.infrastructure.runtime import RedisAgentRunStore
 
 
 @pytest.mark.asyncio
@@ -21,7 +21,7 @@ async def test_redis_agent_run_store_coordinates_active_run(monkeypatch) -> None
         return redis
 
     monkeypatch.setattr(
-        "icore_agent.infrastructure.agent.runtime.redis_store.aioredis.from_url",
+        "icore_agent.contexts.agent.infrastructure.runtime.redis_store.aioredis.from_url",
         fake_from_url,
     )
     store = RedisAgentRunStore(

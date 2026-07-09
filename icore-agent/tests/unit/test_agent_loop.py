@@ -7,21 +7,21 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent.loop import (
+from icore_agent.contexts.agent.application.loop import (
     AgentLoop,
     AgentLoopAborted,
     AgentLoopError,
     AgentLoopRequest,
 )
-from icore_agent.domain.agent.loop import (
+from icore_agent.contexts.agent.domain.loop import (
     ModelToolCallCompleted,
     ModelToolCallDelta,
     ModelToolCallStarted,
     ModelTextDelta,
     ModelStepResult,
 )
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     SessionItem,
     ToolCallItem,
@@ -32,8 +32,8 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
-from icore_agent.domain.agent.turn import Turn, TurnEventKind
+from icore_agent.contexts.agent.domain.tool import ToolChoice, ToolDefinition
+from icore_agent.contexts.agent.domain.turn import Turn, TurnEventKind
 
 
 @pytest.mark.asyncio

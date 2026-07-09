@@ -9,20 +9,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from icore_agent.domain.agent.prompt import (
+from icore_agent.contexts.agent.domain.prompt import (
     PromptEnvelope,
     build_base_instructions,
 )
-from icore_agent.domain.agent.tool import ToolDefinition
-from icore_agent.application.agent.tool.catalog import (
+from icore_agent.contexts.agent.domain.tool import ToolDefinition
+from icore_agent.contexts.agent.application.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
 from icore_agent.config import ResolvedLiteLLMConfig
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
 )
-from icore_agent.domain.agent.loop import ModelStepResult
-from icore_agent.infrastructure.agent.chat_completions import (
+from icore_agent.contexts.agent.domain.loop import ModelStepResult
+from icore_agent.contexts.agent.infrastructure.chat_completions import (
     ChatCompletionsModelClient,
     create_chat_completions_model_client,
 )
@@ -125,14 +125,14 @@ def test_sequential_endpoint_is_not_registered(client):
 @patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.soft_delete_session")
 @patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.assert_owned_session")
 @patch(
-    "icore_agent.interfaces.http.v1.agent.handlers.session._run_session_end_extract_from_context",
+    "icore_agent.contexts.agent.interfaces.http.v1.handlers.session._run_session_end_extract_from_context",
     new_callable=AsyncMock,
 )
 @patch(
-    "icore_agent.interfaces.http.v1.agent.handlers.session.resolve_session_extract_context",
+    "icore_agent.contexts.agent.interfaces.http.v1.handlers.session.resolve_session_extract_context",
     new_callable=AsyncMock,
 )
-@patch("icore_agent.interfaces.http.v1.agent.handlers.session.memory")
+@patch("icore_agent.contexts.agent.interfaces.http.v1.handlers.session.memory")
 def test_clear_session(mock_memory, mock_resolve, mock_extract, _assert_owned, _soft_delete, client):
     mock_memory.clear = AsyncMock()
     mock_resolve.return_value = (
@@ -149,7 +149,7 @@ def test_clear_session(mock_memory, mock_resolve, mock_extract, _assert_owned, _
 
 @patch("icore_agent.interfaces.http.v1.dependencies.agent_session_service.assert_owned_session")
 @patch(
-    "icore_agent.interfaces.http.v1.agent.handlers.session._run_finalize_session_extract",
+    "icore_agent.contexts.agent.interfaces.http.v1.handlers.session._run_finalize_session_extract",
     new_callable=AsyncMock,
 )
 def test_finalize_session(mock_extract, _assert_owned, client):
@@ -165,7 +165,7 @@ def test_finalize_session(mock_extract, _assert_owned, client):
 
 # ── Orchestrator factory ───────────────────────────────────────────────────
 
-@patch("icore_agent.infrastructure.agent.chat_completions.runner.settings")
+@patch("icore_agent.contexts.agent.infrastructure.chat_completions.runner.settings")
 def test_create_chat_completions_model_client_uses_resolved_model(mock_settings):
     """Chat Completions model client should use resolved LiteLLM settings."""
     mock_settings.effective_model_id.return_value = "test-model"

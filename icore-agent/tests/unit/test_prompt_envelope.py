@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain import ChatCompletionRole
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
     UserInput,
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.tool import ToolChoice, ToolDefinition
-from icore_agent.infrastructure.agent.chat_completions import (
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.tool import ToolChoice, ToolDefinition
+from icore_agent.contexts.agent.infrastructure.chat_completions import (
     render_chat_completions_messages,
     render_chat_completions_tools,
 )

@@ -2,8 +2,9 @@
 
 from fastapi import FastAPI
 
+from icore_agent.contexts.agent.interfaces.http.v1 import router as agent_router
+
 from .account import router as account_router
-from .agent import router as agent_router
 from .envelope import install_api_envelope
 from .files import router as files_router
 from .health import router as health_router

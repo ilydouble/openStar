@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from icore_agent.application.agent.tool.catalog import (
+from icore_agent.contexts.agent.application.tool.catalog import (
     build_orchestrator_tool_definitions,
 )
-from icore_agent.domain.agent.tool import (
+from icore_agent.contexts.agent.domain.tool import (
     ToolExecutionContext,
 )
 from icore_agent.domain.files.models import FileAsset

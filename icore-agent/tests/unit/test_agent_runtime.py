@@ -8,15 +8,15 @@ from typing import Any
 
 import pytest
 
-from icore_agent.domain.agent.turn import AgentTurnCommand
-from icore_agent.application.agent.runtime import (
+from icore_agent.contexts.agent.domain.turn import AgentTurnCommand
+from icore_agent.contexts.agent.application.runtime import (
     AgentRunConflict,
     AgentRunNotActive,
     AgentRunRecord,
     AgentRuntime,
     QueuedAgentInput,
 )
-from icore_agent.domain.agent.turn import TurnEvent
+from icore_agent.contexts.agent.domain.turn import TurnEvent
 from icore_agent.domain.user import AuthenticatedUser
 
 

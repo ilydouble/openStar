@@ -594,10 +594,6 @@ def test_http_interface_layer_is_split_by_business_domain():
             "schemas": {"auth.py", "billing.py", "lead.py", "project.py", "team.py"},
             "handlers": {"auth.py", "billing.py", "lead.py", "profile.py", "project.py", "team.py"},
         },
-        "agent": {
-            "schemas": {"chat.py", "transcribe.py"},
-            "handlers": {"chat.py", "session.py", "transcribe.py"},
-        },
         "files": {
             "schemas": {"files.py"},
             "handlers": {"files.py"},
@@ -625,6 +621,24 @@ def test_http_interface_layer_is_split_by_business_domain():
             assert filenames <= {path.name for path in layer_dir.glob("*.py")}
     assert (v1_dir / "users" / "serializers.py").is_file()
 
+    agent_v1_dir = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "contexts"
+        / "agent"
+        / "interfaces"
+        / "http"
+        / "v1"
+    )
+    assert (agent_v1_dir / "router.py").is_file()
+    assert {"chat.py", "runtime.py", "session.py", "transcribe.py"} <= {
+        path.name for path in (agent_v1_dir / "handlers").glob("*.py")
+    }
+    assert {"chat.py", "runtime.py", "session.py", "transcribe.py"} <= {
+        path.name for path in (agent_v1_dir / "schemas").glob("*.py")
+    }
+
 
 def test_python_payment_router_does_not_expose_direct_plan_upgrade():
     """Verify paid plans cannot be activated through a public backend route."""
@@ -649,10 +663,11 @@ def test_agent_chat_handler_stays_http_adapter_only():
         AGENT_ROOT
         / "src"
         / "icore_agent"
+        / "contexts"
+        / "agent"
         / "interfaces"
         / "http"
         / "v1"
-        / "agent"
         / "handlers"
         / "chat.py"
     ).read_text(encoding="utf-8")
@@ -674,12 +689,12 @@ def test_agent_chat_handler_stays_http_adapter_only():
 def test_agent_chat_handler_uses_domain_authenticated_user():
     """Keep authenticated user payload dicts out of chat commands."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
+    agent_context_dir = package_dir / "contexts" / "agent"
     handler = (
-        package_dir / "interfaces" / "http" / "v1" /
-        "agent" / "handlers" / "chat.py"
+        agent_context_dir / "interfaces" / "http" / "v1" / "handlers" / "chat.py"
     ).read_text(encoding="utf-8")
     command = (
-        package_dir / "domain" / "agent" / "turn" / "turn_command.py"
+        agent_context_dir / "domain" / "turn" / "turn_command.py"
     ).read_text(encoding="utf-8")
     dependencies = (
         package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
@@ -694,17 +709,18 @@ def test_agent_chat_handler_uses_domain_authenticated_user():
 def test_agent_application_uses_explicit_turn_and_session_boundaries():
     """Keep agent turn/session/runtime code under the agent application package."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
+    agent_context = package_dir / "contexts" / "agent"
     chat_dir = package_dir / "application" / "chat"
-    agent_dir = package_dir / "application" / "agent"
+    agent_dir = agent_context / "application"
     routing = (agent_dir / "turn" / "routing.py").read_text(encoding="utf-8")
-    roles = (package_dir / "domain" / "agent" / "roles.py").read_text(
+    roles = (agent_context / "domain" / "roles.py").read_text(
         encoding="utf-8"
     )
     agent_context_dir = agent_dir / "context"
-    agent_domain_loop_dir = package_dir / "domain" / "agent" / "loop"
-    agent_domain_context_dir = package_dir / "domain" / "agent" / "context"
-    agent_domain_prompt_dir = package_dir / "domain" / "agent" / "prompt"
-    agent_domain_turn_dir = package_dir / "domain" / "agent" / "turn"
+    agent_domain_loop_dir = agent_context / "domain" / "loop"
+    agent_domain_context_dir = agent_context / "domain" / "context"
+    agent_domain_prompt_dir = agent_context / "domain" / "prompt"
+    agent_domain_turn_dir = agent_context / "domain" / "turn"
     agent_prompt_dir = agent_dir / "prompt"
     agent_turn_dir = agent_dir / "turn"
     agent_session_dir = agent_dir / "session"
@@ -712,9 +728,9 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     agent_tool_dir = agent_dir / "tool"
     legacy_vendor = "str" + "ands"
     legacy_vendor_title = "Str" + "ands"
-    legacy_vendor_dir = package_dir / "infrastructure" / "agent" / legacy_vendor
+    legacy_vendor_dir = agent_context / "infrastructure" / legacy_vendor
     chat_completions_dir = (
-        package_dir / "infrastructure" / "agent" / "chat_completions"
+        agent_context / "infrastructure" / "chat_completions"
     )
     turn_service = (agent_turn_dir / "service.py").read_text(
         encoding="utf-8"
@@ -781,10 +797,8 @@ def test_agent_application_uses_explicit_turn_and_session_boundaries():
     assert not (chat_completions_dir / "event_bridge.py").exists()
     assert not (chat_completions_dir / "payloads.py").exists()
     assert not (agent_turn_dir / "tool_projection.py").exists()
-    assert not (package_dir / "application" /
-                "agent" / f"{legacy_vendor}_bridge.py").exists()
-    assert not (package_dir / "application" /
-                "agent" / "tool_payloads.py").exists()
+    assert not (agent_dir / f"{legacy_vendor}_bridge.py").exists()
+    assert not (agent_dir / "tool_payloads.py").exists()
     forbidden_import = "from " + "application.chat"
     for path in (
         agent_dir / "__init__.py",
@@ -849,13 +863,12 @@ def test_agent_session_migrations_use_turns_and_session_items_as_canonical_truth
 def test_number_comparator_is_registered_with_orchestrator_tools():
     """The orchestrator should expose the deterministic number comparison tool."""
     legacy_vendor = "str" + "ands"
+    agent_context = AGENT_ROOT / "src" / "icore_agent" / "contexts" / "agent"
     catalog_init = (
-        AGENT_ROOT / "src" / "icore_agent" /
-        "application" / "agent" / "tool" / "catalog" / "__init__.py"
+        agent_context / "application" / "tool" / "catalog" / "__init__.py"
     ).read_text(encoding="utf-8")
     tool_definition = (
-        AGENT_ROOT / "src" / "icore_agent" /
-        "domain" / "agent" / "tool" / "tool_definition.py"
+        agent_context / "domain" / "tool" / "tool_definition.py"
     ).read_text(encoding="utf-8")
 
     assert "build_orchestrator_tools" not in catalog_init
@@ -865,8 +878,7 @@ def test_number_comparator_is_registered_with_orchestrator_tools():
     assert "class ToolDefinition" in tool_definition
     assert "class AgentTool" not in tool_definition
     assert not (
-        AGENT_ROOT / "src" / "icore_agent" /
-        "application" / "agent" / "tool" / "tool_definition.py"
+        agent_context / "application" / "tool" / "tool_definition.py"
     ).exists()
     assert f"{legacy_vendor}.types._events" not in tool_definition
     assert "ToolResultEvent" not in tool_definition
@@ -879,34 +891,35 @@ def test_chat_orchestration_lives_in_application_layer():
     """Keep chat runtime thin while agent owns prompts and tool catalog."""
     legacy_vendor = "str" + "ands"
     package_dir = AGENT_ROOT / "src" / "icore_agent"
+    agent_context = package_dir / "contexts" / "agent"
     chat_dir = package_dir / "application" / "chat"
-    agent_dir = package_dir / "application" / "agent"
+    agent_dir = agent_context / "application"
     dependencies = (
         package_dir / "interfaces" / "http" / "v1" / "dependencies.py"
     ).read_text(
         encoding="utf-8"
     )
     chat_completions_runner = (
-        package_dir / "infrastructure" / "agent" / "chat_completions" / "runner.py"
+        agent_context / "infrastructure" / "chat_completions" / "runner.py"
     ).read_text(encoding="utf-8")
     domain_prompt = (
-        package_dir / "domain" / "agent" / "prompt" / "system_prompt.py"
+        agent_context / "domain" / "prompt" / "system_prompt.py"
     ).read_text(encoding="utf-8")
     domain_prompt_init = (
-        package_dir / "domain" / "agent" / "prompt" / "__init__.py"
+        agent_context / "domain" / "prompt" / "__init__.py"
     ).read_text(encoding="utf-8")
-    domain_tool_dir = package_dir / "domain" / "agent" / "tool"
+    domain_tool_dir = agent_context / "domain" / "tool"
     domain_tool_init = (domain_tool_dir / "__init__.py").read_text(
         encoding="utf-8"
     )
     prompt_envelope = (
-        package_dir / "domain" / "agent" / "prompt" / "prompt_envelope.py"
+        agent_context / "domain" / "prompt" / "prompt_envelope.py"
     ).read_text(encoding="utf-8")
     catalog_dir = agent_dir / "tool" / "catalog"
-    agent_session_dir = package_dir / "domain" / "agent" / "session"
+    agent_session_dir = agent_context / "domain" / "session"
     session_items_dir = agent_session_dir / "session_items"
     application_agent_context_dir = agent_dir / "context"
-    domain_context_dir = package_dir / "domain" / "agent" / "context"
+    domain_context_dir = agent_context / "domain" / "context"
 
     assert not (package_dir / "engine").exists()
     assert not (package_dir / "tools").exists()
@@ -976,10 +989,11 @@ def test_agent_session_schema_uses_explicit_payload_models():
         AGENT_ROOT
         / "src"
         / "icore_agent"
+        / "contexts"
+        / "agent"
         / "interfaces"
         / "http"
         / "v1"
-        / "agent"
         / "schemas"
         / "session.py"
     ).read_text(encoding="utf-8")

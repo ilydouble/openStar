@@ -7,20 +7,20 @@ from typing import Any
 
 import pytest
 
-import icore_agent.application.agent.context as app_context
-import icore_agent.domain.agent.context as agent_context
-from icore_agent.domain.agent.prompt import (
+import icore_agent.contexts.agent.application.context as app_context
+import icore_agent.contexts.agent.domain.context as agent_context
+from icore_agent.contexts.agent.domain.prompt import (
     assemble_prompt_envelope,
     build_base_instructions,
     build_context_items,
 )
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.tool import ToolChoice
+from icore_agent.contexts.agent.domain.tool import ToolChoice
 from icore_agent.domain.files.models import FileAsset
 
 

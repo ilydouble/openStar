@@ -6,13 +6,13 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent.tool.runtime import ToolRuntime
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.application.tool.runtime import ToolRuntime
+from icore_agent.contexts.agent.domain.session import (
     ToolCallItem,
     ToolCallStatus,
     ToolFunction,
 )
-from icore_agent.domain.agent.tool import (
+from icore_agent.contexts.agent.domain.tool import (
     ToolDefinition,
     ToolExecutionContext,
 )

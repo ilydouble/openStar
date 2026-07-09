@@ -5,17 +5,17 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from icore_agent.application.agent.runtime import (
+from icore_agent.contexts.agent.application.runtime import (
     AgentRunControlResult,
     AgentRunNotActive,
 )
 from icore_agent.domain.user import AuthenticatedUser
-from icore_agent.interfaces.http.v1.agent.handlers.runtime import (
+from icore_agent.contexts.agent.interfaces.http.v1.handlers.runtime import (
     abort_session_run,
     follow_up_session_run,
     steer_session_run,
 )
-from icore_agent.interfaces.http.v1.agent.schemas.runtime import (
+from icore_agent.contexts.agent.interfaces.http.v1.schemas.runtime import (
     AgentRuntimeInputRequest,
 )
 

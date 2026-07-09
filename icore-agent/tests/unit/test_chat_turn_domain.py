@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
-from icore_agent.domain.agent import ChatCompletionRole
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain import ChatCompletionRole
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
     SessionItem,
@@ -16,7 +16,7 @@ from icore_agent.domain.agent.session import (
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.domain.agent.turn import Turn
+from icore_agent.contexts.agent.domain.turn import Turn
 
 
 def test_session_item_union_parses_user_agent_and_tool_items() -> None:

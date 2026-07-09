@@ -7,15 +7,15 @@ from typing import Any
 
 import pytest
 
-from icore_agent.application.agent import (
+from icore_agent.contexts.agent.application import (
     AgentTurnService,
     AgentIntent,
     classify_turn_intent,
 )
-from icore_agent.domain.agent.loop import ModelStepResult
-from icore_agent.application.agent.context import dedupe_file_uuids
-from icore_agent.domain.agent.prompt import PromptEnvelope
-from icore_agent.domain.agent.session import (
+from icore_agent.contexts.agent.domain.loop import ModelStepResult
+from icore_agent.contexts.agent.application.context import dedupe_file_uuids
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
+from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     SessionItem,
     ToolCallItem,
@@ -23,7 +23,7 @@ from icore_agent.domain.agent.session import (
     UserMessageItem,
 )
 from icore_agent.domain.files.models import FileAsset
-from icore_agent.domain.agent.turn import (
+from icore_agent.contexts.agent.domain.turn import (
     AgentTurnCommand,
     Turn,
     TurnEventKind,

@@ -12,7 +12,7 @@ from icore_agent.contexts.agent.application import (
     AgentTurnService,
 )
 from icore_agent.contexts.files.application import FileAssetService
-from icore_agent.application.knowledge import KnowledgeService
+from icore_agent.contexts.knowledge.application import KnowledgeService
 from icore_agent.contexts.memory.application import UserMemoryService
 from icore_agent.contexts.account.application.usage import UsageService
 from icore_agent.contexts.account.application.workspace import WorkspaceMetadataService
@@ -29,7 +29,7 @@ from icore_agent.contexts.agent.infrastructure.chat_completions import (
 from icore_agent.contexts.agent.infrastructure.runtime import RedisAgentRunStore
 from icore_agent.contexts.files.infrastructure.persistence import SqlAlchemyFileRepository
 from icore_agent.infrastructure.memory.conversation import memory
-from icore_agent.infrastructure.memory.chroma_store import (
+from icore_agent.contexts.knowledge.infrastructure.memory.chroma_store import (
     add_documents,
     get_collection,
     list_documents,

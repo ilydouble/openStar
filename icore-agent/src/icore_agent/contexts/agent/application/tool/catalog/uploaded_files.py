@@ -10,7 +10,7 @@ from typing import Protocol
 import pandas as pd
 
 from icore_agent.contexts.files.application import FileAssetNotFoundError
-from icore_agent.application.knowledge.parsers import (
+from icore_agent.contexts.knowledge.application.parsers import (
     SUPPORTED_EXTENSIONS,
     parse_file,
 )

@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, Depends
 
-from ..dependencies import get_current_user
-from ..envelope import ApiEnvelopeRoute
+from icore_agent.interfaces.http.v1.dependencies import get_current_user
+from icore_agent.interfaces.http.v1.envelope import ApiEnvelopeRoute
 from .handlers import delete_document, list_knowledge_documents, upload_document
 from .schemas import DocumentInfo, UploadResponse
 

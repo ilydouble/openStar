@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
-from icore_agent.application.knowledge.parsers import SUPPORTED_EXTENSIONS, parse_file
-from icore_agent.application.knowledge.service import KnowledgeService
-from icore_agent.application.knowledge.text import chunk_text
+from icore_agent.contexts.knowledge.application.parsers import SUPPORTED_EXTENSIONS, parse_file
+from icore_agent.contexts.knowledge.application.service import KnowledgeService
+from icore_agent.contexts.knowledge.application.text import chunk_text
 from icore_agent.contexts.account.domain.user import AuthenticatedUser
 
 
@@ -25,7 +25,7 @@ def test_parse_file_uses_pdf_reader():
         ]
     )
 
-    with patch("icore_agent.application.knowledge.parsers.PdfReader", return_value=fake_reader):
+    with patch("icore_agent.contexts.knowledge.application.parsers.PdfReader", return_value=fake_reader):
         parsed = parse_file("report.pdf", b"%PDF")
 
     assert parsed == "one\ntwo"

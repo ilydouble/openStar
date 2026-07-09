@@ -594,10 +594,6 @@ def test_http_interface_layer_is_split_by_business_domain():
             "schemas": {"probe.py"},
             "handlers": {"probe.py"},
         },
-        "knowledge": {
-            "schemas": {"document.py"},
-            "handlers": {"documents.py"},
-        },
         "payment": {
             "schemas": {"checkout.py", "order.py"},
             "handlers": {"checkout.py", "order.py", "webhook.py"},
@@ -664,6 +660,24 @@ def test_http_interface_layer_is_split_by_business_domain():
     }
     assert {"files.py"} <= {
         path.name for path in (files_v1_dir / "schemas").glob("*.py")
+    }
+
+    knowledge_v1_dir = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "contexts"
+        / "knowledge"
+        / "interfaces"
+        / "http"
+        / "v1"
+    )
+    assert (knowledge_v1_dir / "router.py").is_file()
+    assert {"documents.py"} <= {
+        path.name for path in (knowledge_v1_dir / "handlers").glob("*.py")
+    }
+    assert {"document.py"} <= {
+        path.name for path in (knowledge_v1_dir / "schemas").glob("*.py")
     }
 
 

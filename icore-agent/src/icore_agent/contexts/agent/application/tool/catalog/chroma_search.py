@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from icore_agent.shared.logging.app_logger import get_logger
 
-from icore_agent.infrastructure.memory.chroma_store import search as chroma_search_raw
+from icore_agent.contexts.knowledge.infrastructure.memory.chroma_store import search as chroma_search_raw
 
 log = get_logger(__name__)
 

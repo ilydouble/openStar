@@ -7,7 +7,7 @@ from typing import Any
 
 from icore_agent.contexts.account.application.usage.policy import current_timestamp
 from icore_agent.contexts.account.domain.user import UserProfile
-from icore_agent.infrastructure.memory.workspace_cache import workspace_cache
+from icore_agent.contexts.account.infrastructure.cache.workspace_cache import workspace_cache
 from icore_agent.contexts.account.infrastructure.persistence.organizations.repository import (
     SqlAlchemyOrganizationRepository,
 )

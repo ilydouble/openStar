@@ -12,7 +12,7 @@ from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     SessionItem,
 )
-from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.identifiers import uuid7
 
 from .turn_error import TurnError
 

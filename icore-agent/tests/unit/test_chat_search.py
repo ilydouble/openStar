@@ -24,7 +24,7 @@ from icore_agent.contexts.agent.domain.session import (
 from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnStatus
 from icore_agent.contexts.files.domain import FileAsset
 from icore_agent.contexts.account.domain.user import AuthenticatedUser
-from icore_agent.infrastructure.persistence.sessions import repository as search_repo
+from icore_agent.contexts.agent.infrastructure.persistence.sessions import repository as search_repo
 from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers
 from icore_agent.contexts.agent.interfaces.http.v1.handlers.chat import chat
 from icore_agent.contexts.agent.interfaces.http.v1.handlers.session import _session_attachment_refs

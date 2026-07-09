@@ -551,23 +551,30 @@ def test_litellm_and_openai_dependency_pins_are_compatible():
 
 
 def test_python_backend_uses_clean_architecture_layers():
-    """Keep Python backend code grouped by abstraction layer, not mixed top-level folders."""
+    """Keep Python backend business code grouped by context, not top-level layers."""
     package_dir = AGENT_ROOT / "src" / "icore_agent"
 
-    expected_layers = {
-        "application",
+    expected_top_level_dirs = {
         "config",
-        "domain",
+        "contexts",
         "infrastructure",
         "interfaces",
         "services",
         "shared",
     }
-    assert expected_layers <= {
+    assert expected_top_level_dirs <= {
         path.name for path in package_dir.iterdir() if path.is_dir()
     }
 
-    mixed_top_level_dirs = {
+    top_level_dirs_with_python_sources = {
+        path.name
+        for path in package_dir.iterdir()
+        if path.is_dir() and any(child.suffix == ".py" for child in path.rglob("*.py"))
+    }
+    legacy_business_layer_dirs = {
+        "application",
+        "domain",
+        "workers",
         "api",
         "control_plane",
         "database",
@@ -577,9 +584,8 @@ def test_python_backend_uses_clean_architecture_layers():
         "tools",
         "users",
     }
-    assert not (mixed_top_level_dirs & {
-        path.name for path in package_dir.iterdir() if path.is_dir()
-    })
+    assert not (legacy_business_layer_dirs &
+                top_level_dirs_with_python_sources)
 
 
 def test_http_interface_layer_is_split_by_business_domain():
@@ -1079,6 +1085,7 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
     package_dir = AGENT_ROOT / "src" / "icore_agent"
     account_context = package_dir / "contexts" / "account"
     account_persistence = account_context / "infrastructure" / "persistence"
+    agent_context = package_dir / "contexts" / "agent"
 
     assert (account_context / "domain" / "account" / "plans.py").is_file()
     assert (account_context / "domain" / "user" /
@@ -1101,7 +1108,10 @@ def test_domain_infrastructure_and_shared_layers_own_lower_level_concepts():
         account_context / "infrastructure" / "control_plane" / "json_store.py"
     ).is_file()
     assert (
-        package_dir / "infrastructure" / "memory" / "conversation.py"
+        account_context / "infrastructure" / "cache" / "workspace_cache.py"
+    ).is_file()
+    assert (
+        agent_context / "infrastructure" / "memory" / "conversation.py"
     ).is_file()
 
 

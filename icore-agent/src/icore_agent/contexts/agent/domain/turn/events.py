@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from icore_agent.contexts.agent.domain.session import SessionItem
-from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.identifiers import uuid7
 from icore_agent.shared.time.utils import utc_now
 
 from .turn import Turn

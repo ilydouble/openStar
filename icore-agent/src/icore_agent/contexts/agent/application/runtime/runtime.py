@@ -14,7 +14,7 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.turn import TurnEvent, TurnEventKind
-from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.identifiers import uuid7
 
 from .exceptions import AgentRunConflict, AgentRunNotActive
 from .models import AgentRunControlResult, AgentRunRecord, QueuedAgentInput

@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.identifiers import uuid7
 from icore_agent.shared.time.utils import utc_now
 
 

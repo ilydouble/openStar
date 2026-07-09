@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from icore_agent.contexts.agent.application.session import AgentSessionService
-from icore_agent.infrastructure.memory.conversation import ConversationMemory
+from icore_agent.contexts.agent.infrastructure.memory.conversation import ConversationMemory
 
 
 async def resolve_session_extract_context(

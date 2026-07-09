@@ -20,12 +20,12 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnEventKind, TurnStatus
-from icore_agent.infrastructure.persistence.sessions.models import (
+from icore_agent.contexts.agent.infrastructure.persistence.sessions.models import (
     ChatSessionEvent,
     ChatSessionItem,
     ChatTurn,
 )
-from icore_agent.infrastructure.persistence.sessions.repository import (
+from icore_agent.contexts.agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
 from icore_agent.infrastructure.persistence.sqlalchemy.models import Base

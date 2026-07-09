@@ -28,7 +28,7 @@ from icore_agent.contexts.agent.infrastructure.chat_completions import (
 )
 from icore_agent.contexts.agent.infrastructure.runtime import RedisAgentRunStore
 from icore_agent.contexts.files.infrastructure.persistence import SqlAlchemyFileRepository
-from icore_agent.infrastructure.memory.conversation import memory
+from icore_agent.contexts.agent.infrastructure.memory.conversation import memory
 from icore_agent.contexts.knowledge.infrastructure.memory.chroma_store import (
     add_documents,
     get_collection,

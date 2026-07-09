@@ -12,7 +12,7 @@ from icore_agent.contexts.account.infrastructure.persistence.projects.models imp
     Project as Project,
     ProjectSession as ProjectSession,
 )
-from ..sessions.models import ChatSession as ChatSession  # noqa: E402,F401
+from icore_agent.contexts.agent.infrastructure.persistence.sessions.models import ChatSession as ChatSession  # noqa: E402,F401
 from icore_agent.contexts.account.infrastructure.persistence.users.models import User as User  # noqa: E402,F401
 from .base import Base
 

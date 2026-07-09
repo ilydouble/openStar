@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from icore_agent.domain.identifiers import uuid7
+from icore_agent.shared.identifiers import uuid7
 
 __all__ = ["uuid7"]

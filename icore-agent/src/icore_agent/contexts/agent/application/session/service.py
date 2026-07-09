@@ -6,7 +6,7 @@ from typing import Any
 
 from icore_agent.contexts.agent.domain.session import SessionItem, UserMessageItem
 from icore_agent.contexts.agent.domain.turn import Turn, TurnError, TurnEvent, TurnStatus
-from icore_agent.infrastructure.persistence.sessions.repository import (
+from icore_agent.contexts.agent.infrastructure.persistence.sessions.repository import (
     SqlAlchemyChatHistoryRepository,
 )
 from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import sync_session_scope

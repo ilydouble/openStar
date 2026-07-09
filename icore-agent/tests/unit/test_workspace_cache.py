@@ -6,7 +6,7 @@ from typing import Any
 
 import redis
 
-from icore_agent.infrastructure.memory import workspace_cache as workspace_cache_module
+from icore_agent.contexts.account.infrastructure.cache import workspace_cache as workspace_cache_module
 
 
 class BrokenRedis:

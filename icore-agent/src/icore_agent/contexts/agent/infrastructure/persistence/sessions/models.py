@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
-from ..sqlalchemy.base import Base
+from icore_agent.infrastructure.persistence.sqlalchemy.base import Base
 
 JsonObject = JSON().with_variant(JSONB(), "postgresql")
 RowIDType = BigInteger().with_variant(Integer(), "sqlite")

@@ -11,7 +11,7 @@ from icore_agent.contexts.files.application import FileAssetNotFoundError, FileA
 from icore_agent.contexts.memory.application import UserMemoryService
 from icore_agent.contexts.memory.application.session_context import resolve_session_extract_context
 from icore_agent.contexts.account.domain.user import AuthenticatedUser
-from icore_agent.infrastructure.memory.conversation import memory
+from icore_agent.contexts.agent.infrastructure.memory.conversation import memory
 from icore_agent.shared.logging.app_logger import get_logger
 
 from icore_agent.interfaces.http.v1.dependencies import (

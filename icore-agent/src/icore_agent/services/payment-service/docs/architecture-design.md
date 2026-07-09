@@ -14,7 +14,7 @@ Current account plans live in `icore-agent/src/icore_agent/contexts/account/doma
 - `premium`: USD 299/month, 5000 tasks/month
 - `byok`: USD 9/month, unlimited tasks with user-owned API key
 
-The current Python payment API is still a mock/Stripe-shaped facade under `interfaces/http/v1/payment`, and `contexts/account/application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow. The gateway should enforce runtime JWT authentication for payment HTTP routes, while the Python backend remains responsible for issuing tokens, account entitlements, and plan/quota application.
+The current Python payment API is still a mock/Stripe-shaped facade under `contexts/payment/interfaces/http/v1`, and `contexts/account/application/billing/service.py` only updates account plans directly. The WeChat Pay integration should replace that mock checkout path with a real provider-backed order workflow. The gateway should enforce runtime JWT authentication for payment HTTP routes, while the Python backend remains responsible for issuing tokens, account entitlements, and plan/quota application.
 
 ## Source Review
 

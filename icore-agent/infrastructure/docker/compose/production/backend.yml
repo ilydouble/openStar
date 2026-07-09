@@ -62,7 +62,7 @@ services:
     image: ${ICORE_AGENT_IMAGE:-icore-agent:production}
     container_name: icore-payment-events-consumer
     restart: unless-stopped
-    command: python -m icore_agent.workers.payment_events
+    command: python -m icore_agent.contexts.payment.interfaces.worker.payment_events
     env_file:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.database${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}

@@ -594,10 +594,6 @@ def test_http_interface_layer_is_split_by_business_domain():
             "schemas": {"probe.py"},
             "handlers": {"probe.py"},
         },
-        "payment": {
-            "schemas": {"checkout.py", "order.py"},
-            "handlers": {"checkout.py", "order.py", "webhook.py"},
-        },
     }
     for domain, expected in expected_domains.items():
         assert not (http_dir / domain).exists()
@@ -680,6 +676,24 @@ def test_http_interface_layer_is_split_by_business_domain():
         path.name for path in (knowledge_v1_dir / "schemas").glob("*.py")
     }
 
+    payment_v1_dir = (
+        AGENT_ROOT
+        / "src"
+        / "icore_agent"
+        / "contexts"
+        / "payment"
+        / "interfaces"
+        / "http"
+        / "v1"
+    )
+    assert (payment_v1_dir / "router.py").is_file()
+    assert {"checkout.py", "order.py", "webhook.py"} <= {
+        path.name for path in (payment_v1_dir / "handlers").glob("*.py")
+    }
+    assert {"checkout.py", "order.py"} <= {
+        path.name for path in (payment_v1_dir / "schemas").glob("*.py")
+    }
+
 
 def test_python_payment_router_does_not_expose_direct_plan_upgrade():
     """Verify paid plans cannot be activated through a public backend route."""
@@ -687,10 +701,11 @@ def test_python_payment_router_does_not_expose_direct_plan_upgrade():
         AGENT_ROOT
         / "src"
         / "icore_agent"
+        / "contexts"
+        / "payment"
         / "interfaces"
         / "http"
         / "v1"
-        / "payment"
         / "router.py"
     ).read_text(encoding="utf-8")
 

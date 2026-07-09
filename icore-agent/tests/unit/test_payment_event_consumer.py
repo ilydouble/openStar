@@ -10,10 +10,10 @@ import aiokafka
 from icore_agent.contexts.account.application.usage.policy import default_usage
 from icore_agent.contexts.account.domain.account.plans import Plan
 from icore_agent.contexts.account.domain.user import UserProfile
-from icore_agent.infrastructure.persistence.payment_event_models import (
+from icore_agent.contexts.payment.infrastructure.persistence.payment_event_models import (
     ProcessedPaymentEvent,
 )
-from icore_agent.infrastructure.persistence.payment_events import (
+from icore_agent.contexts.payment.infrastructure.persistence.payment_events import (
     PaymentEventApplyResult,
     PostgresPaymentEventRepository,
 )
@@ -24,7 +24,7 @@ from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
 from icore_agent.contexts.account.infrastructure.persistence.users.sqlalchemy_repository import (
     SqlAlchemyUserRepository,
 )
-from icore_agent.workers import payment_events as payment_events_worker
+from icore_agent.contexts.payment.interfaces.worker import payment_events as payment_events_worker
 
 
 class RecordingStore:

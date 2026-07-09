@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, Depends
 
-from ..dependencies import get_current_user
-from ..envelope import ApiEnvelopeRoute
+from icore_agent.interfaces.http.v1.dependencies import get_current_user
+from icore_agent.interfaces.http.v1.envelope import ApiEnvelopeRoute
 from .handlers import create_checkout_session, get_user_orders, stripe_webhook
 from .schemas import CheckoutSessionResponse, OrderResponse
 

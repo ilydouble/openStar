@@ -116,7 +116,7 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     assert '"aiokafka' in pyproject
     for backend_compose in (dev_backend_compose, production_backend_compose):
         assert "payment-events-consumer:" in backend_compose
-        assert "python -m icore_agent.workers.payment_events" in backend_compose
+        assert "python -m icore_agent.contexts.payment.interfaces.worker.payment_events" in backend_compose
         assert "PAYMENT_EVENTS_KAFKA_BROKERS" in backend_compose
         assert "PAYMENT_EVENTS_KAFKA_TOPIC" in backend_compose
         assert "PAYMENT_EVENTS_GROUP_ID" in backend_compose

@@ -13,9 +13,9 @@ from icore_agent.contexts.account.domain.account.plans import Plan
 from icore_agent.contexts.account.infrastructure.persistence.users.sqlalchemy_repository import (
     SqlAlchemyUserRepository,
 )
+from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import sync_session_scope
 
 from .payment_event_models import ProcessedPaymentEvent
-from .sqlalchemy.sync_session import sync_session_scope
 
 
 class ControlPlaneEventStore(Protocol):

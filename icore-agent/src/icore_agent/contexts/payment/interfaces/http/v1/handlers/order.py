@@ -3,8 +3,7 @@
 from fastapi import Depends
 
 from icore_agent.contexts.account.domain.user import AuthenticatedUser
-
-from ...dependencies import get_current_user
+from icore_agent.interfaces.http.v1.dependencies import get_current_user
 
 
 async def get_user_orders(

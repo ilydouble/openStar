@@ -11,7 +11,7 @@ from typing import Any
 
 from icore_agent.config.dotenv import load_domain_dotenvs
 from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
-from icore_agent.infrastructure.persistence.payment_events import (
+from icore_agent.contexts.payment.infrastructure.persistence.payment_events import (
     PostgresPaymentEventRepository,
 )
 

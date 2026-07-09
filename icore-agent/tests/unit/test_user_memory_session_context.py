@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from icore_agent.application.memory.session_context import resolve_session_extract_context
+from icore_agent.contexts.memory.application.session_context import resolve_session_extract_context
 
 
 class FakeConversationMemory:

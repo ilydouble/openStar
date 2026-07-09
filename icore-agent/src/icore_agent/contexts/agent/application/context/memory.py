@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from icore_agent.domain.memory import TurnMemoryContext
+from icore_agent.contexts.memory.domain import TurnMemoryContext
 
 from .ports import UserMemoryPromptBuilder
 

@@ -8,7 +8,7 @@ from sqlalchemy import JSON, BigInteger, Float, ForeignKey, Integer, String, Tex
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..sqlalchemy.base import Base
+from icore_agent.infrastructure.persistence.sqlalchemy.base import Base
 
 JsonObject = JSON().with_variant(JSONB(), "postgresql")
 FactIdType = BigInteger().with_variant(Integer(), "sqlite")

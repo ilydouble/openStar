@@ -5,9 +5,11 @@ from __future__ import annotations
 from sqlalchemy import func, select, update
 
 from icore_agent.application.usage.policy import current_timestamp
-from icore_agent.domain.memory import UserMemoryFact, UserMemoryProfile
+from icore_agent.contexts.memory.domain import UserMemoryFact, UserMemoryProfile
 
-from ..sqlalchemy.sync_session import sync_session_scope
+from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
+    sync_session_scope,
+)
 from .models import UserMemoryFactRecord, UserMemoryProfileRecord
 
 

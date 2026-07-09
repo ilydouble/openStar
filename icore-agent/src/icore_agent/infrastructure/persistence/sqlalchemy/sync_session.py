@@ -70,7 +70,10 @@ def ensure_user_schema() -> None:
         from icore_agent.contexts.files.infrastructure.persistence.models import (  # noqa: F401
             FileAssetRecord,
         )
-        from ..memory.models import UserMemoryFactRecord, UserMemoryProfileRecord  # noqa: F401
+        from icore_agent.contexts.memory.infrastructure.persistence.models import (  # noqa: F401
+            UserMemoryFactRecord,
+            UserMemoryProfileRecord,
+        )
         from ..organizations.models import Organization, OrgMember  # noqa: F401
         from ..payment_event_models import ProcessedPaymentEvent  # noqa: F401
         from ..projects.models import Project, ProjectSession  # noqa: F401

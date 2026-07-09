@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from icore_agent.application.memory import UserMemoryService
+from icore_agent.contexts.memory.application import UserMemoryService
 from icore_agent.application.usage.policy import current_timestamp, default_usage
 from icore_agent.domain.account.plans import Plan
-from icore_agent.domain.memory import UserMemoryFact
+from icore_agent.contexts.memory.domain import UserMemoryFact
 from icore_agent.domain.user import UserProfile
-from icore_agent.infrastructure.persistence.memory import SqlAlchemyUserMemoryRepository
+from icore_agent.contexts.memory.infrastructure.persistence import SqlAlchemyUserMemoryRepository
 from icore_agent.infrastructure.persistence.sqlalchemy.sync_session import (
     ensure_user_schema,
     reset_sync_engine,

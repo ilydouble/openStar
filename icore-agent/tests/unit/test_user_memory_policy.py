@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from icore_agent.application.memory import policy
-from icore_agent.application.memory.consolidation import parse_extract_response
+from icore_agent.contexts.memory.application import policy
+from icore_agent.contexts.memory.application.consolidation import parse_extract_response
 from icore_agent.application.usage.policy import current_timestamp
-from icore_agent.domain.memory import TurnMemoryContext, UserMemoryFact
+from icore_agent.contexts.memory.domain import TurnMemoryContext, UserMemoryFact
 
 
 def test_build_user_memory_prompt_is_bounded() -> None:

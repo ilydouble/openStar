@@ -13,7 +13,7 @@ from icore_agent.contexts.agent.application import (
 )
 from icore_agent.contexts.files.application import FileAssetService
 from icore_agent.application.knowledge import KnowledgeService
-from icore_agent.application.memory import UserMemoryService
+from icore_agent.contexts.memory.application import UserMemoryService
 from icore_agent.application.usage import UsageService
 from icore_agent.application.workspace import WorkspaceMetadataService
 from icore_agent.config import settings
@@ -34,7 +34,7 @@ from icore_agent.infrastructure.memory.chroma_store import (
     get_collection,
     list_documents,
 )
-from icore_agent.infrastructure.persistence.memory import SqlAlchemyUserMemoryRepository
+from icore_agent.contexts.memory.infrastructure.persistence import SqlAlchemyUserMemoryRepository
 from icore_agent.infrastructure.persistence.users.postgres_repositories import (
     PostgresBillingRepository,
     PostgresBillingSummaryRepository,

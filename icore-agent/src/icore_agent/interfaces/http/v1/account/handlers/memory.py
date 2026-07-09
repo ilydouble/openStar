@@ -2,7 +2,7 @@
 
 from fastapi import Depends, HTTPException
 
-from icore_agent.application.memory import UserMemoryService
+from icore_agent.contexts.memory.application import UserMemoryService
 from icore_agent.domain.user import AuthenticatedUser
 
 from ...dependencies import get_current_user, get_user_memory_service

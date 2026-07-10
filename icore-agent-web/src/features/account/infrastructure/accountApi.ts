@@ -5,11 +5,6 @@ const client = createJsonClient()
 
 export type AccountPayload = Record<string, unknown>
 
-/** Submit an enterprise lead request for follow-up. */
-export async function captureLead(payload: AccountPayload): Promise<unknown> {
-  return client.post(`${BASE}/leads`, payload)
-}
-
 /** Fetch the current account profile. */
 export async function fetchMe(): Promise<unknown> {
   return client.get(`${BASE}/me`)

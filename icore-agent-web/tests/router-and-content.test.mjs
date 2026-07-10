@@ -36,7 +36,7 @@ test('landing content namespace exists in both locales', () => {
 })
 
 test('landing keeps api.stellarmesh.net in footer extra services instead of a standalone section', () => {
-  const landingViewSource = readFileSync(new URL('../src/views/LandingView.vue', import.meta.url), 'utf8')
+  const landingViewSource = readFileSync(new URL('../src/features/landing/interfaces/LandingView.vue', import.meta.url), 'utf8')
 
   assert.ok(landingViewSource.includes('<LandingFooter />'), 'expected landing footer to stay mounted')
   assert.ok(!landingViewSource.includes('<RelatedBusinessSection />'), 'expected related business section to be removed from main landing flow')
@@ -66,15 +66,15 @@ test('landing copy matches the updated homepage messaging from 网站修改.docx
 })
 
 test('landing visual components reference the generated image assets', () => {
-  const heroSource = readFileSync(new URL('../src/components/landing/HeroSection.vue', import.meta.url), 'utf8')
-  const solutionsSource = readFileSync(new URL('../src/components/landing/SolutionsSection.vue', import.meta.url), 'utf8')
-  const finalCtaSource = readFileSync(new URL('../src/components/landing/FinalCtaSection.vue', import.meta.url), 'utf8')
+  const heroSource = readFileSync(new URL('../src/features/landing/interfaces/components/HeroSection.vue', import.meta.url), 'utf8')
+  const solutionsSource = readFileSync(new URL('../src/features/landing/interfaces/components/SolutionsSection.vue', import.meta.url), 'utf8')
+  const finalCtaSource = readFileSync(new URL('../src/features/landing/interfaces/components/FinalCtaSection.vue', import.meta.url), 'utf8')
 
   assert.ok(heroSource.includes('hero-ops-cockpit.jpg'), 'expected hero section image asset reference')
   assert.ok(solutionsSource.includes('solutions-workflows.jpg'), 'expected solutions section image asset reference')
   assert.ok(finalCtaSource.includes('final-cta-platform.jpg'), 'expected final CTA image asset reference')
 
-  assert.ok(existsSync(new URL('../src/assets/landing/hero-ops-cockpit.jpg', import.meta.url)), 'expected hero image asset file')
-  assert.ok(existsSync(new URL('../src/assets/landing/solutions-workflows.jpg', import.meta.url)), 'expected solutions image asset file')
-  assert.ok(existsSync(new URL('../src/assets/landing/final-cta-platform.jpg', import.meta.url)), 'expected final CTA image asset file')
+  assert.ok(existsSync(new URL('../src/features/landing/assets/hero-ops-cockpit.jpg', import.meta.url)), 'expected hero image asset file')
+  assert.ok(existsSync(new URL('../src/features/landing/assets/solutions-workflows.jpg', import.meta.url)), 'expected solutions image asset file')
+  assert.ok(existsSync(new URL('../src/features/landing/assets/final-cta-platform.jpg', import.meta.url)), 'expected final CTA image asset file')
 })

@@ -10618,49 +10618,7 @@
       "name": "Timeline Item · Agent Message",
       "reusable": true,
       "width": 780,
-      "gap": 12,
       "children": [
-        {
-          "type": "frame",
-          "id": "jMI4k",
-          "name": "Agent Message Avatar",
-          "width": 30,
-          "height": 30,
-          "fill": {
-            "type": "gradient",
-            "gradientType": "linear",
-            "enabled": true,
-            "rotation": 135,
-            "size": {
-              "height": 1
-            },
-            "colors": [
-              {
-                "color": "#8B5CF6",
-                "position": 0
-              },
-              {
-                "color": "#4F46E5",
-                "position": 1
-              }
-            ]
-          },
-          "cornerRadius": 15,
-          "justifyContent": "center",
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "text",
-              "id": "xz7Mn",
-              "name": "Agent Message Avatar Text",
-              "fill": "$white",
-              "content": "A",
-              "fontFamily": "$font-body",
-              "fontSize": 11,
-              "fontWeight": "700"
-            }
-          ]
-        },
         {
           "type": "frame",
           "id": "USHQ0",

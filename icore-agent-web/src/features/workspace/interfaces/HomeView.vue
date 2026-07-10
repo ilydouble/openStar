@@ -428,7 +428,7 @@ import {
   QuotaExceededError,
 } from '../infrastructure/agentApi'
 import { isDark as isDarkFn } from '../../../shared/presentation/theme/theme'
-import { fetchPlan, fetchProjects, syncProject } from '../../account/infrastructure/accountApi'
+import { accountApplication } from '../../account'
 import { authApplication } from '../../auth'
 import {
   getWorkspaceOnboardingComplete,
@@ -576,9 +576,9 @@ const recentProjects = computed(() => {
   return projectRecords.value.map((project) => ({
     id: project.id,
     title: project.title,
-    sessions: project.sessions_count,
-    assets: project.assets_count,
-    updatedAt: project.updated_at,
+    sessions: project.sessionsCount,
+    assets: project.assetsCount,
+    updatedAt: project.updatedAt,
   }))
 })
 
@@ -625,7 +625,7 @@ const composerAttachments = computed(() =>
 
 async function loadPlanSummary() {
   try {
-    planSummary.value = await fetchPlan()
+    planSummary.value = await accountApplication.loadPlan()
   } catch {
     planSummary.value = null
   }
@@ -1013,7 +1013,7 @@ async function onSessionSearch(query) {
 
 async function loadProjects() {
   try {
-    const payload = await fetchProjects()
+    const payload = await accountApplication.loadProjects()
     projectRecords.value = payload.projects || []
   } catch {
     projectRecords.value = []
@@ -1027,14 +1027,14 @@ async function syncCurrentProject(meta = {}) {
   const sessionTitle = meta.sessionTitle || meta.title || template?.title || t('home.heroTitle')
   const sessionSubtitle = meta.sessionSubtitle || meta.subtitle || template?.description || t('home.subtitle')
   try {
-    await syncProject({
-      project_id: projectId,
-      project_title: projectTitle,
-      scenario_id: template?.id || meta.scenarioId || '',
-      session_id: sessionId.value,
-      session_title: sessionTitle,
-      session_subtitle: sessionSubtitle,
-      attachment_count: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
+    await accountApplication.syncProject({
+      projectId,
+      projectTitle,
+      scenarioId: template?.id || meta.scenarioId || '',
+      sessionId: sessionId.value,
+      sessionTitle,
+      sessionSubtitle,
+      attachmentCount: Number(meta.attachmentCount ?? attachmentList.value.length ?? 0),
     })
     await loadProjects()
   } catch {

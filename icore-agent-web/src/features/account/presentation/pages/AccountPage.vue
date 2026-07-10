@@ -72,7 +72,7 @@
               <label class="block md:col-span-2">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiKey') }}</span>
                 <input
-                  v-model="byokForm.api_key"
+                  v-model="byokForm.apiKey"
                   type="password"
                   :placeholder="t('account.byok.apiKeyPlaceholder')"
                   class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10"
@@ -80,7 +80,7 @@
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.apiBase') }}</span>
-                <input v-model="byokForm.api_base" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input v-model="byokForm.apiBase" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.byok.model') }}</span>
@@ -106,7 +106,7 @@
             <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.orgName') }}</span>
-                <input v-model="teamForm.organization_name" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input v-model="teamForm.organizationName" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
               </label>
               <div class="flex items-end">
                 <button type="button" class="rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-zinc-950" @click="saveTeamName">
@@ -135,7 +135,7 @@
               <div class="mt-3 space-y-2">
                 <article
                   v-for="member in team?.members || []"
-                  :key="member.user_id"
+                  :key="member.userId"
                   class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]"
                 >
                   <div class="flex flex-col gap-2 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-3">
@@ -154,15 +154,15 @@
             <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.memberName') }}</span>
-                <input v-model="teamForm.member_name" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input v-model="teamForm.memberName" type="text" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.memberEmail') }}</span>
-                <input v-model="teamForm.member_email" type="email" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
+                <input v-model="teamForm.memberEmail" type="email" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-violet-300 dark:focus:ring-violet-500/10" />
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('account.team.memberRole') }}</span>
-                <select v-model="teamForm.member_role" class="form-select">
+                <select v-model="teamForm.memberRole" class="form-select">
                   <option value="owner">{{ t('account.team.owner') }}</option>
                   <option value="editor">{{ t('account.team.editor') }}</option>
                   <option value="viewer">{{ t('account.team.viewer') }}</option>
@@ -248,7 +248,7 @@
               <div v-if="heavyUsers.length" class="mt-3 space-y-2">
                 <article
                   v-for="item in heavyUsers"
-                  :key="item.user_id"
+                  :key="item.userId"
                   class="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.04]"
                 >
                   <div class="flex items-center justify-between gap-3">
@@ -276,217 +276,34 @@
   </div>
 </template>
 
-<script setup>
-import { computed, onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import {
-  addTeamMember,
-  fetchAdminOverview,
-  fetchMe,
-  fetchPlan,
-  fetchTeam,
-  renameTeam,
-  updateByok,
-  updateKnowledgeScope,
-} from '../infrastructure/accountApi'
-import { authApplication } from '../../auth'
-import MemoryManagerSection from './MemoryManagerSection.vue'
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
 
-const { t } = useI18n()
-const router = useRouter()
+import MemoryManagerSection from '../components/MemoryManagerSection.vue'
+import { useAccountPage } from '../composables/useAccountPage'
 
-const loading = ref(true)
-const me = ref(null)
-const plan = ref(null)
-const adminOverview = ref(null)
-const team = ref(null)
-const saved = ref(false)
-const byokForm = reactive({
-  api_key: '',
-  api_base: '',
-  model: '',
-})
-const teamForm = reactive({
-  organization_name: '',
-  scope: 'organization',
-  member_name: '',
-  member_email: '',
-  member_role: 'viewer',
-})
-
-/** Render a plan quota limit, using ∞ when the backend marks it unlimited. */
-function formatPlanLimit(value) {
-  return value == null ? '∞' : value
-}
-
-/** Mirror backend UsageService estimated_cost from PostgreSQL token quota usage. */
-function estimatedCostFromTokenCount(tokenCount) {
-  const tokens = Number(tokenCount) || 0
-  return Math.round((tokens / 1_000_000) * 2.0 * 1_000_000) / 1_000_000
-}
-
-const planUsage = computed(() => plan.value?.usage || {})
-
-const usageCards = computed(() => {
-  const usage = planUsage.value
-  const tokenCount = Number(usage.tokens) || 0
-  const estimatedCost =
-    usage.estimated_cost != null
-      ? Number(usage.estimated_cost) || 0
-      : estimatedCostFromTokenCount(tokenCount)
-  return [
-    { label: t('account.cards.totalTokens'), value: tokenCount, helper: t('account.plan.tokens') },
-    { label: t('account.cards.totalCost'), value: `$${estimatedCost.toFixed(4)}`, helper: t('account.cards.estimated') },
-    { label: t('account.cards.tasks'), value: usage.tasks ?? 0, helper: t('account.plan.tasks') },
-    { label: t('account.cards.attachments'), value: usage.attachments ?? 0, helper: t('account.plan.attachments') },
-  ]
-})
-
-const modelRows = computed(() => {
-  const byModel = plan.value?.by_model || {}
-  return Object.entries(byModel).map(([model, stats]) => ({
-    model,
-    calls: stats.calls,
-    tokens: stats.tokens,
-    cost: stats.cost,
-  }))
-})
-
-const totalCalls = computed(() => Number(planUsage.value.model_calls) || 0)
-
-const activeModelCount = computed(() => Number(planUsage.value.active_models) || 0)
-
-const adminCards = computed(() => {
-  const users = adminOverview.value?.users || {}
-  const usageSummary = adminOverview.value?.usage || {}
-  const leads = adminOverview.value?.leads || {}
-  return [
-    { label: t('account.adminCards.users'), value: users.total ?? 0 },
-    { label: t('account.adminCards.active'), value: users.active_7d ?? 0 },
-    { label: t('account.adminCards.trials'), value: users.new_trials_7d ?? 0 },
-    { label: t('account.adminCards.leads'), value: leads.total ?? 0 },
-    { label: t('account.adminCards.cost'), value: `$${Number(usageSummary.total_cost || 0).toFixed(4)}` },
-  ]
-})
-
-const heavyUsers = computed(() => adminOverview.value?.heavy_users || [])
-
-/** Platform operators with the admin role can view global usage metrics. */
-const isPlatformAdmin = computed(
-  () => Array.isArray(me.value?.roles) && me.value.roles.includes('admin'),
-)
-
-const byokBadgeClass = computed(() =>
-  plan.value?.byok?.enabled
-    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-    : 'bg-zinc-100 text-zinc-600 dark:bg-white/[0.06] dark:text-zinc-300',
-)
-
-const PLAN_POLL_MS = 10_000
-let planPollTimer = null
-
-async function loadAccount(options = {}) {
-  const silent = Boolean(options.silent)
-  if (!silent) {
-    loading.value = true
-  }
-  const [meResp, planResp] = await Promise.all([
-    fetchMe(),
-    fetchPlan(),
-  ])
-  me.value = meResp
-  plan.value = planResp
-  byokForm.api_base = planResp.byok?.api_base || ''
-  byokForm.model = planResp.byok?.model || ''
-  adminOverview.value = isPlatformAdmin.value
-    ? await fetchAdminOverview().catch(() => null)
-    : null
-  team.value = await fetchTeam().catch(() => null)
-  teamForm.organization_name = team.value?.organization?.name || ''
-  teamForm.scope = team.value?.organization?.knowledge_scope || 'organization'
-  if (!silent) {
-    loading.value = false
-  }
-}
-
-function startPlanPolling() {
-  stopPlanPolling()
-  planPollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      loadAccount({ silent: true })
-    }
-  }, PLAN_POLL_MS)
-}
-
-function stopPlanPolling() {
-  if (planPollTimer) {
-    clearInterval(planPollTimer)
-    planPollTimer = null
-  }
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState === 'visible') {
-    loadAccount({ silent: true })
-  }
-}
-
-async function saveByok() {
-  saved.value = false
-  const payload = {
-    api_base: byokForm.api_base,
-    model: byokForm.model,
-  }
-  const nextApiKey = byokForm.api_key.trim()
-  if (nextApiKey) {
-    payload.api_key = nextApiKey
-  }
-  await updateByok(payload)
-  byokForm.api_key = ''
-  await loadAccount()
-  saved.value = true
-}
-
-async function saveTeamName() {
-  team.value = await renameTeam({ organization_name: teamForm.organization_name })
-}
-
-async function saveKnowledgeScope() {
-  team.value = await updateKnowledgeScope({ scope: teamForm.scope })
-}
-
-async function inviteMember() {
-  if (!teamForm.member_name || !teamForm.member_email) return
-  await addTeamMember({
-    name: teamForm.member_name,
-    email: teamForm.member_email,
-    role: teamForm.member_role,
-  })
-  team.value = await fetchTeam()
-  teamForm.member_name = ''
-  teamForm.member_email = ''
-  teamForm.member_role = 'viewer'
-}
-
-function handleSignOut() {
-  authApplication.signOut()
-  router.push({ name: 'auth' })
-}
-
-onMounted(async () => {
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  await loadAccount()
-  startPlanPolling()
-})
-
-onActivated(async () => {
-  await loadAccount({ silent: true })
-  startPlanPolling()
-})
-
-onUnmounted(() => {
-  stopPlanPolling()
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-})
+const {
+  activeModelCount,
+  adminCards,
+  byokBadgeClass,
+  byokForm,
+  formatPlanLimit,
+  handleSignOut,
+  heavyUsers,
+  inviteMember,
+  isPlatformAdmin,
+  loading,
+  me,
+  modelRows,
+  plan,
+  saveByok,
+  saved,
+  saveKnowledgeScope,
+  saveTeamName,
+  t,
+  team,
+  teamForm,
+  totalCalls,
+  usageCards,
+} = useAccountPage()
 </script>

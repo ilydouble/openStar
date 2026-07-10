@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
 import { authApplication, loadAuthPage } from './features/auth'
+import { loadAccountPage } from './features/account'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'landing', component: () => import('./features/landing/interfaces/LandingView.vue') },
@@ -8,7 +9,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/account',
     name: 'account',
-    component: () => import('./features/account/interfaces/AccountView.vue'),
+    component: loadAccountPage,
     meta: { requiresAuth: true },
   },
   {

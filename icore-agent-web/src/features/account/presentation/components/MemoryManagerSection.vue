@@ -109,7 +109,7 @@
 
           <div class="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
             <span>{{ t('account.memory.confidence') }}: {{ formatConfidence(fact.confidence) }}</span>
-            <span>{{ t('account.memory.lastConfirmed') }}: {{ formatDate(fact.last_confirmed_at) }}</span>
+            <span>{{ t('account.memory.lastConfirmed') }}: {{ formatDate(fact.lastConfirmedAt) }}</span>
           </div>
         </article>
 
@@ -130,163 +130,33 @@
   </div>
 </template>
 
-<script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { deleteMemoryFact, fetchMemory, updateMemoryFact } from '../infrastructure/accountApi'
+<script setup lang="ts">
+import { useMemoryManager } from '../composables/useMemoryManager'
 
-const { t, locale } = useI18n()
-
-const CATEGORY_ORDER = ['personal', 'work_context', 'goal', 'preference', 'constraint']
-const CATEGORY_PREVIEW_LIMIT = 3
-
-const loading = ref(true)
-const saving = ref(false)
-const deletingId = ref(null)
-const error = ref('')
-const facts = ref([])
-const editingId = ref(null)
-const draftValue = ref('')
-const expandedCategories = ref({})
-
-const groupedFacts = computed(() => {
-  const groups = Object.fromEntries(CATEGORY_ORDER.map((category) => [category, []]))
-  for (const fact of facts.value) {
-    const category = CATEGORY_ORDER.includes(fact.category) ? fact.category : 'preference'
-    groups[category].push(fact)
-  }
-  return groups
-})
-
-const visibleCategories = computed(() =>
-  CATEGORY_ORDER.filter((category) => (groupedFacts.value[category]?.length || 0) > 0),
-)
-
-/** Return all facts for one category group. */
-function factsForCategory(category) {
-  return groupedFacts.value[category] || []
-}
-
-/** Return whether a category group is expanded beyond the preview limit. */
-function isCategoryExpanded(category) {
-  return Boolean(expandedCategories.value[category])
-}
-
-/** Toggle expanded state for one category group. */
-function toggleCategoryExpanded(category) {
-  expandedCategories.value = {
-    ...expandedCategories.value,
-    [category]: !expandedCategories.value[category],
-  }
-}
-
-/** Return whether a category has more facts than the preview limit. */
-function categoryHasMore(category) {
-  return factsForCategory(category).length > CATEGORY_PREVIEW_LIMIT
-}
-
-/** Return how many facts are hidden in one collapsed category. */
-function hiddenFactCount(category) {
-  return Math.max(factsForCategory(category).length - CATEGORY_PREVIEW_LIMIT, 0)
-}
-
-/** Return the facts visible for one category based on expand state. */
-function visibleFactsForCategory(category) {
-  const items = factsForCategory(category)
-  if (isCategoryExpanded(category) || items.length <= CATEGORY_PREVIEW_LIMIT) {
-    return items
-  }
-  return items.slice(0, CATEGORY_PREVIEW_LIMIT)
-}
-
-/** Load active memory facts for the account memory manager. */
-async function loadMemory() {
-  loading.value = true
-  error.value = ''
-  expandedCategories.value = {}
-  try {
-    const payload = await fetchMemory()
-    facts.value = Array.isArray(payload?.facts) ? payload.facts : []
-  } catch (err) {
-    error.value = err?.message || t('account.memory.loadFailed')
-    facts.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-/** Return a localized label for one memory category. */
-function categoryLabel(category) {
-  const key = `account.memory.categories.${category}`
-  return t(key)
-}
-
-/** Render a snake_case fact key for display. */
-function formatKey(key) {
-  return String(key || '').replace(/_/g, ' ')
-}
-
-/** Format confidence as a whole-number percentage. */
-function formatConfidence(value) {
-  return `${Math.round(Number(value || 0) * 100)}%`
-}
-
-/** Format a unix timestamp for the active locale. */
-function formatDate(timestamp) {
-  const seconds = Number(timestamp)
-  if (!seconds) return '-'
-  const date = new Date(seconds * 1000)
-  return new Intl.DateTimeFormat(locale.value, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(date)
-}
-
-/** Begin inline editing for one fact. */
-function startEdit(fact) {
-  editingId.value = fact.id
-  draftValue.value = fact.value
-}
-
-/** Cancel inline editing. */
-function cancelEdit() {
-  editingId.value = null
-  draftValue.value = ''
-}
-
-/** Persist an edited fact value. */
-async function saveEdit(factId) {
-  const value = draftValue.value.trim()
-  if (!value) return
-  saving.value = true
-  error.value = ''
-  try {
-    const updated = await updateMemoryFact(factId, value)
-    facts.value = facts.value.map((fact) => (fact.id === factId ? { ...fact, ...updated } : fact))
-    cancelEdit()
-  } catch (err) {
-    error.value = err?.message || t('account.memory.saveFailed')
-  } finally {
-    saving.value = false
-  }
-}
-
-/** Delete one fact after confirmation. */
-async function confirmDelete(factId) {
-  if (!window.confirm(t('account.memory.deleteConfirm'))) return
-  deletingId.value = factId
-  error.value = ''
-  try {
-    await deleteMemoryFact(factId)
-    facts.value = facts.value.filter((fact) => fact.id !== factId)
-    if (editingId.value === factId) cancelEdit()
-  } catch (err) {
-    error.value = err?.message || t('account.memory.deleteFailed')
-  } finally {
-    deletingId.value = null
-  }
-}
-
-onMounted(loadMemory)
+const {
+  cancelEdit,
+  categoryHasMore,
+  categoryLabel,
+  confirmDelete,
+  deletingId,
+  draftValue,
+  editingId,
+  error,
+  facts,
+  formatConfidence,
+  formatDate,
+  formatKey,
+  groupedFacts,
+  hiddenFactCount,
+  isCategoryExpanded,
+  loadMemory,
+  loading,
+  saveEdit,
+  saving,
+  startEdit,
+  t,
+  toggleCategoryExpanded,
+  visibleCategories,
+  visibleFactsForCategory,
+} = useMemoryManager()
 </script>

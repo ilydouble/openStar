@@ -6,8 +6,8 @@ import {
   formatApiErrorMessage,
   getFileTimeoutMs,
   normalizeFetchError,
-} from './api-client'
-import i18n from '../i18n'
+} from '../../../../shared/infrastructure/http/api-client'
+import i18n from '../../../../shared/presentation/i18n'
 
 const FILE_BASE = '/files'
 

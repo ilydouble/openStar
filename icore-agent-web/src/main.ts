@@ -1,10 +1,10 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { getAccessToken } from './features/auth/application/session'
-import i18n from './shared/i18n'
+import i18n from './shared/presentation/i18n'
 import { createAppRouter } from './router'
-import { configureApiClient } from './shared/api/api-client'
-import { initTheme } from './shared/theme/theme'
+import { configureApiClient } from './shared/infrastructure/http'
+import { initTheme } from './shared/presentation/theme/theme'
 import './style.css'
 
 initTheme()

@@ -7,7 +7,7 @@ import axios, {
 } from 'axios'
 import axiosRetry from 'axios-retry'
 
-import i18n from '../i18n'
+import i18n from '../../presentation/i18n'
 
 const DEFAULT_API_BASE_URL = '/api/v1'
 const DEFAULT_API_TIMEOUT_MS = 15_000

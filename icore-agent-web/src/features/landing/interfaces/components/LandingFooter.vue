@@ -69,7 +69,7 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { setLocalePreference } from '../../../../shared/i18n/localePreference'
+import { setLocalePreference } from '../../../../shared/presentation/i18n/localePreference'
 
 const { t, tm, locale } = useI18n()
 const currentLocale = computed(() => locale.value)

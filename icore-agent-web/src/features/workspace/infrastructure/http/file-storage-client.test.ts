@@ -8,7 +8,7 @@ import {
   configureApiClient,
   createApiClient,
   type HttpTraceEvent,
-} from './api-client'
+} from '../../../../shared/infrastructure/http/api-client'
 import {
   completeFileUpload,
   deleteFileStorageAsset,

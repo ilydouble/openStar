@@ -7,8 +7,8 @@ import {
   configureApiClient,
   createApiClient,
   formatApiErrorMessage,
-} from '../src/shared/api/api-client'
-import i18n from '../src/shared/i18n'
+} from '../src/shared/infrastructure/http'
+import i18n from '../src/shared/presentation/i18n'
 import { fetchAllSessions, searchSessions } from '../src/features/workspace/infrastructure/agentApi'
 import {
   WORKSPACE_ONBOARDING_KEY,

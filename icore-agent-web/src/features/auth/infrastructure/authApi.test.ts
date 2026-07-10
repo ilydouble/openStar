@@ -3,7 +3,7 @@ import { afterEach, test } from 'vitest'
 
 import { AxiosHeaders, type AxiosAdapter } from 'axios'
 
-import { configureApiClient, createApiClient } from '../../../shared/api/api-client'
+import { configureApiClient, createApiClient } from '../../../shared/infrastructure/http'
 import { clearSession, getAccessToken } from '../application/session'
 import { emailLogin } from './authApi'
 

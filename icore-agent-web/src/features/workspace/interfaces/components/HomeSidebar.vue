@@ -464,10 +464,10 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { setLocalePreference } from '../../../../shared/i18n/localePreference'
+import { setLocalePreference } from '../../../../shared/presentation/i18n/localePreference'
 import { clearSession } from '../../../auth/application/session'
-import ThemeToggle from '../../../../shared/ui/ThemeToggle.vue'
-import { sanitizeHtml } from '../../../../shared/html/sanitizeHtml'
+import ThemeToggle from '../../../../shared/presentation/components/ThemeToggle.vue'
+import { sanitizeHtml } from '../../../../shared/presentation/html/sanitizeHtml'
 
 const emit = defineEmits(['new', 'navigate', 'search', 'delete-session'])
 

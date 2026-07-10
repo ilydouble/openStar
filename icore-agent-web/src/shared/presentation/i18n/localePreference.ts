@@ -1,4 +1,8 @@
-import { getBrowserStorage, readStoredString, writeStoredString } from '../storage/browserStorage'
+import {
+  getBrowserStorage,
+  readStoredString,
+  writeStoredString,
+} from '../../infrastructure/storage/browserStorage'
 
 export const LOCALE_STORAGE_KEY = 'locale'
 

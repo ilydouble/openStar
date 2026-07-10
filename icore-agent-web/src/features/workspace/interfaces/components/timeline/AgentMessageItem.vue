@@ -21,7 +21,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { renderMarkdown } from '../../../../../shared/html/sanitizeHtml'
+import { renderMarkdown } from '../../../../../shared/presentation/html/sanitizeHtml'
 
 const props = defineProps({
   item: { type: Object, required: true },

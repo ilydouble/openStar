@@ -427,7 +427,7 @@ import {
   searchSessions,
   QuotaExceededError,
 } from '../infrastructure/agentApi'
-import { isDark as isDarkFn } from '../../../shared/theme/theme'
+import { isDark as isDarkFn } from '../../../shared/presentation/theme/theme'
 import { fetchPlan, fetchProjects, syncProject } from '../../account/infrastructure/accountApi'
 import { signOut } from '../../auth/infrastructure/authApi'
 import {

@@ -4,7 +4,7 @@ import { afterEach, test } from 'vitest'
 
 import { AxiosHeaders } from 'axios'
 
-import { configureApiClient, createApiClient } from '../../../shared/api/api-client'
+import { configureApiClient, createApiClient } from '../../../shared/infrastructure/http'
 import { QuotaExceededError, chatEventStream, chatStream, transcribeSpeech } from './agentApi'
 
 const originalFetch = globalThis.fetch

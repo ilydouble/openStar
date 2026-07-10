@@ -1,5 +1,5 @@
-import enUS from '../../../shared/i18n/locales/en-US'
-import zhCN from '../../../shared/i18n/locales/zh-CN'
+import enUS from '../../../shared/presentation/i18n/locales/en-US'
+import zhCN from '../../../shared/presentation/i18n/locales/zh-CN'
 import { getFileDownloadUrl } from '../infrastructure/agentApi'
 import { resolveUserMessageDisplayContent } from './scenarioPrompt'
 

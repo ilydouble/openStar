@@ -3,15 +3,15 @@ import {
   apiClient,
   getFileTimeoutMs,
   readFetchResponse,
-} from '../../../shared/api/api-client'
+} from '../../../shared/infrastructure/http'
 import {
   completeFileUpload,
   deleteFileStorageAsset,
   fetchFileDownloadUrl,
   putPresignedFile,
   requestFileUploadUrl,
-} from '../../../shared/api/file-storage-client'
-import { openSseResponse } from '../../../shared/api/sse-client'
+} from './http/file-storage-client'
+import { openSseResponse } from '../../../shared/infrastructure/http'
 
 const BASE = '/agent'
 

@@ -1,14 +1,14 @@
 <template>
-  <div class="flex max-w-[min(92%,calc(100vw-2.5rem))] gap-2 min-[390px]:max-w-[80%] sm:gap-3">
+  <div class="flex w-full max-w-[min(94%,calc(100vw-2rem))] items-start gap-2.5 sm:max-w-[82%] sm:gap-3">
     <div
-      class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-md shadow-violet-900/20 dark:shadow-violet-900/40"
+      class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white shadow-sm shadow-violet-900/20 dark:bg-violet-500 dark:shadow-violet-900/40"
     >
       A
     </div>
     <div
       :class="[
-        'min-w-0 rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-md ring-1 transition-colors duration-300 dark:shadow-lg dark:backdrop-blur-sm',
-        'border-zinc-200/90 bg-white text-zinc-950 ring-black/5 dark:border-white/[0.08] dark:bg-zinc-900/60 dark:text-zinc-200 dark:shadow-black/25 dark:ring-white/10',
+        'min-w-0 flex-1 rounded-2xl rounded-tl-md border px-4 py-3 text-sm leading-6 shadow-sm ring-1 transition-colors duration-300 dark:shadow-md',
+        'border-zinc-200/90 bg-white text-zinc-950 ring-black/[0.04] dark:border-white/[0.08] dark:bg-zinc-900/65 dark:text-zinc-200 dark:shadow-black/20 dark:ring-white/[0.06]',
         dark ? 'prose-chat-dark' : 'prose-chat',
         streaming ? (dark ? 'typing-cursor typing-cursor-dark' : 'typing-cursor') : '',
       ]"
@@ -22,13 +22,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { renderMarkdown } from '../../../../../shared/presentation/html/sanitizeHtml'
+import type { AgentMessageTimelineItem } from '../../../domain/models/timeline'
 
-const props = defineProps({
-  item: { type: Object, required: true },
-  dark: { type: Boolean, default: false },
-})
+const props = withDefaults(defineProps<{
+  item: AgentMessageTimelineItem
+  dark?: boolean
+}>(), { dark: false })
 
-const text = computed(() => String(props.item?.payload?.text || ''))
-const streaming = computed(() => props.item?.status === 'in_progress')
+const text = computed(() => props.item.payload.text)
+const streaming = computed(() => props.item.status === 'in_progress')
 const html = computed(() => renderMarkdown(text.value))
 </script>

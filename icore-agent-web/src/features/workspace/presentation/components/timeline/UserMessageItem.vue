@@ -5,8 +5,8 @@
       'rounded-2xl rounded-tr-sm text-sm leading-relaxed ring-1 transition-colors duration-300',
       usesAttachmentLayout
         ? 'w-fit max-w-[min(24rem,calc(100vw-2.5rem))] px-2 py-1.5 shadow-sm shadow-zinc-900/5 dark:shadow-md dark:shadow-black/20'
-        : 'max-w-[min(88%,calc(100vw-2.5rem))] px-3 py-3 shadow-md shadow-zinc-900/8 min-[390px]:px-4 sm:max-w-[70%] dark:shadow-lg dark:shadow-black/25',
-      'bg-white text-zinc-900 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/10',
+        : 'max-w-[min(90%,calc(100vw-2rem))] px-3 py-3 shadow-sm shadow-zinc-900/8 min-[390px]:px-4 sm:max-w-[72%] dark:shadow-md dark:shadow-black/20',
+      'bg-zinc-100 text-zinc-900 ring-zinc-200/90 dark:bg-zinc-800/95 dark:text-zinc-100 dark:ring-white/[0.08]',
     ]"
   >
     <div v-if="usesAttachmentLayout" class="flex flex-col gap-1.5">
@@ -63,18 +63,18 @@ import DocumentFileIcon from '../DocumentFileIcon.vue'
 import { isAutoAttachmentPrompt } from '../../models/sessionMessageHydration'
 import { resolveUserMessageDisplayContent } from '../../../application/services/scenarioPrompt'
 import { userMessageText } from '../../models/sessionTimeline'
-import type { TimelineItem } from '../../../domain/models/timeline'
+import type { UserMessageTimelineItem } from '../../../domain/models/timeline'
 import type { WorkspaceAttachment } from '../../models/viewModels'
 
 const props = withDefaults(defineProps<{
-  item: TimelineItem
+  item: UserMessageTimelineItem
   attachments?: WorkspaceAttachment[]
   templateLabels?: Record<string, string>
 }>(), { attachments: () => [], templateLabels: () => ({}) })
 
 defineEmits<{ 'open-document': [attachment: WorkspaceAttachment] }>()
 
-const payload = computed(() => props.item?.payload || {})
+const payload = computed(() => props.item.payload)
 const metadata = computed<Record<string, any>>(() => {
   const raw = payload.value.metadata
   return raw && typeof raw === 'object' ? raw : {}

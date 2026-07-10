@@ -1,5 +1,5 @@
 <template>
-  <div class="mx-auto w-full max-w-3xl space-y-6">
+  <div class="mx-auto w-full max-w-4xl space-y-7">
     <TurnGroup
       v-for="turn in visibleTurns"
       :key="turn.turnId"

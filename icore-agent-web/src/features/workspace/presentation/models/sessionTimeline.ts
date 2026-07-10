@@ -6,9 +6,16 @@ import {
 } from './sessionMessageHydration'
 import { resolveUserMessageDisplayContent } from '../../application/services/scenarioPrompt'
 import type {
+  AgentMessageTimelineItem,
+  ContextTimelineItem,
   SessionTimeline,
   TimelineItem,
+  TimelineItemStatus,
+  TimelineItemType,
   TimelineTurn,
+  ToolCallTimelineItem,
+  UserMessageItemPayload,
+  UserMessageTimelineItem,
 } from '../../domain/models/timeline'
 
 type AnyRecord = Record<string, any>
@@ -29,21 +36,41 @@ interface TimelineToRowsOptions {
   templateLabels?: Record<string, string>
 }
 
+const TIMELINE_ITEM_TYPES = new Set<TimelineItemType>([
+  'context',
+  'user_message',
+  'agent_message',
+  'reasoning',
+  'plan',
+  'tool_call',
+])
+
+const TIMELINE_ITEM_STATUSES = new Set<TimelineItemStatus>([
+  'in_progress',
+  'streaming',
+  'ready',
+  'running',
+  'completed',
+  'failed',
+  'declined',
+])
+
 /** Normalize one backend session item wrapper or raw turn event item. */
-export function normalizeTimelineItem(input: AnyRecord = {}): TimelineItem {
+export function normalizeTimelineItem(input: AnyRecord = {}): TimelineItem | null {
   const payload = input?.payload && typeof input.payload === 'object'
     ? { ...input.payload }
     : { ...(input || {}) }
   const itemId = String(input?.item_id || input?.id || payload.id || '').trim()
-  if (itemId && !payload.id) payload.id = itemId
-  const type = String(input?.type || payload.type || '').trim()
-  const status = String(input?.status || payload.status || '').trim()
+  const rawType = String(input?.type || payload.type || '').trim()
+  if (!itemId || !isTimelineItemType(rawType)) return null
+  if (!payload.id) payload.id = itemId
+  const status = normalizeTimelineItemStatus(input?.status || payload.status)
   return {
     itemId,
-    type,
+    type: rawType,
     status,
-    payload,
-  }
+    payload: normalizeTimelinePayload(rawType, payload, status),
+  } as TimelineItem
 }
 
 /** Normalize one backend turn payload into the frontend canonical timeline shape. */
@@ -60,7 +87,7 @@ export function normalizeTimelineTurn(input: AnyRecord = {}): TimelineTurn {
     durationMs: input?.duration_ms ?? input?.durationMs ?? null,
     items: (Array.isArray(input?.items) ? input.items : [])
       .map((item: AnyRecord) => normalizeTimelineItem(item))
-      .filter((item: TimelineItem) => item.itemId),
+      .filter((item): item is TimelineItem => item !== null),
   }
 }
 
@@ -90,7 +117,7 @@ export function isVisibleTimelineItem(item: TimelineItem | null | undefined, opt
 export function upsertTimelineItem(turn: TimelineTurn, itemInput: AnyRecord): TimelineItem | null {
   if (!turn || !Array.isArray(turn.items)) return null
   const item = normalizeTimelineItem(itemInput)
-  if (!item.itemId) return null
+  if (!item) return null
   const index = turn.items.findIndex((existing: TimelineItem) => existing.itemId === item.itemId)
   if (index >= 0) {
     turn.items.splice(index, 1, item)
@@ -180,7 +207,7 @@ export function timelineToChatRows(timeline: SessionTimeline, options: TimelineT
 }
 
 /** Return the text content of a user message timeline item. */
-export function userMessageText(payload: AnyRecord): string {
+export function userMessageText(payload: UserMessageItemPayload): string {
   const blocks = Array.isArray(payload?.content) ? payload.content : []
   return blocks
     .map((block) => String(block?.text || '').trim())
@@ -249,21 +276,21 @@ function appendTimelineItemDelta(turn: TimelineTurn, event: AnyRecord): void {
           },
         },
       }
-    } else {
+    } else if (isTextTimelineItemType(eventItemType)) {
       item = {
         itemId,
-        type: 'agent_message',
+        type: eventItemType,
         status: 'in_progress',
-        payload: { id: itemId, type: 'agent_message', status: 'in_progress', text: '' },
-      }
+        payload: { id: itemId, type: eventItemType, status: 'in_progress', text: '' },
+      } as TimelineItem
+    } else {
+      return
     }
     turn.items.push(item)
   }
-  if (item.type === 'tool_call' || eventItemType === 'tool_call') {
+  if (item.type === 'tool_call') {
     const append = String(event.delta?.arguments_append || '')
-    const fn = item.payload?.function && typeof item.payload.function === 'object'
-      ? item.payload.function
-      : {}
+    const fn = item.payload.function
     item.payload = {
       ...item.payload,
       provider_tool_call_id:
@@ -278,15 +305,10 @@ function appendTimelineItemDelta(turn: TimelineTurn, event: AnyRecord): void {
     return
   }
   const text = String(event.delta?.text_append ?? event.delta?.text ?? '')
-  if (text) {
+  if (text && isTextTimelineItem(item)) {
     item.payload = {
       ...item.payload,
       text: String(item.payload?.text || '') + text,
-    }
-  } else {
-    item.payload = {
-      ...item.payload,
-      delta: { ...(item.payload?.delta || {}), ...(event.delta || {}) },
     }
   }
 }
@@ -294,7 +316,7 @@ function appendTimelineItemDelta(turn: TimelineTurn, event: AnyRecord): void {
 /** Project one user message item to the temporary chat-row shape. */
 function userMessageRow(
   turn: TimelineTurn,
-  item: TimelineItem,
+  item: UserMessageTimelineItem,
   lookup: Map<string, AnyRecord>,
   assignedUuids: Set<string>,
   templateLabels: Record<string, string>,
@@ -344,7 +366,11 @@ function userMessageRow(
 }
 
 /** Project one assistant item to the temporary chat-row shape. */
-function agentMessageRow(turn: TimelineTurn, item: TimelineItem, toolSteps: AnyRecord[]): TimelineRow {
+function agentMessageRow(
+  turn: TimelineTurn,
+  item: AgentMessageTimelineItem,
+  toolSteps: AnyRecord[],
+): TimelineRow {
   const text = String(item.payload?.text || '')
   return {
     id: `${turn.turnId}-${item.itemId}`,
@@ -359,7 +385,7 @@ function agentMessageRow(turn: TimelineTurn, item: TimelineItem, toolSteps: AnyR
 }
 
 /** Project one context item to an optional debug chat-row shape. */
-function contextDebugRow(turn: TimelineTurn, item: TimelineItem): TimelineRow {
+function contextDebugRow(turn: TimelineTurn, item: ContextTimelineItem): TimelineRow {
   return {
     id: `${turn.turnId}-${item.itemId}`,
     turnId: turn.turnId,
@@ -371,7 +397,7 @@ function contextDebugRow(turn: TimelineTurn, item: TimelineItem): TimelineRow {
 }
 
 /** Project one tool call item to the legacy assistant step summary shape. */
-function toolCallStep(item: TimelineItem, index: number): AnyRecord {
+function toolCallStep(item: ToolCallTimelineItem, index: number): AnyRecord {
   const fn = item.payload?.function || {}
   const argsJson = fn.arguments_json
   let inputPreview = String(fn.arguments_text || '').trim()
@@ -387,5 +413,85 @@ function toolCallStep(item: TimelineItem, index: number): AnyRecord {
     tool: String(fn.name || ''),
     input_preview: inputPreview,
     status: item.status,
+  }
+}
+
+/** Return whether a raw protocol value is one of the six supported item types. */
+function isTimelineItemType(value: string): value is TimelineItemType {
+  return TIMELINE_ITEM_TYPES.has(value as TimelineItemType)
+}
+
+/** Return whether an item type carries streamed text. */
+function isTextTimelineItemType(
+  value: string,
+): value is 'agent_message' | 'reasoning' | 'plan' {
+  return value === 'agent_message' || value === 'reasoning' || value === 'plan'
+}
+
+/** Return whether a timeline item accepts text deltas. */
+function isTextTimelineItem(
+  item: TimelineItem,
+): item is Extract<TimelineItem, { type: 'agent_message' | 'reasoning' | 'plan' }> {
+  return isTextTimelineItemType(item.type)
+}
+
+/** Normalize protocol status values while retaining a stable UI fallback. */
+function normalizeTimelineItemStatus(value: unknown): TimelineItemStatus {
+  const status = String(value || '').trim()
+  return TIMELINE_ITEM_STATUSES.has(status as TimelineItemStatus)
+    ? status as TimelineItemStatus
+    : 'in_progress'
+}
+
+/** Fill required payload fields for the selected discriminated item branch. */
+function normalizeTimelinePayload(
+  type: TimelineItemType,
+  payload: AnyRecord,
+  status: TimelineItemStatus,
+): TimelineItem['payload'] {
+  if (type === 'context') {
+    return {
+      ...payload,
+      type: 'context',
+      status,
+      kind: String(payload.kind || 'context'),
+      content: String(payload.content || ''),
+    }
+  }
+  if (type === 'user_message') {
+    return {
+      ...payload,
+      type: 'user_message',
+      status,
+      content: Array.isArray(payload.content) ? payload.content : [],
+      metadata: payload.metadata && typeof payload.metadata === 'object'
+        ? payload.metadata
+        : {},
+    }
+  }
+  if (type === 'agent_message') {
+    return { ...payload, type: 'agent_message', status, text: String(payload.text || '') }
+  }
+  if (type === 'reasoning') {
+    return { ...payload, type: 'reasoning', status, text: String(payload.text || '') }
+  }
+  if (type === 'plan') {
+    return { ...payload, type: 'plan', status, text: String(payload.text || '') }
+  }
+  const fn = payload.function && typeof payload.function === 'object'
+    ? payload.function
+    : {}
+  return {
+    ...payload,
+    type: 'tool_call',
+    status,
+    function: {
+      ...fn,
+      name: fn.name == null ? null : String(fn.name),
+      arguments_text: String(fn.arguments_text || ''),
+      arguments_json: fn.arguments_json && typeof fn.arguments_json === 'object'
+        ? fn.arguments_json
+        : null,
+    },
   }
 }

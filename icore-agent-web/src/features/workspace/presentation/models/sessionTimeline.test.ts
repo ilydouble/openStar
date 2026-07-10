@@ -8,7 +8,12 @@ import {
   timelineToChatRows,
   upsertTimelineItem,
 } from './sessionTimeline'
-import type { TimelineTurn } from '../../domain/models/timeline'
+import type {
+  AgentMessageTimelineItem,
+  TimelineItem,
+  TimelineItemType,
+  TimelineTurn,
+} from '../../domain/models/timeline'
 
 test('hydrateSessionTimeline reads canonical turns and attachments', () => {
   const timeline = hydrateSessionTimeline({
@@ -32,7 +37,7 @@ test('hydrateSessionTimeline reads canonical turns and attachments', () => {
   assert.equal(timeline.sessionId, 'session-1')
   assert.equal(timeline.turns.length, 1)
   assert.equal(timeline.turns[0].turnId, 'turn-1')
-  assert.equal(timeline.turns[0].items[0].payload.text, 'Done')
+  assert.equal(itemOfType(timeline.turns[0].items[0], 'agent_message').payload.text, 'Done')
   assert.equal(timeline.attachments[0].file_uuid, 'file-1')
 })
 
@@ -65,7 +70,7 @@ test('upsertTimelineItem updates existing items by stable item id', () => {
 
   assert.equal(turn.items.length, 1)
   assert.equal(turn.items[0].status, 'completed')
-  assert.equal(turn.items[0].payload.text, 'Hello')
+  assert.equal(itemOfType(turn.items[0], 'agent_message').payload.text, 'Hello')
 })
 
 test('applyTurnEvent builds turns, appends deltas, and preserves failed items', () => {
@@ -102,7 +107,23 @@ test('applyTurnEvent builds turns, appends deltas, and preserves failed items', 
 
   assert.equal(timeline.turns[0].status, 'failed')
   assert.equal((timeline.turns[0].error as { message: string }).message, 'model unavailable')
-  assert.equal(timeline.turns[0].items[0].payload.text, 'Hello')
+  assert.equal(itemOfType(timeline.turns[0].items[0], 'agent_message').payload.text, 'Hello')
+})
+
+test('applyTurnEvent preserves reasoning item type while appending text deltas', () => {
+  const timeline = hydrateSessionTimeline({ session_id: 'session-1', turns: [], attachments: [] })
+
+  applyTurnEvent(timeline, { type: 'turn_started', turn_id: 'turn-1' })
+  applyTurnEvent(timeline, {
+    type: 'item_delta',
+    turn_id: 'turn-1',
+    item_id: 'reasoning-1',
+    item_type: 'reasoning',
+    delta: { text_append: 'Compare the available evidence.' },
+  })
+
+  const item = itemOfType(timeline.turns[0].items[0], 'reasoning')
+  assert.equal(item.payload.text, 'Compare the available evidence.')
 })
 
 test('applyTurnEvent replaces terminal turns and appends tool-call arguments', () => {
@@ -143,7 +164,7 @@ test('applyTurnEvent replaces terminal turns and appends tool-call arguments', (
     delta: { arguments_append: '2,"right":1}' },
   })
   assert.equal(
-    timeline.turns[0].items[0].payload.function.arguments_text,
+    itemOfType(timeline.turns[0].items[0], 'tool_call').payload.function.arguments_text,
     '{"left":2,"right":1}',
   )
   applyTurnEvent(timeline, {
@@ -168,7 +189,7 @@ test('applyTurnEvent replaces terminal turns and appends tool-call arguments', (
   assert.equal(timeline.turns[0].status, 'completed')
   assert.equal(timeline.turns[0].model, 'test-model')
   assert.equal(timeline.turns[0].items.length, 1)
-  assert.equal(timeline.turns[0].items[0].payload.text, 'Done')
+  assert.equal(itemOfType(timeline.turns[0].items[0], 'agent_message').payload.text, 'Done')
 })
 
 test('timelineToChatRows renders user attachments and hides context items by default', () => {
@@ -226,22 +247,35 @@ test('timelineToChatRows renders user attachments and hides context items by def
 })
 
 test('isVisibleTimelineItem hides empty assistant text placeholders', () => {
-  assert.equal(isVisibleTimelineItem({
+  const emptyItem: AgentMessageTimelineItem = {
     itemId: 'assistant-1',
     type: 'agent_message',
     status: 'in_progress',
-    payload: { text: '' },
-  }), false)
-  assert.equal(isVisibleTimelineItem({
+    payload: { type: 'agent_message', status: 'in_progress', text: '' },
+  }
+  const whitespaceItem: AgentMessageTimelineItem = {
     itemId: 'assistant-2',
     type: 'agent_message',
     status: 'completed',
-    payload: { text: '  ' },
-  }), false)
-  assert.equal(isVisibleTimelineItem({
+    payload: { type: 'agent_message', status: 'completed', text: '  ' },
+  }
+  const visibleItem: AgentMessageTimelineItem = {
     itemId: 'assistant-3',
     type: 'agent_message',
     status: 'in_progress',
-    payload: { text: 'Hel' },
-  }), true)
+    payload: { type: 'agent_message', status: 'in_progress', text: 'Hel' },
+  }
+
+  assert.equal(isVisibleTimelineItem(emptyItem), false)
+  assert.equal(isVisibleTimelineItem(whitespaceItem), false)
+  assert.equal(isVisibleTimelineItem(visibleItem), true)
 })
+
+/** Assert and return one discriminated timeline item branch for focused tests. */
+function itemOfType<TType extends TimelineItemType>(
+  item: TimelineItem,
+  type: TType,
+): Extract<TimelineItem, { type: TType }> {
+  assert.equal(item.type, type)
+  return item as Extract<TimelineItem, { type: TType }>
+}

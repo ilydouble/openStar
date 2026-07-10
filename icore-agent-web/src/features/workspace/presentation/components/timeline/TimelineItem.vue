@@ -1,5 +1,5 @@
 <template>
-  <div :class="rowClass">
+  <div :class="rowClass" :data-item-type="item.type">
     <UserMessageItem
       v-if="item.type === 'user_message'"
       :item="item"
@@ -44,8 +44,8 @@ const props = withDefaults(defineProps<{
 defineEmits<{ 'open-document': [attachment: WorkspaceAttachment] }>()
 
 const rowClass = computed(() => {
-  if (props.item.type === 'user_message') return 'flex justify-end'
-  if (props.item.type === 'context') return 'flex justify-center'
-  return 'flex justify-start'
+  if (props.item.type === 'user_message') return 'flex w-full justify-end'
+  if (props.item.type === 'agent_message') return 'flex w-full justify-start'
+  return 'flex w-full'
 })
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <section v-if="visibleItems.length" class="space-y-3">
+  <section v-if="visibleItems.length" class="space-y-4">
     <TimelineItem
       v-for="item in visibleItems"
       :key="item.itemId"

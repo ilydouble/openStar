@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
-import { isAuthenticated } from './features/auth/application/session'
+import { authApplication, loadAuthPage } from './features/auth'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'landing', component: () => import('./features/landing/interfaces/LandingView.vue') },
-  { path: '/auth', name: 'auth', component: () => import('./features/auth/interfaces/AuthView.vue') },
+  { path: '/auth', name: 'auth', component: loadAuthPage },
   { path: '/enterprise', name: 'enterprise', component: () => import('./features/enterprise/interfaces/EnterpriseView.vue') },
   {
     path: '/account',
@@ -48,13 +48,13 @@ export function createAppRouter(): Router {
     },
   })
   router.beforeEach((to) => {
-    if (to.meta?.requiresAuth && !isAuthenticated()) {
+    if (to.meta?.requiresAuth && !authApplication.isAuthenticated()) {
       return {
         name: 'auth',
         query: { redirect: to.fullPath },
       }
     }
-    if (to.name === 'auth' && isAuthenticated()) {
+    if (to.name === 'auth' && authApplication.isAuthenticated()) {
       return { name: 'workspace' }
     }
     return true

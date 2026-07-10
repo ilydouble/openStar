@@ -290,7 +290,7 @@ import {
   updateByok,
   updateKnowledgeScope,
 } from '../infrastructure/accountApi'
-import { signOut } from '../../auth/infrastructure/authApi'
+import { authApplication } from '../../auth'
 import MemoryManagerSection from './MemoryManagerSection.vue'
 
 const { t } = useI18n()
@@ -470,7 +470,7 @@ async function inviteMember() {
 }
 
 function handleSignOut() {
-  signOut()
+  authApplication.signOut()
   router.push({ name: 'auth' })
 }
 

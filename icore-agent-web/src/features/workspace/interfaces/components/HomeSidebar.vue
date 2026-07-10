@@ -465,7 +465,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../../../shared/presentation/i18n/localePreference'
-import { clearSession } from '../../../auth/application/session'
+import { authApplication } from '../../../auth'
 import ThemeToggle from '../../../../shared/presentation/components/ThemeToggle.vue'
 import { sanitizeHtml } from '../../../../shared/presentation/html/sanitizeHtml'
 
@@ -686,7 +686,7 @@ function toggleLocale() {
 
 /** 清除 session 并跳转到登录页 */
 function handleSignOut() {
-  clearSession()
+  authApplication.signOut()
   closeMore()
   router.push({ name: 'auth' })
 }

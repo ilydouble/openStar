@@ -429,7 +429,7 @@ import {
 } from '../infrastructure/agentApi'
 import { isDark as isDarkFn } from '../../../shared/presentation/theme/theme'
 import { fetchPlan, fetchProjects, syncProject } from '../../account/infrastructure/accountApi'
-import { signOut } from '../../auth/infrastructure/authApi'
+import { authApplication } from '../../auth'
 import {
   getWorkspaceOnboardingComplete,
   setWorkspaceOnboardingComplete,
@@ -1133,7 +1133,7 @@ async function sendUserMessage(msg, agentHint = '', {
       } else {
         const errorMsg = String(e?.message || '')
         if (errorMsg.includes('401')) {
-          signOut()
+          authApplication.signOut()
           router.push({ name: 'auth' })
         } else {
           appendLocalErrorTurn(t('chat.requestFailed', { msg: errorMsg }))
@@ -1283,7 +1283,7 @@ function goAccount() {
 }
 
 function handleSignOut() {
-  signOut()
+  authApplication.signOut()
   router.push({ name: 'auth' })
 }
 </script>

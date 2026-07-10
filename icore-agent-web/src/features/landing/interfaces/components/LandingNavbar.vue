@@ -163,14 +163,14 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../../../shared/presentation/i18n/localePreference'
-import { isAuthenticated } from '../../../auth/application/session'
+import { authApplication } from '../../../auth'
 import ThemeToggle from '../../../../shared/presentation/components/ThemeToggle.vue'
 
 const { t, tm, locale } = useI18n()
 
 const menuOpen = ref(false)
 const currentLocale = computed(() => locale.value)
-const loggedIn = computed(() => isAuthenticated())
+const loggedIn = computed(() => authApplication.isAuthenticated())
 const navLinks = computed(() => {
   const items = tm('landing.nav.links')
   return Array.isArray(items) ? items : []

@@ -102,7 +102,7 @@
               <span class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ t('auth.verificationCode') }}</span>
               <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                 <input
-                  v-model="form.verification_code"
+                  v-model="form.verificationCode"
                   type="text"
                   inputmode="numeric"
                   maxlength="6"
@@ -150,89 +150,24 @@
   </div>
 </template>
 
-<script setup>
-import { reactive, ref, computed, watch } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { emailLogin, registerTrial, sendVerificationCode } from '../infrastructure/authApi'
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
 
-const { t, tm } = useI18n()
-const router = useRouter()
+import { useAuthForm } from '../composables/useAuthForm'
 
-const isLoginMode = ref(false)  // 登录/注册模式切换
-const step = ref(1)  // 1=填信息发验证码, 2=填验证码注册/登录
-const form = reactive({ name: '', email: '', verification_code: '' })
-const submitting = ref(false)
-const sending = ref(false)
-const codeSent = ref(false)
-const error = ref('')
-const resendCooldown = ref(0)
-
-// 切换模式时重置状态
-watch(isLoginMode, () => {
-  resetStep()
-})
-
-const featureCards = computed(() => {
-  const raw = tm('auth.features')
-  return Array.isArray(raw) ? raw : []
-})
-
-function startCooldown(seconds = 60) {
-  resendCooldown.value = seconds
-  const timer = setInterval(() => {
-    resendCooldown.value -= 1
-    if (resendCooldown.value <= 0) clearInterval(timer)
-  }, 1000)
-}
-
-function resetStep() {
-  step.value = 1
-  form.verification_code = ''
-  codeSent.value = false
-  error.value = ''
-}
-
-async function sendCode() {
-  if (sending.value || (!isLoginMode.value && !form.name.trim()) || !form.email) return
-  sending.value = true
-  error.value = ''
-  try {
-    await sendVerificationCode({
-      email: form.email,
-      purpose: isLoginMode.value ? 'login' : 'register',
-    })
-    step.value = 2
-    codeSent.value = true
-    startCooldown(60)
-  } catch (err) {
-    if (!isLoginMode.value && err.status === 400) {
-      error.value = t('auth.emailAlreadyRegistered')
-    } else {
-      error.value = err.message || t('auth.failed')
-    }
-  } finally {
-    sending.value = false
-  }
-}
-
-async function submit() {
-  if (submitting.value) return
-  submitting.value = true
-  error.value = ''
-  try {
-    if (isLoginMode.value) {
-      // 登录模式：只需邮箱 + 验证码
-      await emailLogin({ email: form.email, verification_code: form.verification_code })
-    } else {
-      // 注册模式：需要姓名 + 邮箱 + 验证码
-      await registerTrial(form)
-    }
-    router.push({ name: 'workspace' })
-  } catch (err) {
-    error.value = err.message || t('auth.failed')
-  } finally {
-    submitting.value = false
-  }
-}
+const {
+  codeSent,
+  error,
+  featureCards,
+  form,
+  isLoginMode,
+  resendCooldown,
+  resetStep,
+  sendCode,
+  sending,
+  step,
+  submit,
+  submitting,
+  t,
+} = useAuthForm()
 </script>

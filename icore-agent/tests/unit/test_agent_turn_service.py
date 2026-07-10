@@ -20,6 +20,7 @@ from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     SessionItem,
     ToolCallItem,
+    ToolCallStatus,
     ToolFunction,
     UserMessageItem,
 )
@@ -621,6 +622,7 @@ class FakeModelClient:
                 tool_calls=[
                     ToolCallItem(
                         provider_tool_call_id="tool-1",
+                        status=ToolCallStatus.READY,
                         function=ToolFunction(
                             name="number_comparator",
                             arguments_text='{"left":2,"right":1}',

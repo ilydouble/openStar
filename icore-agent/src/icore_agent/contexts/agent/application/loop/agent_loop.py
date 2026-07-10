@@ -352,9 +352,24 @@ class AgentLoop:
                     "Chat Completions tool loop exceeded limit")
             tool_rounds += 1
 
+            for tool_call in step.tool_calls:
+                if (
+                    tool_call.status == ToolCallStatus.FAILED
+                    and not _turn_contains_failed_tool_call(
+                        request.turn,
+                        tool_call.id,
+                    )
+                ):
+                    request.turn.upsert_item(tool_call)
+                    yield TurnEvent.item_completed(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=tool_call,
+                    )
             requested_calls = [
                 _running_tool_call(tool_call)
                 for tool_call in step.tool_calls
+                if tool_call.status == ToolCallStatus.READY
             ]
             for tool_call in requested_calls:
                 request.turn.upsert_item(tool_call)
@@ -365,8 +380,10 @@ class AgentLoop:
                 )
 
             try:
-                completed_calls = await request.tool_runtime.execute(
-                    requested_calls,
+                completed_calls = (
+                    await request.tool_runtime.execute(requested_calls)
+                    if requested_calls
+                    else []
                 )
             except Exception as exc:
                 log.error("agent_tool_runtime_failed", error=str(exc))
@@ -479,6 +496,16 @@ def _running_tool_call(item: ToolCallItem) -> ToolCallItem:
         "started_at": item.started_at or datetime.now(UTC),
         "completed_at": None,
     })
+
+
+def _turn_contains_failed_tool_call(turn: Turn, item_id: str) -> bool:
+    """Return whether the turn already contains this failed tool call."""
+    return any(
+        isinstance(item, ToolCallItem)
+        and item.id == item_id
+        and item.status == ToolCallStatus.FAILED
+        for item in turn.items
+    )
 
 
 def _streaming_tool_call(event: ModelToolCallStarted) -> ToolCallItem:

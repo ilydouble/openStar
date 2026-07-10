@@ -306,6 +306,109 @@ async def test_chat_completions_model_client_streams_tool_call_deltas(
     assert final.stop_reason == "tool_calls"
 
 
+@pytest.mark.asyncio
+async def test_streamed_invalid_tool_arguments_are_not_coerced_to_empty_object(
+    monkeypatch,
+) -> None:
+    """Malformed streamed arguments should finalize as a failed tool call."""
+
+    async def fake_completion(**kwargs: Any) -> Any:
+        _ = kwargs
+
+        async def chunks() -> Any:
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "id": "provider-tool-1",
+                            "type": "function",
+                            "function": {
+                                "name": "number_comparator",
+                                "arguments": '{"left":',
+                            },
+                        }],
+                    },
+                    "finish_reason": "tool_calls",
+                }],
+            }
+
+        return chunks()
+
+    monkeypatch.setattr(
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
+        fake_completion,
+    )
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
+        client_args={},
+        params={},
+    )
+
+    events = [
+        event
+        async for event in client.stream(_envelope(_tool_definition()))
+    ]
+
+    completed = next(
+        event
+        for event in events
+        if isinstance(event, ModelToolCallCompleted)
+    )
+    assert completed.tool_call.status == ToolCallStatus.FAILED
+    assert completed.tool_call.function.arguments_text == '{"left":'
+    assert completed.tool_call.function.arguments_json is None
+    assert completed.tool_call.error is not None
+    assert completed.tool_call.error.code == "InvalidToolArguments"
+    final = events[-1]
+    assert isinstance(final, ModelStepResult)
+    assert final.tool_calls[0].status == ToolCallStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_complete_response_invalid_tool_arguments_use_same_validation(
+    monkeypatch,
+) -> None:
+    """Non-streaming fallbacks should share strict tool argument validation."""
+
+    async def fake_completion(**kwargs: Any) -> dict[str, Any]:
+        _ = kwargs
+        return {
+            "id": "response-1",
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "provider-tool-1",
+                        "type": "function",
+                        "function": {
+                            "name": "number_comparator",
+                            "arguments": "[]",
+                        },
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+
+    monkeypatch.setattr(
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
+        fake_completion,
+    )
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
+        client_args={},
+        params={},
+    )
+
+    result = await client.sample(_envelope(_tool_definition()))
+
+    assert result.tool_calls[0].status == ToolCallStatus.FAILED
+    assert result.tool_calls[0].function.arguments_text == "[]"
+    assert result.tool_calls[0].function.arguments_json is None
+
+
 def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> None:
     """Renderer should convert current-turn tool state only at the provider boundary."""
     tool_definition = _tool_definition()

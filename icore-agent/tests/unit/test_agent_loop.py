@@ -25,6 +25,7 @@ from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ReasoningItem,
     SessionItem,
+    ToolCallError,
     ToolCallItem,
     ToolCallResult,
     ToolCallStatus,
@@ -299,6 +300,64 @@ async def test_agent_loop_fails_when_tool_round_limit_is_exceeded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_loop_skips_failed_arguments_and_executes_ready_calls() -> None:
+    """Invalid calls should reach the next model step without tool execution."""
+    turn = Turn(session_id="session-1")
+    invalid_call = ToolCallItem(
+        id="invalid-tool-item",
+        provider_tool_call_id="invalid-provider-tool",
+        status=ToolCallStatus.FAILED,
+        function=ToolFunction(
+            name="number_comparator",
+            arguments_text='{"left":',
+            arguments_json=None,
+        ),
+        result=ToolCallResult(
+            content="Tool call arguments were not valid JSON."),
+        error=ToolCallError(
+            message="Tool call arguments were not valid JSON.",
+            code="InvalidToolArguments",
+        ),
+    )
+    ready_call = _tool_call().model_copy(update={"id": "ready-tool-item"})
+    model_client = ScriptedModelClient([
+        ModelStepResult(
+            assistant_item=AgentMessageItem(text=""),
+            tool_calls=[invalid_call, ready_call],
+            stop_reason="tool_calls",
+        ),
+        ModelStepResult(
+            assistant_item=AgentMessageItem(text="Recovered response"),
+        ),
+    ])
+    tool_runtime = RecordingToolRuntime()
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=model_client,
+        tool_runtime=tool_runtime,
+    )
+
+    events = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+
+    assert tool_runtime.requested_item_ids == ["ready-tool-item"]
+    assert any(
+        event.kind == TurnEventKind.ITEM_COMPLETED
+        and event.item is not None
+        and event.item.id == "invalid-tool-item"
+        and event.item.status == ToolCallStatus.FAILED
+        for event in events
+    )
+    assert model_client.prompt_turn_item_types == [
+        [],
+        ["tool_call", "tool_call"],
+    ]
+    assert turn.reply_text() == "Recovered response"
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_aborts_before_model_sampling_when_requested() -> None:
     """AgentLoop should stop cooperatively before calling the model client."""
     turn = Turn(session_id="session-1")
@@ -507,6 +566,19 @@ class CompletingToolRuntime:
         ]
 
 
+class RecordingToolRuntime(CompletingToolRuntime):
+    """Completing runtime that records which tool calls reached execution."""
+
+    def __init__(self) -> None:
+        """Create an empty execution record."""
+        self.requested_item_ids: list[str] = []
+
+    async def execute(self, tool_calls: list[ToolCallItem]) -> list[ToolCallItem]:
+        """Record requested calls before returning completed items."""
+        self.requested_item_ids.extend(call.id for call in tool_calls)
+        return await super().execute(tool_calls)
+
+
 class SteeringControl:
     """Runtime control fake that injects one steering message after tools run."""
 
@@ -556,6 +628,7 @@ def _tool_call() -> ToolCallItem:
     """Build a requested number comparison tool call."""
     return ToolCallItem(
         provider_tool_call_id="provider-tool-1",
+        status=ToolCallStatus.READY,
         function=ToolFunction(
             name="number_comparator",
             arguments_text='{"left":2,"right":1}',

@@ -1,4 +1,4 @@
-import { createJsonClient } from '../../../shared/api/client'
+import { apiClient } from '../../../shared/api/api-client'
 import {
   clearSession,
   peekAccessTokenState,
@@ -7,8 +7,7 @@ import {
 } from '../application/session'
 import { authTrace } from '../application/trace'
 
-const BASE = '/api/v1/account'
-const client = createJsonClient()
+const BASE = '/account'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -59,12 +58,12 @@ export async function sendVerificationCode({
   email,
   purpose = 'register',
 }: VerificationCodeCommand): Promise<unknown> {
-  return client.post(`${BASE}/send-verification-code`, { email, purpose })
+  return apiClient.post(`${BASE}/send-verification-code`, { email, purpose })
 }
 
 /** Register a trial account and persist the returned session token. */
 export async function registerTrial(command: RegisterTrialCommand): Promise<unknown> {
-  const payload = await client.post(`${BASE}/register-trial`, command)
+  const payload = await apiClient.post<unknown, RegisterTrialCommand>(`${BASE}/register-trial`, command)
   authTrace('registerTrial response shape', {
     topKeys: isRecord(payload) ? Object.keys(payload).slice(0, 24) : typeof payload,
   })
@@ -87,7 +86,7 @@ export async function registerTrial(command: RegisterTrialCommand): Promise<unkn
 
 /** Log in with email verification and persist the returned session token. */
 export async function emailLogin(command: EmailLoginCommand): Promise<unknown> {
-  const payload = await client.post(`${BASE}/login`, command)
+  const payload = await apiClient.post<unknown, EmailLoginCommand>(`${BASE}/login`, command)
   authTrace('emailLogin response shape', {
     topKeys: isRecord(payload) ? Object.keys(payload).slice(0, 24) : typeof payload,
   })

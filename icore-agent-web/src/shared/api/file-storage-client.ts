@@ -1,5 +1,6 @@
 import {
   ApiError,
+  apiClient,
   createRequestId,
   emitHttpTrace,
   formatApiErrorMessage,
@@ -8,9 +9,54 @@ import {
 } from './api-client'
 import i18n from '../i18n'
 
+const FILE_BASE = '/files'
+
+export type FileStorageRecord = Record<string, unknown>
+
+export interface FileUploadUrlCommand {
+  original_filename: string
+  content_type: string
+  checksum_sha256: string
+}
+
+export interface CompleteFileUploadCommand {
+  checksum_sha256: string
+}
+
 export interface PresignedUploadOptions {
   contentType: string
   timeoutMs?: number
+}
+
+/** Request an authenticated upload URL from the first-party files API. */
+export function requestFileUploadUrl<TResponse = FileStorageRecord>(
+  command: FileUploadUrlCommand,
+): Promise<TResponse> {
+  return apiClient.post<TResponse, FileUploadUrlCommand>(`${FILE_BASE}/upload-url/`, command)
+}
+
+/** Mark one uploaded storage object complete after checksum verification. */
+export function completeFileUpload<TResponse = FileStorageRecord>(
+  fileUuid: string,
+  command: CompleteFileUploadCommand,
+): Promise<TResponse> {
+  const encodedUuid = encodeURIComponent(fileUuid)
+  return apiClient.post<TResponse, CompleteFileUploadCommand>(
+    `${FILE_BASE}/${encodedUuid}/complete/`,
+    command,
+  )
+}
+
+/** Fetch a temporary download URL for one owned file asset. */
+export function fetchFileDownloadUrl<TResponse = FileStorageRecord>(
+  fileUuid: string,
+): Promise<TResponse> {
+  return apiClient.get<TResponse>(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/download-url/`)
+}
+
+/** Delete one owned file asset through the first-party files API. */
+export function deleteFileStorageAsset(fileUuid: string): Promise<unknown> {
+  return apiClient.delete(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/`)
 }
 
 /** Upload a body to an external presigned URL without first-party auth or correlation headers. */

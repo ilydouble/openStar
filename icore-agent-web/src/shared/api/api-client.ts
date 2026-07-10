@@ -80,6 +80,7 @@ export type TokenReader = () => string
 export interface ApiClientConfiguration {
   tokenReader: TokenReader
   traceSink?: HttpTraceSink
+  client?: ApiClient
 }
 
 export interface CreateApiClientOptions {
@@ -145,11 +146,13 @@ export class ApiError extends Error {
 
 let configuredTokenReader: TokenReader = () => ''
 let configuredTraceSink: HttpTraceSink | undefined
+let configuredClient: ApiClient | undefined
 
 /** Configure browser-specific authentication and optional trace delivery at app startup. */
-export function configureApiClient({ tokenReader, traceSink }: ApiClientConfiguration): void {
+export function configureApiClient({ tokenReader, traceSink, client }: ApiClientConfiguration): void {
   configuredTokenReader = tokenReader
   configuredTraceSink = traceSink
+  configuredClient = client
 }
 
 /** Read the access token configured by the application bootstrap. */
@@ -607,4 +610,28 @@ function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
 }
 
-export const apiClient = createApiClient()
+const defaultApiClient = createApiClient()
+
+/** Resolve the configured client override or the production default instance. */
+function activeApiClient(): ApiClient {
+  return configuredClient || defaultApiClient
+}
+
+/** Shared client facade used by feature infrastructure modules. */
+export const apiClient: ApiClient = {
+  request<TResponse, TBody = unknown>(config: ApiRequestConfig<TBody>) {
+    return activeApiClient().request<TResponse, TBody>(config)
+  },
+  get<TResponse>(path: string, options?: ApiRequestOptions) {
+    return activeApiClient().get<TResponse>(path, options)
+  },
+  post<TResponse, TBody = unknown>(path: string, body?: TBody, options?: ApiRequestOptions) {
+    return activeApiClient().post<TResponse, TBody>(path, body, options)
+  },
+  put<TResponse, TBody = unknown>(path: string, body?: TBody, options?: ApiRequestOptions) {
+    return activeApiClient().put<TResponse, TBody>(path, body, options)
+  },
+  delete<TResponse>(path: string, options?: ApiRequestOptions) {
+    return activeApiClient().delete<TResponse>(path, options)
+  },
+}

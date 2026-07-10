@@ -2,12 +2,16 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
-import { chatEventStream, chatStream } from './agentApi'
+import { AxiosHeaders } from 'axios'
+
+import { configureApiClient, createApiClient } from '../../../shared/api/api-client'
+import { QuotaExceededError, chatEventStream, chatStream, transcribeSpeech } from './agentApi'
 
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  configureApiClient({ tokenReader: () => '' })
 })
 
 test('chatStream converts turn item deltas into token events', async () => {
@@ -123,6 +127,67 @@ test('chatStream reports turn_failed error messages', async () => {
     async () => collect(chatStream('Hi', 'session-1')),
     /model unavailable/,
   )
+})
+
+test('chatEventStream preserves quota errors from the shared SSE client', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    code: 402,
+    message: 'quota exceeded',
+    data: { current_plan: 'trial', upgrade_url: '/account' },
+    timestamp: '2026-07-10T00:00:00Z',
+    error_code: 'quota_exceeded',
+  }), {
+    status: 402,
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  await assert.rejects(
+    async () => collect(chatEventStream('Hi', 'session-1')),
+    (error) => {
+      assert.ok(error instanceof QuotaExceededError)
+      assert.equal(error.currentPlan, 'trial')
+      assert.equal(error.upgradeUrl, '/account')
+      return true
+    },
+  )
+})
+
+test('transcribeSpeech uses shared FormData transport with the long request timeout', async () => {
+  let seenConfig
+  const adapter = async (config) => {
+    seenConfig = config
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      data: {
+        code: 200,
+        message: 'ok',
+        data: { text: 'Transcribed text' },
+        timestamp: '2026-07-10T00:00:00Z',
+      },
+      headers: new AxiosHeaders(),
+    }
+  }
+  configureApiClient({
+    tokenReader: () => 'voice-token',
+    client: createApiClient({ adapter, tokenReader: () => 'voice-token' }),
+  })
+  const signal = new AbortController().signal
+
+  const text = await transcribeSpeech(new Blob(['audio'], { type: 'audio/webm' }), {
+    language: 'zh-CN',
+    filename: 'voice.webm',
+    signal,
+  })
+
+  assert.equal(text, 'Transcribed text')
+  assert.equal(seenConfig.url, '/agent/transcribe')
+  assert.equal(seenConfig.timeout, 120_000)
+  assert.equal(seenConfig.signal, signal)
+  assert.ok(seenConfig.data instanceof FormData)
+  assert.equal(seenConfig.data.get('language'), 'zh-CN')
+  assert.equal(AxiosHeaders.from(seenConfig.headers).get('Authorization'), 'Bearer voice-token')
 })
 
 function mockChatStreamResponse(frames) {

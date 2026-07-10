@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test src/features/workspace/infrastructure/agentApi.test.ts src/features/workspace/domain/sessionMessageHydration.test.ts src/features/workspace/domain/sessionTimeline.test.ts src/shared/api/api-client.test.ts src/shared/api/sse-client.test.ts src/shared/api/file-storage-client.test.ts src/shared/html/sanitizeHtml.test.ts src/shared/composables/useVirtualList.test.ts tests/*.test.mjs",
+    "test": "node --import tsx --test src/features/account/infrastructure/accountApi.test.ts src/features/auth/infrastructure/authApi.test.ts src/features/workspace/infrastructure/agentApi.test.ts src/features/workspace/domain/sessionMessageHydration.test.ts src/features/workspace/domain/sessionTimeline.test.ts src/shared/api/api-client.test.ts src/shared/api/sse-client.test.ts src/shared/api/file-storage-client.test.ts src/shared/html/sanitizeHtml.test.ts src/shared/composables/useVirtualList.test.ts tests/*.test.mjs",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {

@@ -1,14 +1,66 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
-import { ApiError, configureApiClient, type HttpTraceEvent } from './api-client'
-import { putPresignedFile } from './file-storage-client'
+import { AxiosHeaders, type AxiosAdapter } from 'axios'
+
+import {
+  ApiError,
+  configureApiClient,
+  createApiClient,
+  type HttpTraceEvent,
+} from './api-client'
+import {
+  completeFileUpload,
+  deleteFileStorageAsset,
+  fetchFileDownloadUrl,
+  putPresignedFile,
+  requestFileUploadUrl,
+} from './file-storage-client'
 
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
   globalThis.fetch = originalFetch
   configureApiClient({ tokenReader: () => '' })
+})
+
+test('file metadata operations share the authenticated first-party API client', async () => {
+  const calls: Array<{ method: string; path: string; authorization: string }> = []
+  const adapter: AxiosAdapter = async (config) => {
+    calls.push({
+      method: String(config.method || '').toUpperCase(),
+      path: String(config.url || ''),
+      authorization: String(AxiosHeaders.from(config.headers).get('Authorization') || ''),
+    })
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      data: envelope({ ok: true }),
+      headers: new AxiosHeaders(),
+    }
+  }
+  configureApiClient({
+    tokenReader: () => 'file-token',
+    client: createApiClient({ adapter, tokenReader: () => 'file-token' }),
+  })
+
+  await requestFileUploadUrl({
+    original_filename: 'report.pdf',
+    content_type: 'application/pdf',
+    checksum_sha256: 'abc',
+  })
+  await completeFileUpload('file id', { checksum_sha256: 'abc' })
+  await fetchFileDownloadUrl('file id')
+  await deleteFileStorageAsset('file id')
+
+  assert.deepEqual(calls.map(({ method, path }) => ({ method, path })), [
+    { method: 'POST', path: '/files/upload-url/' },
+    { method: 'POST', path: '/files/file%20id/complete/' },
+    { method: 'GET', path: '/files/file%20id/download-url/' },
+    { method: 'DELETE', path: '/files/file%20id/' },
+  ])
+  assert.ok(calls.every((call) => call.authorization === 'Bearer file-token'))
 })
 
 test('presigned upload sends only storage headers and redacts query credentials from traces', async () => {
@@ -63,3 +115,13 @@ test('presigned upload converts its timeout into ApiError without retrying', asy
   )
   assert.equal(attempts, 1)
 })
+
+/** Build the backend's shared success envelope for file client fixtures. */
+function envelope(data: unknown) {
+  return {
+    code: 200,
+    message: 'ok',
+    data,
+    timestamp: '2026-07-10T00:00:00Z',
+  }
+}

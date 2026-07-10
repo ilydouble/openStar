@@ -151,6 +151,18 @@ test('api client retries configured transient HTTP statuses for safe methods', a
   assert.equal(attempts, 2)
 })
 
+test('api client preserves AbortError semantics for canceled Axios requests', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  const adapter: AxiosAdapter = async (config) => response(config, 200, envelope({ ok: true }))
+  const client = createApiClient({ adapter })
+
+  await assert.rejects(
+    () => client.post('/agent/transcribe', new FormData(), { signal: controller.signal }),
+    (error) => error instanceof Error && error.name === 'AbortError',
+  )
+})
+
 /** Build one successful Axios adapter response. */
 function response(
   config: InternalAxiosRequestConfig,

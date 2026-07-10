@@ -1,12 +1,21 @@
-import { buildAuthHeaders, getAccessToken } from '../../auth/application/session'
-import { authTrace } from '../../auth/application/trace'
-import { formatApiErrorMessage, readJsonResponse } from '../../../shared/api/client'
+import {
+  ApiError,
+  apiClient,
+  getFileTimeoutMs,
+  readFetchResponse,
+} from '../../../shared/api/api-client'
+import {
+  completeFileUpload,
+  deleteFileStorageAsset,
+  fetchFileDownloadUrl,
+  putPresignedFile,
+  requestFileUploadUrl,
+} from '../../../shared/api/file-storage-client'
+import { openSseResponse } from '../../../shared/api/sse-client'
 
-const BASE = '/api/v1/agent'
-const FILE_BASE = '/api/v1/files'
+const BASE = '/agent'
 
 type AnyRecord = Record<string, any>
-type HeaderBag = Record<string, string>
 
 export interface QuotaExceededData {
   current_plan?: string
@@ -52,18 +61,6 @@ export class QuotaExceededError extends Error {
   }
 }
 
-/** Bearer + trace (dev / VITE_DEBUG_AUTH) for outbound agent fetch calls. */
-function mergeAgentAuthHeaders(extra: HeaderBag = {}, label = 'agent-fetch'): HeaderBag {
-  const token = getAccessToken()
-  const sessionTokenLen = typeof token === 'string' ? token.length : -1
-  const headers = buildAuthHeaders(extra)
-  authTrace(label, {
-    hasBearer: Boolean(headers.Authorization),
-    sessionTokenLength: sessionTokenLen,
-  })
-  return headers
-}
-
 /**
  * Parse an agent API error response.
  *
@@ -73,26 +70,32 @@ function mergeAgentAuthHeaders(extra: HeaderBag = {}, label = 'agent-fetch'): He
  *
  */
 export async function readAgentError(resp: Response): Promise<never> {
-  let payload: AnyRecord | null = null
   try {
-    const ct = resp.headers.get('content-type') || ''
-    if (ct.includes('application/json')) {
-      payload = await resp.json()
-    }
-  } catch {
-    // ignore parse failures — fall through to generic error
+    await readFetchResponse(resp)
+  } catch (error) {
+    throwAgentError(error)
   }
+  throw new Error('readAgentError requires a failed response')
+}
 
-  if (resp.status === 402 && payload?.error_code === 'quota_exceeded') {
-    throw new QuotaExceededError(payload?.data || {})
+/** Convert shared agent failures into feature-specific errors when required. */
+function throwAgentError(error: unknown): never {
+  if (error instanceof ApiError && error.status === 402 && error.errorCode === 'quota_exceeded') {
+    const data = error.data && typeof error.data === 'object'
+      ? error.data as QuotaExceededData
+      : {}
+    throw new QuotaExceededError(data)
   }
+  throw error
+}
 
-  const detail = String(payload?.detail || payload?.message || '').trim()
-  const err = new Error(
-    formatApiErrorMessage(resp.status, detail, resp.url || ''),
-  )
-    Object.assign(err, { status: resp.status, detail })
-  throw err
+/** Run one agent request while preserving quota-specific UI behavior. */
+async function requestAgent<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request()
+  } catch (error) {
+    throwAgentError(error)
+  }
 }
 
 /**
@@ -135,29 +138,25 @@ async function openChatStreamResponse(
     ? options.templateId.trim()
     : ''
   const incognito = Boolean(options?.incognito)
-  const resp = await fetch(`${BASE}/chat`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      message,
-      session_id: sessionId,
-      stream: true,
-      agent_hint: agentHint || '',
-      file_uuids: fileUuids,
-      ...(displayCaption ? { display_caption: displayCaption } : {}),
-      ...(agentMessage ? { agent_message: agentMessage } : {}),
-      ...(templateId ? { template_id: templateId } : {}),
-      ...(incognito ? { incognito: true } : {}),
-    }),
-    // 提示运行时尽量不把整段体缓冲完再交给我们（对浏览器/部分代理仅作软提示）
-    cache: 'no-store',
-    signal,
-  })
-
-  if (!resp.ok) {
-    await readAgentError(resp)
+  try {
+    return await openSseResponse(`${BASE}/chat`, {
+      method: 'POST',
+      body: {
+        message,
+        session_id: sessionId,
+        stream: true,
+        agent_hint: agentHint || '',
+        file_uuids: fileUuids,
+        ...(displayCaption ? { display_caption: displayCaption } : {}),
+        ...(agentMessage ? { agent_message: agentMessage } : {}),
+        ...(templateId ? { template_id: templateId } : {}),
+        ...(incognito ? { incognito: true } : {}),
+      },
+      signal,
+    })
+  } catch (error) {
+    throwAgentError(error)
   }
-  return resp
 }
 
 /**
@@ -321,63 +320,41 @@ function parseTurnErrorMessage(error: AnyRecord | null | undefined): string {
  * 非流式对话（备用）
  */
 export async function chat(message: string, sessionId: string, agentHint = ''): Promise<unknown> {
-  const resp = await fetch(`${BASE}/chat`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      message,
-      session_id: sessionId,
-      stream: false,
-      agent_hint: agentHint || '',
-    }),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp) as Promise<AnyRecord>
+  return requestAgent(() => apiClient.post<AnyRecord>(`${BASE}/chat`, {
+    message,
+    session_id: sessionId,
+    stream: false,
+    agent_hint: agentHint || '',
+  }))
 }
 
 /**
  * 执行序列化任务（mini-SWE-agent）
  */
 export async function runSequential(task: string, useDocker = false): Promise<unknown> {
-  const resp = await fetch(`${BASE}/sequential`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ task, use_docker: useDocker }),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return await readJsonResponse(resp) as AnyRecord
+  return requestAgent(() => apiClient.post<AnyRecord>(
+    `${BASE}/sequential`,
+    { task, use_docker: useDocker },
+  ))
 }
 
 /**
  * Finalize a session so durable user memory can be extracted without deleting it.
  */
 export async function finalizeSession(sessionId: string): Promise<unknown> {
-  const resp = await fetch(`${BASE}/session/${sessionId}/finalize`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders(),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp)
+  return requestAgent(() => apiClient.post(`${BASE}/session/${sessionId}/finalize`))
 }
 
 /**
  * 清除会话记忆
  */
 export async function clearSession(sessionId: string): Promise<unknown> {
-  const resp = await fetch(`${BASE}/session/${sessionId}`, {
-    method: 'DELETE',
-    headers: mergeAgentAuthHeaders(),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp)
+  return requestAgent(() => apiClient.delete(`${BASE}/session/${sessionId}`))
 }
 
+/** Fetch the durable state for one chat session. */
 export async function getSessionState(sessionId: string): Promise<unknown> {
-  const resp = await fetch(`${BASE}/session/${sessionId}`, {
-    headers: mergeAgentAuthHeaders(),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp)
+  return requestAgent(() => apiClient.get(`${BASE}/session/${sessionId}`))
 }
 
 /**
@@ -386,13 +363,9 @@ export async function getSessionState(sessionId: string): Promise<unknown> {
 export async function fetchSessions(opts: PageOptions = {}): Promise<AnyRecord> {
   const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
   const offset = Math.max(Number(opts.offset) || 0, 0)
-  const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-  const resp = await fetch(`${BASE}/sessions?${qs}`, {
-    headers: mergeAgentAuthHeaders(),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  const payload = await readJsonResponse(resp)
-  return payload as AnyRecord
+  return requestAgent(() => apiClient.get<AnyRecord>(`${BASE}/sessions`, {
+    params: { limit, offset },
+  }))
 }
 
 /**
@@ -424,12 +397,9 @@ export async function searchSessions(query: string, opts: PageOptions = {}): Pro
   }
   const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
   const offset = Math.max(Number(opts.offset) || 0, 0)
-  const qs = new URLSearchParams({ q, limit: String(limit), offset: String(offset) })
-  const resp = await fetch(`${BASE}/sessions/search?${qs}`, {
-    headers: mergeAgentAuthHeaders(),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp) as Promise<SessionSearchResult>
+  return requestAgent(() => apiClient.get<SessionSearchResult>(`${BASE}/sessions/search`, {
+    params: { q, limit, offset },
+  }))
 }
 
 /** 生成随机 session id */
@@ -456,39 +426,24 @@ async function sha256File(file: File): Promise<string> {
 export async function uploadFileAsset(file: File): Promise<AnyRecord> {
   const contentType = file.type || 'application/octet-stream'
   const checksum = await sha256File(file)
-  const uploadResp = await fetch(`${FILE_BASE}/upload-url/`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-upload-url'),
-    body: JSON.stringify({
-      original_filename: file.name || 'upload',
-      content_type: contentType,
-      checksum_sha256: checksum,
-    }),
+  const upload = await requestFileUploadUrl<AnyRecord>({
+    original_filename: file.name || 'upload',
+    content_type: contentType,
+    checksum_sha256: checksum,
   })
-  if (!uploadResp.ok) await readAgentError(uploadResp)
-  const upload = await readJsonResponse(uploadResp) as AnyRecord
+  const uploadUrl = String(upload.upload_url || '')
+  const fileUuid = String(upload.file_uuid || '')
+  if (!uploadUrl || !fileUuid) throw new Error('File upload response is missing storage metadata')
 
-  const putResp = await fetch(upload.upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file,
+  await putPresignedFile(uploadUrl, file, { contentType })
+  const completed = await completeFileUpload<AnyRecord>(fileUuid, {
+    checksum_sha256: checksum,
   })
-  if (!putResp.ok) {
-    throw new Error(formatApiErrorMessage(putResp.status, '', putResp.url || ''))
-  }
-
-  const completeResp = await fetch(`${FILE_BASE}/${upload.file_uuid}/complete/`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({ 'Content-Type': 'application/json' }, 'files-complete'),
-    body: JSON.stringify({ checksum_sha256: checksum }),
-  })
-  if (!completeResp.ok) await readAgentError(completeResp)
-  const completed = await readJsonResponse(completeResp) as AnyRecord
 
   let downloadUrl = ''
   if (contentType.startsWith('image/')) {
     try {
-      const download = await getFileDownloadUrl(upload.file_uuid)
+      const download = await getFileDownloadUrl(fileUuid)
       downloadUrl = download.download_url
     } catch {
       downloadUrl = ''
@@ -503,6 +458,7 @@ export async function uploadFileAsset(file: File): Promise<AnyRecord> {
   }
 }
 
+/** Classify one uploaded file for workspace rendering. */
 function assetMode(filename: string, contentType: string): string {
   const lower = filename.toLowerCase()
   if (contentType.startsWith('image/')) return 'image'
@@ -523,23 +479,14 @@ function assetMode(filename: string, contentType: string): string {
  * 获取文件下载 URL。
  */
 export async function getFileDownloadUrl(fileUuid: string): Promise<AnyRecord> {
-  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/download-url/`, {
-    headers: mergeAgentAuthHeaders({}, 'files-download-url'),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp) as Promise<AnyRecord>
+  return fetchFileDownloadUrl<AnyRecord>(fileUuid)
 }
 
 /**
  * 删除文件资产。
  */
 export async function deleteFileAsset(fileUuid: string): Promise<unknown> {
-  const resp = await fetch(`${FILE_BASE}/${encodeURIComponent(fileUuid)}/`, {
-    method: 'DELETE',
-    headers: mergeAgentAuthHeaders({}, 'files-delete'),
-  })
-  if (!resp.ok) await readAgentError(resp)
-  return readJsonResponse(resp)
+  return deleteFileStorageAsset(fileUuid)
 }
 
 /**
@@ -554,14 +501,11 @@ export async function transcribeSpeech(
   form.append('file', audioBlob, filename)
   if (language) form.append('language', language)
 
-  const resp = await fetch(`${BASE}/transcribe`, {
-    method: 'POST',
-    headers: mergeAgentAuthHeaders({}, 'agent-transcribe'),
-    body: form,
-    cache: 'no-store',
-    signal,
-  })
-  const payload = await readJsonResponse(resp) as AnyRecord
+  const payload = await requestAgent(() => apiClient.post<AnyRecord, FormData>(
+    `${BASE}/transcribe`,
+    form,
+    { signal, timeoutMs: getFileTimeoutMs() },
+  ))
   const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
   return text
 }

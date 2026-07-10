@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs'
 
 import { readAgentError } from '../src/api/agent.js'
 import { routes } from '../src/router'
-import zhCN from '../src/locales/zh-CN.js'
-import enUS from '../src/locales/en-US.js'
+import zhCN from '../src/shared/i18n/locales/zh-CN'
+import enUS from '../src/shared/i18n/locales/en-US'
 
 test('router exposes auth and account routes and protects workspace', () => {
   const authRoute = routes.find((route) => route.path === '/auth')

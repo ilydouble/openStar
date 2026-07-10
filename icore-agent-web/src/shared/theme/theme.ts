@@ -1,6 +1,6 @@
 /** Theme: Tailwind dark mode via `class="dark"` on <html>. */
 
-import { getBrowserStorage, readStoredString, writeStoredString } from './stores/browserStorage'
+import { getBrowserStorage, readStoredString, writeStoredString } from '../storage/browserStorage'
 
 export const THEME_STORAGE_KEY = 'icore-theme'
 

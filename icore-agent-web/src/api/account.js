@@ -1,6 +1,6 @@
 import { clearSession, peekAccessTokenState, setSession } from '../auth/session'
 import { authTrace } from '../auth/trace'
-import { createJsonClient } from './client.js'
+import { createJsonClient } from '../shared/api/client'
 
 const BASE = '/api/v1/account'
 const client = createJsonClient()

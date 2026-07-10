@@ -467,7 +467,7 @@ import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../stores/preferences'
 import { clearSession } from '../auth/session'
 import ThemeToggle from './ThemeToggle.vue'
-import { sanitizeHtml } from '../utils/sanitizeHtml.js'
+import { sanitizeHtml } from '../shared/html/sanitizeHtml'
 
 const emit = defineEmits(['new', 'navigate', 'search', 'delete-session'])
 

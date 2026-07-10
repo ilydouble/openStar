@@ -124,7 +124,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { isDark as isDarkFn, toggleTheme as toggleThemeFn } from '../theme'
+import { isDark as isDarkFn, toggleTheme as toggleThemeFn } from '../shared/theme/theme'
 
 defineProps({
   variant: {

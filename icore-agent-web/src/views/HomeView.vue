@@ -427,7 +427,7 @@ import {
   searchSessions,
   QuotaExceededError,
 } from '../api/agent.js'
-import { isDark as isDarkFn } from '../theme'
+import { isDark as isDarkFn } from '../shared/theme/theme'
 import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
 import {
   getWorkspaceOnboardingComplete,

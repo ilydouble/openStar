@@ -1,6 +1,6 @@
 import { buildAuthHeaders, getAccessToken } from '../auth/session'
 import { authTrace } from '../auth/trace'
-import { formatApiErrorMessage, readJsonResponse } from './client.js'
+import { formatApiErrorMessage, readJsonResponse } from '../shared/api/client'
 
 const BASE = '/api/v1/agent'
 const FILE_BASE = '/api/v1/files'

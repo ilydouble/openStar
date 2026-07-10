@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { routes } from '../src/router'
-import zhCN from '../src/locales/zh-CN.js'
-import enUS from '../src/locales/en-US.js'
+import zhCN from '../src/shared/i18n/locales/zh-CN'
+import enUS from '../src/shared/i18n/locales/en-US'
 import { existsSync, readFileSync } from 'node:fs'
 
 test('sidebar chat nav targets workspace-session so home and chat are not both active', () => {

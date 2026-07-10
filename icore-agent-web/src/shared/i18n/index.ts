@@ -1,7 +1,7 @@
 import { createI18n } from 'vue-i18n'
-import zhCN from '../locales/zh-CN.js'
-import enUS from '../locales/en-US.js'
-import { getLocalePreference } from '../stores/preferences'
+import zhCN from './locales/zh-CN'
+import enUS from './locales/en-US'
+import { getLocalePreference } from '../../stores/preferences'
 
 type MessageSchema = typeof zhCN
 

@@ -132,7 +132,7 @@ import {
   uploadFileAsset,
 } from '../api/agent.js'
 import ChatTimeline from './timeline/ChatTimeline.vue'
-import { isDark as isDarkFn } from '../theme'
+import { isDark as isDarkFn } from '../shared/theme/theme'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,

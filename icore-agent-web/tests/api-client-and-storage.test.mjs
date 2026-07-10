@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createJsonClient, formatApiErrorMessage, readJsonResponse } from '../src/api/client.js'
-import i18n from '../src/i18n'
+import { createJsonClient, formatApiErrorMessage, readJsonResponse } from '../src/shared/api/client'
+import i18n from '../src/shared/i18n'
 import { fetchAllSessions, searchSessions } from '../src/api/agent.js'
 import {
   WORKSPACE_ONBOARDING_KEY,

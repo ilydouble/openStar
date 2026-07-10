@@ -1,5 +1,5 @@
-import { buildAuthHeaders, getAccessToken } from '../auth/session'
-import { authTrace } from '../auth/trace'
+import { buildAuthHeaders, getAccessToken } from '../../auth/session'
+import { authTrace } from '../../auth/trace'
 import i18n from '../i18n'
 
 /** HTTP statuses that always map to localized copy instead of backend detail. */
@@ -7,12 +7,8 @@ const LOCALIZED_STATUS_CODES = new Set([401, 403, 404, 500])
 
 /**
  * Build a user-facing API error message without an HTTP status prefix.
- * @param {number} status
- * @param {string} [detail]
- * @param {string} [requestUrl]
- * @returns {string}
  */
-export function formatApiErrorMessage(status, detail = '', requestUrl = '') {
+export function formatApiErrorMessage(status: number, detail = '', requestUrl = ''): string {
   const t = i18n.global.t.bind(i18n.global)
   if (LOCALIZED_STATUS_CODES.has(status)) {
     if (status === 404 && String(requestUrl).includes('/api/v1/account/')) {
@@ -24,7 +20,7 @@ export function formatApiErrorMessage(status, detail = '', requestUrl = '') {
       404: 'errors.http404',
       500: 'errors.http500',
     }
-    return t(keyByStatus[status])
+    return t(keyByStatus[status as keyof typeof keyByStatus])
   }
   const trimmed = String(detail || '').trim()
   if (trimmed) return trimmed
@@ -33,10 +29,8 @@ export function formatApiErrorMessage(status, detail = '', requestUrl = '') {
 
 /**
  * Read a fetch response as JSON when possible and surface backend error detail consistently.
- * @param {Response} resp
- * @returns {Promise<any>}
  */
-export async function readJsonResponse(resp) {
+export async function readJsonResponse(resp: Response): Promise<unknown> {
   const contentType = resp.headers.get('content-type') || ''
   let payload = null
   let detail = ''
@@ -57,8 +51,7 @@ export async function readJsonResponse(resp) {
     const err = new Error(
       formatApiErrorMessage(resp.status, detail, resp.url || ''),
     )
-    err.status = resp.status
-    err.detail = detail
+    Object.assign(err, { status: resp.status, detail })
     throw err
   }
   if (
@@ -78,17 +71,34 @@ export async function readJsonResponse(resp) {
  * Build a tiny JSON-first HTTP client so domain API modules stop duplicating fetch boilerplate.
  * Sends `Authorization: Bearer <token>` using {@link getAccessToken} from session storage unless
  * `getAccessToken` is overridden (e.g. in tests).
- * @param {{ getAccessToken?: () => string, fetchImpl?: typeof fetch }} [options]
  */
-export function createJsonClient(options = {}) {
+export interface JsonClientOptions {
+  getAccessToken?: () => string
+  fetchImpl?: typeof fetch
+}
+
+export type JsonRequestInit = Omit<RequestInit, 'body'> & {
+  body?: BodyInit | null
+}
+
+export interface JsonClient {
+  request(path: string | URL, init?: JsonRequestInit): Promise<unknown>
+  get(path: string | URL, init?: JsonRequestInit): Promise<unknown>
+  post(path: string | URL, body: unknown, init?: JsonRequestInit): Promise<unknown>
+  put(path: string | URL, body: unknown, init?: JsonRequestInit): Promise<unknown>
+  delete(path: string | URL, init?: JsonRequestInit): Promise<unknown>
+}
+
+/** Create a JSON-first HTTP client with consistent auth and response handling. */
+export function createJsonClient(options: JsonClientOptions = {}): JsonClient {
   const fetchImpl = options.fetchImpl || fetch
   const readToken = options.getAccessToken ?? getAccessToken
 
-  async function request(path, init = {}) {
+  async function request(path: string | URL, init: JsonRequestInit = {}): Promise<unknown> {
     const headers = buildAuthHeaders(
       {
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(init.headers || {}),
+        ...(init.headers as Record<string, string> | undefined),
       },
       readToken,
     )
@@ -108,24 +118,24 @@ export function createJsonClient(options = {}) {
 
   return {
     request,
-    get(path, init = {}) {
+    get(path: string | URL, init: JsonRequestInit = {}) {
       return request(path, init)
     },
-    post(path, body, init = {}) {
+    post(path: string | URL, body: unknown, init: JsonRequestInit = {}) {
       return request(path, {
         ...init,
         method: 'POST',
         body: JSON.stringify(body),
       })
     },
-    put(path, body, init = {}) {
+    put(path: string | URL, body: unknown, init: JsonRequestInit = {}) {
       return request(path, {
         ...init,
         method: 'PUT',
         body: JSON.stringify(body),
       })
     },
-    delete(path, init = {}) {
+    delete(path: string | URL, init: JsonRequestInit = {}) {
       return request(path, {
         ...init,
         method: 'DELETE',

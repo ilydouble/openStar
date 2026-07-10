@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { renderMarkdown, sanitizeHtml } from './sanitizeHtml.js'
+import { renderMarkdown, sanitizeHtml } from '../shared/html/sanitizeHtml'
 
 test('sanitizeHtml strips script tags and event handlers', () => {
   const dirty = '<p>Hello</p><script>alert(1)</script><img src=x onerror="alert(1)">'

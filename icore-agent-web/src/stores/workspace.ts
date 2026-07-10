@@ -1,4 +1,4 @@
-import { getBrowserStorage, readStoredString, writeStoredString } from './browserStorage'
+import { getBrowserStorage, readStoredString, writeStoredString } from '../shared/storage/browserStorage'
 
 export const WORKSPACE_ONBOARDING_KEY = 'icore_onboarding_completed'
 export const WORKSPACE_RECENT_SESSIONS_KEY = 'icore_recent_sessions'

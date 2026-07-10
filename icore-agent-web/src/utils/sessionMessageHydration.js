@@ -1,5 +1,5 @@
-import enUS from '../locales/en-US.js'
-import zhCN from '../locales/zh-CN.js'
+import enUS from '../shared/i18n/locales/en-US'
+import zhCN from '../shared/i18n/locales/zh-CN'
 import { getFileDownloadUrl } from '../api/agent.js'
 import { resolveUserMessageDisplayContent } from './scenarioPrompt.js'
 

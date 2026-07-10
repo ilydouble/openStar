@@ -14,13 +14,13 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/app',
     name: 'workspace',
-    component: () => import('./views/HomeView.vue'),
+    component: () => import('./features/workspace/interfaces/HomeView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/app/:sessionId',
     name: 'workspace-session',
-    component: () => import('./views/HomeView.vue'),
+    component: () => import('./features/workspace/interfaces/HomeView.vue'),
     meta: { requiresAuth: true },
   },
   {

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { readAgentError } from '../src/api/agent.js'
+import { readAgentError } from '../src/features/workspace/infrastructure/agentApi'
 import { routes } from '../src/router'
 import zhCN from '../src/shared/i18n/locales/zh-CN'
 import enUS from '../src/shared/i18n/locales/en-US'
@@ -36,7 +36,7 @@ test('workspace locales expose scenario content and account copy', () => {
 })
 
 test('home sidebar links only use registered workspace route names', () => {
-  const sidebarSource = readFileSync(new URL('../src/components/HomeSidebar.vue', import.meta.url), 'utf8')
+  const sidebarSource = readFileSync(new URL('../src/features/workspace/interfaces/components/HomeSidebar.vue', import.meta.url), 'utf8')
 
   assert.ok(sidebarSource.includes(":to=\"{ name: 'workspace' }\""), 'expected workspace route link in sidebar')
   assert.ok(!sidebarSource.includes(":to=\"{ name: 'chat' }\""), 'expected sidebar to avoid removed chat route name')

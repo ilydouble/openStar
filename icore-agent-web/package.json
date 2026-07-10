@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test src/api/agent.test.js src/utils/sessionMessageHydration.test.js src/utils/sessionTimeline.test.js src/utils/sanitizeHtml.test.js src/composables/useVirtualList.test.js tests/*.test.mjs",
+    "test": "node --import tsx --test src/features/workspace/infrastructure/agentApi.test.ts src/features/workspace/domain/sessionMessageHydration.test.ts src/features/workspace/domain/sessionTimeline.test.ts src/shared/html/sanitizeHtml.test.ts src/shared/composables/useVirtualList.test.ts tests/*.test.mjs",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {

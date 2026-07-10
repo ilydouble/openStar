@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { createJsonClient, formatApiErrorMessage, readJsonResponse } from '../src/shared/api/client'
 import i18n from '../src/shared/i18n'
-import { fetchAllSessions, searchSessions } from '../src/api/agent.js'
+import { fetchAllSessions, searchSessions } from '../src/features/workspace/infrastructure/agentApi'
 import {
   WORKSPACE_ONBOARDING_KEY,
   WORKSPACE_RECENT_SESSIONS_KEY,
@@ -11,7 +11,7 @@ import {
   getRecentSessions,
   setWorkspaceOnboardingComplete,
   setRecentSessions,
-} from '../src/stores/workspace'
+} from '../src/features/workspace/application/workspaceStore'
 
 test('json client adds auth headers and preserves structured error detail', async () => {
   const seen = []

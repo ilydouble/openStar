@@ -1,9 +1,33 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
+
+// TestLoadReadsGatewayCORSOrigins verifies exact origins are loaded from CSV config.
+func TestLoadReadsGatewayCORSOrigins(t *testing.T) {
+	t.Setenv("GATEWAY_CORS_ALLOWED_ORIGINS", "https://app.example.com, https://admin.example.com")
+
+	cfg := Load()
+
+	want := []string{"https://app.example.com", "https://admin.example.com"}
+	if !reflect.DeepEqual(cfg.CORSAllowedOrigins, want) {
+		t.Fatalf("CORSAllowedOrigins = %#v, want %#v", cfg.CORSAllowedOrigins, want)
+	}
+}
+
+// TestLoadAllowsGatewayCORSToBeDisabled verifies an explicit empty value disables CORS.
+func TestLoadAllowsGatewayCORSToBeDisabled(t *testing.T) {
+	t.Setenv("GATEWAY_CORS_ALLOWED_ORIGINS", "")
+
+	cfg := Load()
+
+	if len(cfg.CORSAllowedOrigins) != 0 {
+		t.Fatalf("CORSAllowedOrigins = %#v, want empty", cfg.CORSAllowedOrigins)
+	}
+}
 
 // TestTimeLocationResolvesGatewayTimeZone verifies gateway timestamps use the configured IANA zone.
 func TestTimeLocationResolvesGatewayTimeZone(t *testing.T) {

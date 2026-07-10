@@ -49,15 +49,68 @@ func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error)
 }
 
 type routerTestConfig struct {
-	backendURL      string
-	secret          string
-	logger          *captureAccessLogger
-	clientIPLimiter pipeline_deps.ClientIPLimiter
-	userIDLimiter   pipeline_deps.UserIDLimiter
-	serviceLimiter  pipeline_deps.ServiceLimiter
-	transport       http.RoundTripper
-	now             func() time.Time
-	location        *time.Location
+	backendURL         string
+	secret             string
+	logger             *captureAccessLogger
+	corsAllowedOrigins []string
+	clientIPLimiter    pipeline_deps.ClientIPLimiter
+	userIDLimiter      pipeline_deps.UserIDLimiter
+	serviceLimiter     pipeline_deps.ServiceLimiter
+	transport          http.RoundTripper
+	now                func() time.Time
+	location           *time.Location
+}
+
+// TestGatewayHandlesProtectedCORSPreflightBeforeJWT verifies edge preflight bypasses the pipeline.
+func TestGatewayHandlesProtectedCORSPreflightBeforeJWT(t *testing.T) {
+	upstreamHit := false
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		upstreamHit = true
+		return testResponse(http.StatusOK, ""), nil
+	})
+	logger := &captureAccessLogger{}
+	router := newTestRouter(routerTestConfig{
+		logger:             logger,
+		transport:          transport,
+		corsAllowedOrigins: []string{testAllowedOrigin},
+	})
+	request := httptest.NewRequest(http.MethodOptions, "/api/v1/account/me", nil)
+	request.Header.Set("Origin", testAllowedOrigin)
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	request.Header.Set("Access-Control-Request-Headers", "authorization,x-request-id")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", response.Code)
+	}
+	if upstreamHit {
+		t.Fatal("preflight should not reach the protected upstream")
+	}
+	if len(logger.events) != 0 {
+		t.Fatalf("preflight access logs = %d, want 0", len(logger.events))
+	}
+}
+
+// TestGatewayAddsCORSHeadersToProtectedAuthFailure verifies edge-generated 401 responses are readable.
+func TestGatewayAddsCORSHeadersToProtectedAuthFailure(t *testing.T) {
+	router := newTestRouter(routerTestConfig{
+		logger:             &captureAccessLogger{},
+		corsAllowedOrigins: []string{testAllowedOrigin},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/account/me", nil)
+	request.Header.Set("Origin", testAllowedOrigin)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", response.Code)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != testAllowedOrigin {
+		t.Fatalf("allow origin = %q", got)
+	}
 }
 
 func TestGatewayInjectsGeneratedRequestIDAndLogsMetadata(t *testing.T) {
@@ -341,7 +394,10 @@ func newTestRouter(config routerTestConfig) http.Handler {
 		Proxy:           proxyinfra.NewReverseProxy(backendURL, config.transport),
 		AccessLogger:    logger,
 	})
-	return NewRouter(NewHandler(pipeline))
+	return NewRouter(
+		NewHandler(pipeline),
+		CORSConfig{AllowedOrigins: config.corsAllowedOrigins},
+	)
 }
 
 func testResponse(status int, body string) *http.Response {

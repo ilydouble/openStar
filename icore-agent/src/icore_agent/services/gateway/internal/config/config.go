@@ -15,6 +15,7 @@ type Config struct {
 	Addr                  string
 	BackendURL            string
 	PaymentServiceURL     string
+	CORSAllowedOrigins    []string
 	LoggingServiceName    string
 	LoggingServiceURL     string
 	LoggingServiceToken   string
@@ -52,6 +53,7 @@ func Load() Config {
 		Addr:                  envconfig.String("GATEWAY_ADDR", ":11000"),
 		BackendURL:            envconfig.String("GATEWAY_BACKEND_URL", "http://icore-agent:11001"),
 		PaymentServiceURL:     envconfig.String("GATEWAY_PAYMENT_SERVICE_URL", "http://payment-service:8080"),
+		CORSAllowedOrigins:    envconfig.CSVAllowEmpty("GATEWAY_CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000"),
 		LoggingServiceName:    envconfig.String("GATEWAY_LOGGING_SERVICE_NAME", "icore-gateway"),
 		LoggingServiceURL:     envconfig.String("LOGGING_SERVICE_URL", "http://logging-service:8091"),
 		LoggingServiceToken:   envconfig.String("LOGGING_SERVICE_TOKEN", "dev-logging-service-token"),

@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager
 import litellm
 import uvicorn
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 from icore_agent.contexts.account.application.usage.recording import (
@@ -116,15 +115,6 @@ def create_app() -> FastAPI:
     )
 
     install_api_envelope(app)
-
-    # ── CORS ──────────────────────────────────────────────
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_allowed_origins_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     # ── Auth middleware (optional, delegates to ft-base) ──
     if settings.auth_enabled:

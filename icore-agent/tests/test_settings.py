@@ -152,36 +152,3 @@ def test_settings_load_agent_tool_workspace_from_tools_domain(monkeypatch):
     settings = Settings(_env_file=None)
 
     assert settings.agent_tool_workspace == "/tmp/icore-agent-tools"
-
-
-def test_cors_allowed_origins_default_to_local_dev_hosts(monkeypatch):
-    monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
-
-    settings = Settings(_env_file=None)
-
-    assert settings.cors_allowed_origins_list == [
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ]
-
-
-def test_cors_allowed_origins_parse_comma_separated_values(monkeypatch):
-    monkeypatch.setenv(
-        "CORS_ALLOWED_ORIGINS",
-        "https://app.example.com, https://admin.example.com",
-    )
-
-    settings = Settings(_env_file=None)
-
-    assert settings.cors_allowed_origins_list == [
-        "https://app.example.com",
-        "https://admin.example.com",
-    ]
-
-
-def test_cors_allowed_origins_empty_env_disables_cross_origin_access(monkeypatch):
-    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "")
-
-    settings = Settings(_env_file=None)
-
-    assert settings.cors_allowed_origins_list == []

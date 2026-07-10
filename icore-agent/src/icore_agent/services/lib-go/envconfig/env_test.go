@@ -52,3 +52,12 @@ func TestIntegerHelpersBoolAndCSV(t *testing.T) {
 		t.Fatalf("unexpected csv %#v", got)
 	}
 }
+
+// TestCSVAllowEmptyPreservesExplicitDisable verifies empty values override defaults.
+func TestCSVAllowEmptyPreservesExplicitDisable(t *testing.T) {
+	t.Setenv("OPTIONAL_CSV", "")
+
+	if got := CSVAllowEmpty("OPTIONAL_CSV", "fallback"); len(got) != 0 {
+		t.Fatalf("optional csv = %#v, want empty", got)
+	}
+}

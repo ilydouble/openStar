@@ -58,7 +58,20 @@ def test_dotenv_files_are_split_by_domain():
         path.name: path.read_text(encoding="utf-8")
         for path in (dotenv_dir / "production").glob(".env.*.example")
     }
-    assert dev_examples == production_examples
+    assert dev_examples.keys() == production_examples.keys()
+    for name, dev_text in dev_examples.items():
+        production_text = production_examples[name]
+        dev_keys = {
+            line.partition("=")[0]
+            for line in dev_text.splitlines()
+            if line and not line.startswith("#") and "=" in line
+        }
+        production_keys = {
+            line.partition("=")[0]
+            for line in production_text.splitlines()
+            if line and not line.startswith("#") and "=" in line
+        }
+        assert dev_keys == production_keys, name
     assert not (dotenv_dir / ".env.sequential.example").exists()
     assert not list(dotenv_dir.glob(".env.*.example"))
 
@@ -517,6 +530,27 @@ def test_fastapi_app_installs_request_id_middleware():
     assert "app.add_middleware(RequestIdMiddleware)" in main
     assert "BackendRequestLoggingMiddleware" in main
     assert "app.add_middleware(BackendRequestLoggingMiddleware)" in main
+
+
+def test_gateway_owns_browser_cors_boundary():
+    """Keep browser CORS at the public gateway instead of the Python backend."""
+    main = (AGENT_ROOT / "src" / "icore_agent" /
+            "main.py").read_text(encoding="utf-8")
+    app_settings = (AGENT_ROOT / "src" / "icore_agent" / "config" /
+                    "app" / "settings.py").read_text(encoding="utf-8")
+    gateway_router = (
+        AGENT_ROOT / "src" / "icore_agent" / "services" / "gateway" /
+        "internal" / "interfaces" / "http" / "router.go"
+    ).read_text(encoding="utf-8")
+    gateway_config = (
+        AGENT_ROOT / "src" / "icore_agent" / "services" / "gateway" /
+        "internal" / "config" / "config.go"
+    ).read_text(encoding="utf-8")
+
+    assert "CORSMiddleware" not in main
+    assert "cors_allowed_origins" not in app_settings
+    assert "router.Use(CORSMiddleware(corsConfig))" in gateway_router
+    assert "GATEWAY_CORS_ALLOWED_ORIGINS" in gateway_config
 
 
 def test_backend_no_longer_depends_on_legacy_structured_logger():

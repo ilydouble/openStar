@@ -117,7 +117,10 @@ func main() {
 		},
 		pipelineDependencies,
 	)
-	router := httpapi.NewRouter(httpapi.NewHandler(pipeline))
+	router := httpapi.NewRouter(
+		httpapi.NewHandler(pipeline),
+		httpapi.CORSConfig{AllowedOrigins: cfg.CORSAllowedOrigins},
+	)
 	server := httpserver.New(cfg.HTTPServerConfig(), router)
 
 	go func() {

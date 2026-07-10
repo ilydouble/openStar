@@ -68,7 +68,20 @@ func Bool(key string, fallback bool) bool {
 
 // CSV parses a comma-separated environment value into non-empty tokens.
 func CSV(key, fallback string) []string {
-	raw := String(key, fallback)
+	return parseCSV(String(key, fallback))
+}
+
+// CSVAllowEmpty parses a CSV value while preserving an explicitly empty setting.
+func CSVAllowEmpty(key, fallback string) []string {
+	raw, exists := os.LookupEnv(key)
+	if !exists {
+		raw = fallback
+	}
+	return parseCSV(raw)
+}
+
+// parseCSV splits one CSV string into normalized non-empty tokens.
+func parseCSV(raw string) []string {
 	parts := strings.Split(raw, ",")
 	values := make([]string, 0, len(parts))
 	for _, part := range parts {

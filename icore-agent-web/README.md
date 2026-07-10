@@ -93,7 +93,18 @@ const { t } = useI18n()
 
 ```bash
 VITE_API_PROXY_TARGET=http://localhost:11000
+VITE_PUBLIC_API_BASE_URL=/api/v1
+VITE_API_TIMEOUT_MS=15000
+VITE_FILE_TIMEOUT_MS=120000
+VITE_API_RETRY_COUNT=2
+VITE_DEBUG_HTTP=false
 ```
+
+`VITE_PUBLIC_API_BASE_URL` 是浏览器请求使用的公开 API 地址，必须包含
+`/api/v1`。开发环境默认通过同源 Vite proxy 访问；跨域部署时可配置为
+`https://api.example.com/api/v1`。普通 API 默认超时 15 秒，文件与语音请求默认
+超时 120 秒。仅 GET、HEAD、OPTIONS 会对网络错误及 408、429、502、503、504
+自动重试，`VITE_API_RETRY_COUNT` 表示首次请求后的额外尝试次数。
 
 ## 开发建议
 

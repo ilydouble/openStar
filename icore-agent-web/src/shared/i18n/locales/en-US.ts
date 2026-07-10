@@ -14,6 +14,9 @@ export default {
     http403: 'You do not have permission to perform this action.',
     http404: 'The requested item was not found.',
     http500: 'Something went wrong on our end. Please try again later.',
+    network: 'Unable to reach the service. Check your connection and try again.',
+    timeout: 'The request timed out. Please try again.',
+    fileTimeout: 'File upload timed out. Please try again.',
     generic: 'Something went wrong. Please try again.',
   },
   agents: {

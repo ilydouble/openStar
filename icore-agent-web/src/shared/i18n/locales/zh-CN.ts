@@ -14,6 +14,9 @@ export default {
     http403: '您没有权限执行此操作。',
     http404: '未找到请求的内容。',
     http500: '服务器出现问题，请稍后再试。',
+    network: '无法连接到服务，请检查网络后重试。',
+    timeout: '请求超时，请重试。',
+    fileTimeout: '文件上传超时，请重试。',
     generic: '出现错误，请重试。',
   },
   agents: {

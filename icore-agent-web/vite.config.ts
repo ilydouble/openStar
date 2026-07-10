@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const apiProxyTarget =
-    env.VITE_API_PROXY_TARGET || env.VITE_API_BASE_URL || 'http://localhost:11000'
+    env.VITE_API_PROXY_TARGET || 'http://localhost:11000'
 
   return {
     plugins: [vue()],

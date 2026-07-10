@@ -1,0 +1,296 @@
+"""Tests for chat session hybrid FTS and trigram search."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from fastapi.responses import StreamingResponse
+
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
+from icore_agent.contexts.agent.domain.session import (
+    AgentMessageItem,
+    SessionItemStatus,
+    ToolCallItem,
+    ToolCallResult,
+    ToolCallStatus,
+    ToolFunction,
+    UserInput,
+    UserInputType,
+    UserMessageItem,
+)
+from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent, TurnStatus
+from icore_agent.contexts.agent.interfaces.http.v1.handlers import session as session_handlers
+from icore_agent.contexts.agent.interfaces.http.v1.handlers.chat import chat
+from icore_agent.contexts.agent.interfaces.http.v1.handlers.session import _session_attachment_refs
+from icore_agent.contexts.agent.interfaces.http.v1.schemas.chat import ChatRequest, ChatResponse
+from icore_agent.contexts.files.domain import FileAsset
+
+
+def test_session_attachment_refs_resolve_file_uuid_metadata() -> None:
+    """Session state should rehydrate file asset references from user item metadata."""
+    file_uuid = str(uuid4())
+    image_uuid = str(uuid4())
+    service = FakeFileService({
+        file_uuid: _asset(file_uuid, "brief.txt", "text/plain"),
+        image_uuid: _asset(image_uuid, "chart.png", "image/png"),
+    })
+
+    refs = _session_attachment_refs(
+        [
+            {
+                "items": [
+                    {
+                        "type": "user_message",
+                        "metadata": {
+                            "file_uuids": [file_uuid, image_uuid, file_uuid],
+                        },
+                    },
+                    {
+                        "type": "agent_message",
+                        "text": "Done",
+                    },
+                ],
+            }
+        ],
+        user_id="user-public-id",
+        file_service=service,
+    )
+
+    assert [ref.model_dump(exclude_none=True) for ref in refs] == [
+        {
+            "file_uuid": file_uuid,
+            "original_filename": "brief.txt",
+            "filename": "brief.txt",
+            "content_type": "text/plain",
+            "mode": "data",
+        },
+        {
+            "file_uuid": image_uuid,
+            "original_filename": "chart.png",
+            "filename": "chart.png",
+            "content_type": "image/png",
+            "mode": "image",
+            "download_url": f"https://files.example.com/{image_uuid}",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_starts_without_message_quota_service() -> None:
+    """Chat streaming should not depend on message quota checks."""
+    service = FakeAgentTurnService()
+    request = ChatRequest(
+        message="Hello",
+        session_id="session-1",
+        stream=True,
+        file_uuids=["file-1", "file-1"],
+    )
+
+    response = await chat(
+        request,
+        user=_auth_user(),
+        agent_turn_service=service,
+    )
+
+    assert isinstance(response, StreamingResponse)
+    assert len(service.commands) == 1
+    command = service.commands[0]
+    assert command.message == "Hello"
+    assert command.session_id == "session-1"
+    assert command.stream is True
+    assert command.user_id == "user-public-id"
+    assert command.user.public_id == "user-public-id"
+    assert command.file_uuids == ("file-1", "file-1")
+
+
+@pytest.mark.asyncio
+async def test_chat_non_streaming_returns_service_result() -> None:
+    """Non-streaming chat should translate the application result to HTTP schema."""
+    service = FakeAgentTurnService(reply="plain reply")
+    request = ChatRequest(
+        message="Hello",
+        session_id="session-2",
+        stream=False,
+    )
+
+    response = await chat(
+        request,
+        user=_auth_user(),
+        agent_turn_service=service,
+    )
+
+    assert response == ChatResponse(
+        session_id="session-2", reply="plain reply")
+
+
+@pytest.mark.asyncio
+async def test_session_state_returns_turns_and_session_items(monkeypatch) -> None:
+    """Session state should expose canonical turns and session item payloads."""
+    monkeypatch.setattr(session_handlers, "memory", FakeMemory())
+    chat_history = FakeSessionHistory()
+
+    response = await session_handlers.get_session_state(
+        "session-3",
+        user=_auth_user(),
+        agent_session=chat_history,
+        file_service=FakeFileService({}),
+    )
+
+    assert not hasattr(response, "messages")
+    assert len(response.turns) == 1
+    turn = response.turns[0]
+    assert turn.turn_id == "turn-1"
+    assert turn.model == "test-model"
+    assert [item.type for item in turn.items] == [
+        "user_message",
+        "tool_call",
+        "agent_message",
+    ]
+    tool_item = turn.items[1]
+    assert tool_item.payload["function"]["name"] == "web_search"
+    assert tool_item.payload["result"]["structured_content"] == {"ok": True}
+
+
+class FakeAgentTurnService:
+    """Application service fake for chat handler tests."""
+
+    def __init__(self, reply: str = "ok") -> None:
+        """Create an empty call recorder."""
+        self.reply = reply
+        self.commands = []
+
+    async def stream(self, command):
+        """Record one stream command and return a done-only event stream."""
+        self.commands.append(command)
+        return self._events()
+
+    async def run(self, command):
+        """Record one non-stream command and return a deterministic result."""
+        self.commands.append(command)
+        return Turn(
+            session_id=command.session_id,
+            id="turn-1",
+            status=TurnStatus.COMPLETED,
+            items=[
+                AgentMessageItem(
+                    status=SessionItemStatus.COMPLETED,
+                    text=self.reply,
+                ),
+            ],
+        )
+
+    async def _events(self):
+        """Yield a minimal terminal stream."""
+        yield TurnEvent.turn_completed(
+            session_id="session-1",
+            turn_id="turn-1",
+            reply=self.reply,
+        )
+
+
+class FakeMemory:
+    """Conversation memory fake that forces durable history fallback."""
+
+    async def get_context(self, session_id: str):
+        """Return no cached messages."""
+        return "", []
+
+
+class FakeSessionHistory:
+    """Session fake that returns canonical turns and items."""
+
+    def assert_owned_session(self, public_id: str, user_id: str) -> None:
+        """Accept the owned session check."""
+
+    def load_session_timeline(
+        self,
+        public_id: str,
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+        """Return a small canonical timeline with one tool call."""
+        return [
+            {
+                "turn_id": "turn-1",
+                "status": "completed",
+                "model": "test-model",
+                "provider": "test-provider",
+                "usage": {"total_tokens": 7},
+                "error": None,
+                "started_at": "2026-05-22T11:00:00+00:00",
+                "completed_at": "2026-05-22T11:00:01+00:00",
+                "duration_ms": 1000,
+                "items": [
+                    UserMessageItem(
+                        content=[
+                            UserInput(
+                                type=UserInputType.TEXT,
+                                text="Search weather",
+                            )
+                        ],
+                    ).model_dump(mode="json"),
+                    ToolCallItem(
+                        id="tool-item-1",
+                        provider_tool_call_id="tool-1",
+                        status=ToolCallStatus.COMPLETED,
+                        function=ToolFunction(
+                            name="web_search",
+                            arguments_json={"query": "weather"},
+                        ),
+                        result=ToolCallResult(
+                            content="ok",
+                            structured_content={"ok": True},
+                        ),
+                        duration_ms=12,
+                    ).model_dump(mode="json"),
+                    AgentMessageItem(
+                        status=SessionItemStatus.COMPLETED,
+                        text="It is 22C.",
+                    ).model_dump(mode="json"),
+                ],
+            },
+        ]
+
+
+class FakeFileService:
+    """Minimal file asset service fake for session attachment tests."""
+
+    def __init__(self, assets: dict[str, FileAsset]) -> None:
+        """Store file assets by UUID."""
+        self.assets = assets
+
+    def get_owned_asset(self, *, uploader_public_id: str, file_uuid: str) -> FileAsset:
+        """Return one owned test asset."""
+        return self.assets[file_uuid]
+
+    def create_download_url(self, *, uploader_public_id: str, file_uuid: str) -> str:
+        """Return a deterministic image download URL."""
+        return f"https://files.example.com/{file_uuid}"
+
+
+def _asset(file_uuid: str, filename: str, content_type: str) -> FileAsset:
+    """Build a completed file asset for chat history tests."""
+    return FileAsset(
+        file_uuid=file_uuid,
+        original_filename=filename,
+        uploader_public_id="user-public-id",
+        uploaded_at=datetime.now(UTC),
+        deleted_at=None,
+        storage_bucket="icore-files",
+        object_key=f"files/user-public-id/{file_uuid}",
+        storage_etag="etag-123",
+        content_type=content_type,
+        checksum_sha256="a" * 64,
+    )
+
+
+def _auth_user() -> AuthenticatedUser:
+    """Build a domain authenticated user for handler tests."""
+    return AuthenticatedUser(
+        public_id="user-public-id",
+        email="user@example.com",
+        name="User One",
+        roles=("owner",),
+    )

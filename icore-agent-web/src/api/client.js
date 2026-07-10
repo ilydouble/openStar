@@ -1,6 +1,6 @@
-import { buildAuthHeaders, getAccessToken } from '../auth/session.js'
-import { authTrace } from '../auth/trace.js'
-import i18n from '../i18n/index.js'
+import { buildAuthHeaders, getAccessToken } from '../auth/session'
+import { authTrace } from '../auth/trace'
+import i18n from '../i18n'
 
 /** HTTP statuses that always map to localized copy instead of backend detail. */
 const LOCALIZED_STATUS_CODES = new Set([401, 403, 404, 500])

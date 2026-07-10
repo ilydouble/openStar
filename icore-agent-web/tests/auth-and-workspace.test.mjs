@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 import { readAgentError } from '../src/api/agent.js'
-import { routes } from '../src/router.js'
+import { routes } from '../src/router'
 import zhCN from '../src/locales/zh-CN.js'
 import enUS from '../src/locales/en-US.js'
 
@@ -54,12 +54,12 @@ test('agent api surfaces quota detail instead of a generic request failure', asy
 
   await assert.rejects(
     () => readAgentError(quotaResponse),
-    /HTTP 402: messages quota exceeded for trial/,
+    /messages quota exceeded for trial/,
     'expected quota detail to be preserved in thrown error',
   )
   await assert.rejects(
     () => readAgentError(genericResponse),
-    /HTTP 500: Internal Server Error/,
-    'expected generic text fallback when no structured detail is available',
+    /服务器出现问题，请稍后再试。/,
+    'expected localized fallback when no structured detail is available',
   )
 })

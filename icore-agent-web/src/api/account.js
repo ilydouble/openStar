@@ -1,5 +1,5 @@
-import { clearSession, peekAccessTokenState, setSession } from '../auth/session.js'
-import { authTrace } from '../auth/trace.js'
+import { clearSession, peekAccessTokenState, setSession } from '../auth/session'
+import { authTrace } from '../auth/trace'
 import { createJsonClient } from './client.js'
 
 const BASE = '/api/v1/account'

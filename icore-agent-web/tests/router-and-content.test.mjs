@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { routes } from '../src/router.js'
+import { routes } from '../src/router'
 import zhCN from '../src/locales/zh-CN.js'
 import enUS from '../src/locales/en-US.js'
 import { existsSync, readFileSync } from 'node:fs'

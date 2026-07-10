@@ -18,7 +18,12 @@ export default defineConfig(({ mode }) => {
           // 在看到 Content-Encoding: gzip 时会把响应整段缓冲到 gunzip 完成
           // 再发给浏览器，表现就是"后端一直在输出、前端等到结束才一次显示"。
           // 强制 Accept-Encoding: identity，后端就不会压缩，代理直接 pipe。
-          configure: (proxy) => {
+          configure: (proxy: {
+            on: (
+              event: 'proxyReq',
+              listener: (proxyReq: { setHeader: (name: string, value: string) => void }) => void,
+            ) => void
+          }) => {
             proxy.on('proxyReq', (proxyReq) => {
               proxyReq.setHeader('Accept-Encoding', 'identity')
             })

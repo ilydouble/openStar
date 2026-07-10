@@ -432,7 +432,7 @@ import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.j
 import {
   getWorkspaceOnboardingComplete,
   setWorkspaceOnboardingComplete,
-} from '../stores/workspace.js'
+} from '../stores/workspace'
 import HomeSidebar from '../components/HomeSidebar.vue'
 import OnboardingModal from '../components/OnboardingModal.vue'
 import QuotaExceededModal from '../components/QuotaExceededModal.vue'

@@ -322,7 +322,6 @@ def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> Non
     envelope = _envelope(
         tool_definition,
         turn_items=[
-            AgentMessageItem(text=""),
             ReasoningItem(text="I need the comparator tool."),
             tool_call,
         ],
@@ -348,6 +347,46 @@ def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> Non
         "tool_call_id": "tool-1",
         "name": "number_comparator",
         "content": '{"comparison":"greater"}',
+    }
+
+
+def test_chat_completions_renderer_reconstructs_tool_request_without_reasoning() -> None:
+    """Renderer should precede standalone tool state with an assistant request."""
+    tool_call = ToolCallItem(
+        provider_tool_call_id="tool-1",
+        function=ToolFunction(
+            name="number_comparator",
+            arguments_text='{"left":2,"right":1}',
+        ),
+        status=ToolCallStatus.COMPLETED,
+        result=ToolCallResult(content='{"comparison":"greater"}'),
+    )
+    envelope = _envelope(_tool_definition(), turn_items=[tool_call])
+
+    messages = render_chat_completions_messages(envelope)
+
+    assert messages[-2]["role"] == ChatCompletionRole.ASSISTANT.value
+    assert messages[-2]["content"] is None
+    assert messages[-2]["tool_calls"][0]["id"] == "tool-1"
+    assert messages[-1]["role"] == ChatCompletionRole.TOOL.value
+
+
+def test_chat_completions_renderer_pairs_reasoning_with_final_answer() -> None:
+    """Renderer should preserve reasoning-before-answer sampling order."""
+    envelope = _envelope(
+        _tool_definition(),
+        turn_items=[
+            ReasoningItem(text="Use the observed result."),
+            AgentMessageItem(text="2 is greater than 1."),
+        ],
+    )
+
+    messages = render_chat_completions_messages(envelope)
+
+    assert messages[-1] == {
+        "role": ChatCompletionRole.ASSISTANT.value,
+        "content": "2 is greater than 1.",
+        "reasoning_content": "Use the observed result.",
     }
 
 

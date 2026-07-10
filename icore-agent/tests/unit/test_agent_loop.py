@@ -69,8 +69,6 @@ async def test_agent_loop_owns_tool_cycle_between_model_samples() -> None:
 
     assert [event.kind for event in events] == [
         TurnEventKind.ITEM_STARTED,
-        TurnEventKind.ITEM_COMPLETED,
-        TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_DELTA,
         TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.ITEM_STARTED,
@@ -80,7 +78,13 @@ async def test_agent_loop_owns_tool_cycle_between_model_samples() -> None:
     ]
     assert model_client.prompt_turn_item_types == [
         [],
-        ["agent_message", "reasoning", "tool_call"],
+        ["reasoning", "tool_call"],
+    ]
+    assert [str(item.type) for item in turn.items] == [
+        "user_message",
+        "reasoning",
+        "tool_call",
+        "agent_message",
     ]
     assert turn.reply_text() == "2 is greater than 1."
 
@@ -116,7 +120,7 @@ async def test_agent_loop_drains_steering_before_next_model_sample() -> None:
     assert events[-1].item.text == "steered reply"
     assert model_client.prompt_turn_item_types == [
         [],
-        ["agent_message", "tool_call", "user_message"],
+        ["tool_call", "user_message"],
     ]
     assert any(
         isinstance(item, UserMessageItem)
@@ -191,6 +195,19 @@ async def test_agent_loop_emits_and_persists_streaming_reasoning_item() -> None:
         and item.text == "Inspect the evidence."
         for item in turn.items
     )
+    assert [str(item.type) for item in turn.items] == [
+        "reasoning",
+        "agent_message",
+    ]
+    assert next(
+        index
+        for index, event in enumerate(events)
+        if isinstance(event.item, ReasoningItem)
+    ) < next(
+        index
+        for index, event in enumerate(events)
+        if isinstance(event.item, AgentMessageItem)
+    )
     assert turn.reply_text() == "Final answer"
 
 
@@ -198,12 +215,13 @@ async def test_agent_loop_emits_and_persists_streaming_reasoning_item() -> None:
 async def test_agent_loop_exposes_streaming_tool_call_deltas() -> None:
     """AgentLoop should project provider tool-call chunks into item deltas."""
     turn = Turn(session_id="session-1")
+    model_client = StreamingToolCallModelClient()
     request = AgentLoopRequest(
         session_id="session-1",
         turn_id=turn.id,
         turn=turn,
         context_manager=RecordingContextManager(),
-        model_client=StreamingToolCallModelClient(),
+        model_client=model_client,
         tool_runtime=CompletingToolRuntime(),
     )
 
@@ -239,6 +257,21 @@ async def test_agent_loop_exposes_streaming_tool_call_deltas() -> None:
     assert tool_events[3].item.status == ToolCallStatus.READY
     assert tool_events[4].item.status == ToolCallStatus.RUNNING
     assert tool_events[-1].item.status == ToolCallStatus.COMPLETED
+    assert model_client.prompt_turn_item_types == [
+        [],
+        ["reasoning", "tool_call"],
+    ]
+    assert [str(item.type) for item in turn.items] == [
+        "reasoning",
+        "tool_call",
+        "reasoning",
+        "agent_message",
+    ]
+    assert all(
+        item.text.strip()
+        for item in turn.items
+        if isinstance(item, AgentMessageItem)
+    )
 
 
 @pytest.mark.asyncio
@@ -346,6 +379,7 @@ class StreamingToolCallModelClient:
     def __init__(self) -> None:
         """Create the fake with one tool-call round."""
         self._calls = 0
+        self.prompt_turn_item_types: list[list[str]] = []
 
     async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
         """Fail if AgentLoop falls back to non-streaming sampling."""
@@ -354,15 +388,21 @@ class StreamingToolCallModelClient:
 
     async def stream(self, envelope: PromptEnvelope):
         """Yield tool-call stream events followed by a final model step."""
-        _ = envelope
+        self.prompt_turn_item_types.append([
+            str(item.type)
+            for item in envelope.turn_items
+        ])
         self._calls += 1
         if self._calls > 1:
+            yield ModelReasoningDelta(text="Use the tool result.")
             yield ModelTextDelta(text="Done")
             yield ModelStepResult(
                 assistant_item=AgentMessageItem(text="Done"),
+                reasoning_item=ReasoningItem(text="Use the tool result."),
                 stop_reason="stop",
             )
             return
+        yield ModelReasoningDelta(text="Use the comparator.")
         yield ModelToolCallStarted(
             item_id="tool-item-1",
             provider_tool_call_id="provider-tool-1",
@@ -398,6 +438,7 @@ class StreamingToolCallModelClient:
         )
         yield ModelStepResult(
             assistant_item=AgentMessageItem(text=""),
+            reasoning_item=ReasoningItem(text="Use the comparator."),
             tool_calls=[
                 ToolCallItem(
                     id="tool-item-1",

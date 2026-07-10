@@ -7,13 +7,14 @@ from typing import Any
 
 import pytest
 
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.contexts.agent.application import (
-    AgentTurnService,
     AgentIntent,
+    AgentTurnService,
     classify_turn_intent,
 )
-from icore_agent.contexts.agent.domain.loop import ModelStepResult
 from icore_agent.contexts.agent.application.context import dedupe_file_uuids
+from icore_agent.contexts.agent.domain.loop import ModelStepResult
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
@@ -22,14 +23,13 @@ from icore_agent.contexts.agent.domain.session import (
     ToolFunction,
     UserMessageItem,
 )
-from icore_agent.contexts.files.domain.models import FileAsset
 from icore_agent.contexts.agent.domain.turn import (
     AgentTurnCommand,
     Turn,
     TurnEventKind,
     TurnStatus,
 )
-from icore_agent.contexts.account.domain.user import AuthenticatedUser
+from icore_agent.contexts.files.domain.models import FileAsset
 
 
 def test_classify_turn_intent_classifies_task_keywords() -> None:
@@ -130,6 +130,13 @@ async def test_agent_turn_run_persists_tool_calls_as_session_items() -> None:
         "tool-1",
         "tool-1",
     ]
+    agent_items = [
+        call[4]
+        for call in history.calls
+        if call[0] == "upsert" and call[3] == "agent_message"
+    ]
+    assert len({item.id for item in agent_items}) == 1
+    assert agent_items[-1].text == "assistant reply"
     assert '"comparison": "greater_than"' in tool_items[-1].result.content
     assert tool_items[-1].result.structured_content is None
     assert all(call[0] != "tool-link" for call in history.calls)

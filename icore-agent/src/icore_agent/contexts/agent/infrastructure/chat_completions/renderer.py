@@ -103,31 +103,47 @@ def _render_turn_messages(
     index = 0
     while index < len(items):
         item = items[index]
+        if isinstance(item, ReasoningItem):
+            assistant, content_index = _following_assistant(items, index + 1)
+            tool_calls, next_index = _following_tool_calls(
+                items,
+                content_index,
+            )
+            if tool_calls:
+                messages.extend(
+                    _render_tool_call_exchange(
+                        assistant,
+                        tool_calls,
+                        reasoning=item,
+                    ),
+                )
+                index = next_index
+                continue
+            messages.append(_assistant_content_message(
+                assistant,
+                reasoning=item,
+            ))
+            index = content_index
+            continue
         if isinstance(item, AgentMessageItem):
             reasoning, content_index = _following_reasoning(items, index + 1)
             tool_calls, next_index = _following_tool_calls(
                 items, content_index)
             if tool_calls:
-                messages.append(_assistant_tool_call_message(
-                    item,
-                    tool_calls,
-                    reasoning=reasoning,
-                ))
                 messages.extend(
-                    _tool_result_message(tool_call)
-                    for tool_call in tool_calls
-                    if _tool_result_content(tool_call) is not None
+                    _render_tool_call_exchange(
+                        item,
+                        tool_calls,
+                        reasoning=reasoning,
+                    ),
                 )
                 index = next_index
                 continue
             if item.text or reasoning is not None:
-                message: dict[str, Any] = {
-                    "role": ChatCompletionRole.ASSISTANT.value,
-                    "content": item.text or None,
-                }
-                if reasoning is not None:
-                    message["reasoning_content"] = reasoning.text
-                messages.append(message)
+                messages.append(_assistant_content_message(
+                    item,
+                    reasoning=reasoning,
+                ))
                 index = content_index
                 continue
         elif isinstance(item, UserMessageItem):
@@ -137,8 +153,11 @@ def _render_turn_messages(
                     "role": ChatCompletionRole.USER.value,
                     "content": content,
                 })
-        elif isinstance(item, ToolCallItem) and _tool_result_content(item) is not None:
-            messages.append(_tool_result_message(item))
+        elif isinstance(item, ToolCallItem):
+            tool_calls, next_index = _following_tool_calls(items, index)
+            messages.extend(_render_tool_call_exchange(None, tool_calls))
+            index = next_index
+            continue
         index += 1
     return messages
 
@@ -147,7 +166,7 @@ def _following_tool_calls(
     items: list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem],
     start: int,
 ) -> tuple[list[ToolCallItem], int]:
-    """Return tool calls immediately following an assistant item."""
+    """Return contiguous tool calls after the current sampling-step prefix."""
     tool_calls: list[ToolCallItem] = []
     index = start
     while index < len(items):
@@ -171,16 +190,65 @@ def _following_reasoning(
     return None, start
 
 
+def _following_assistant(
+    items: list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem],
+    start: int,
+) -> tuple[AgentMessageItem | None, int]:
+    """Return an optional assistant message immediately after reasoning."""
+    if start < len(items):
+        item = items[start]
+        if isinstance(item, AgentMessageItem):
+            return item, start + 1
+    return None, start
+
+
+def _assistant_content_message(
+    assistant: AgentMessageItem | None,
+    *,
+    reasoning: ReasoningItem | None = None,
+) -> dict[str, Any]:
+    """Render one assistant content message with optional reasoning."""
+    content = assistant.text or None if assistant is not None else None
+    message: dict[str, Any] = {
+        "role": ChatCompletionRole.ASSISTANT.value,
+        "content": content,
+    }
+    if reasoning is not None:
+        message["reasoning_content"] = reasoning.text
+    return message
+
+
+def _render_tool_call_exchange(
+    assistant: AgentMessageItem | None,
+    tool_calls: list[ToolCallItem],
+    *,
+    reasoning: ReasoningItem | None = None,
+) -> list[dict[str, Any]]:
+    """Render an assistant tool request followed by available tool results."""
+    messages = [_assistant_tool_call_message(
+        assistant,
+        tool_calls,
+        reasoning=reasoning,
+    )]
+    messages.extend(
+        _tool_result_message(tool_call)
+        for tool_call in tool_calls
+        if _tool_result_content(tool_call) is not None
+    )
+    return messages
+
+
 def _assistant_tool_call_message(
-    assistant: AgentMessageItem,
+    assistant: AgentMessageItem | None,
     tool_calls: list[ToolCallItem],
     *,
     reasoning: ReasoningItem | None = None,
 ) -> dict[str, Any]:
     """Render an assistant message that requested tool calls."""
+    content = assistant.text or None if assistant is not None else None
     message: dict[str, Any] = {
         "role": ChatCompletionRole.ASSISTANT.value,
-        "content": assistant.text or None,
+        "content": content,
         "tool_calls": [
             {
                 "id": _provider_tool_call_id(tool_call),

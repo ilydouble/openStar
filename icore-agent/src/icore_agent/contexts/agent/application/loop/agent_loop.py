@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import cast
 
 from icore_agent.contexts.agent.domain.loop import (
     AgentLoopControl,
     ModelClient,
     ModelReasoningDelta,
     ModelStepResult,
+    ModelStreamEvent,
     ModelStreamWarning,
     ModelTextDelta,
     ModelToolCallCompleted,
@@ -21,6 +23,7 @@ from icore_agent.contexts.agent.domain.loop import (
     PromptContextManager,
     ToolRuntimePort,
 )
+from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ReasoningItem,
@@ -84,21 +87,17 @@ class AgentLoop:
             try:
                 stream = getattr(request.model_client, "stream", None)
                 if callable(stream):
+                    stream_events = cast(
+                        Callable[[PromptEnvelope],
+                                 AsyncIterator[ModelStreamEvent]],
+                        stream,
+                    )
                     step = None
-                    started_assistant = AgentMessageItem(
-                        text="",
-                        status=SessionItemStatus.IN_PROGRESS,
-                    )
-                    request.turn.upsert_item(started_assistant)
-                    yield TurnEvent.item_started(
-                        session_id=request.session_id,
-                        turn_id=request.turn_id,
-                        item=started_assistant,
-                    )
+                    started_assistant: AgentMessageItem | None = None
                     started_reasoning: ReasoningItem | None = None
                     streamed_text = ""
                     streamed_reasoning = ""
-                    async for stream_event in stream(envelope):
+                    async for stream_event in stream_events(envelope):
                         if isinstance(stream_event, ModelReasoningDelta):
                             if not stream_event.text:
                                 continue
@@ -125,6 +124,17 @@ class AgentLoop:
                         if isinstance(stream_event, ModelTextDelta):
                             if not stream_event.text:
                                 continue
+                            if started_assistant is None:
+                                started_assistant = AgentMessageItem(
+                                    text="",
+                                    status=SessionItemStatus.IN_PROGRESS,
+                                )
+                                request.turn.upsert_item(started_assistant)
+                                yield TurnEvent.item_started(
+                                    session_id=request.session_id,
+                                    turn_id=request.turn_id,
+                                    item=started_assistant,
+                                )
                             streamed_text += stream_event.text
                             yield TurnEvent.item_delta(
                                 session_id=request.session_id,
@@ -188,11 +198,9 @@ class AgentLoop:
                             ),
                         )
                     assistant_item = _completed_assistant_item(
-                        step.assistant_item.model_copy(update={
-                            "id": started_assistant.id,
-                            "text": step.assistant_item.text
-                            or streamed_text,
-                        }),
+                        step.assistant_item,
+                        started_item=started_assistant,
+                        streamed_text=streamed_text,
                     )
                     reasoning_item = _completed_reasoning_item(
                         step.reasoning_item,
@@ -211,18 +219,56 @@ class AgentLoop:
                         raw_response_id=step.raw_response_id,
                         raw_payload=step.raw_payload,
                     )
-                    request.turn.upsert_item(assistant_item)
-                    yield TurnEvent.item_completed(
-                        session_id=request.session_id,
-                        turn_id=request.turn_id,
-                        item=assistant_item,
-                    )
                     if reasoning_item is not None:
+                        if started_reasoning is None:
+                            started_reasoning = _started_reasoning_item(
+                                reasoning_item,
+                            )
+                            request.turn.upsert_item(started_reasoning)
+                            yield TurnEvent.item_started(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item=started_reasoning,
+                            )
+                            yield TurnEvent.item_delta(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item_id=started_reasoning.id,
+                                item_type="reasoning",
+                                delta={"text_append": reasoning_item.text},
+                            )
+                            reasoning_item = _completed_reasoning_item(
+                                reasoning_item,
+                                started_item=started_reasoning,
+                                streamed_text=reasoning_item.text,
+                            )
+                            assert reasoning_item is not None
                         request.turn.upsert_item(reasoning_item)
                         yield TurnEvent.item_completed(
                             session_id=request.session_id,
                             turn_id=request.turn_id,
                             item=reasoning_item,
+                        )
+                    if assistant_item.text.strip():
+                        if started_assistant is None:
+                            started_assistant = _started_assistant_item(
+                                assistant_item,
+                            )
+                            request.turn.upsert_item(started_assistant)
+                            yield TurnEvent.item_started(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item=started_assistant,
+                            )
+                            assistant_item = _completed_assistant_item(
+                                assistant_item,
+                                started_item=started_assistant,
+                            )
+                        request.turn.upsert_item(assistant_item)
+                        yield TurnEvent.item_completed(
+                            session_id=request.session_id,
+                            turn_id=request.turn_id,
+                            item=assistant_item,
                         )
                 else:
                     step = await request.model_client.sample(envelope)
@@ -231,31 +277,10 @@ class AgentLoop:
                 raise AgentLoopError(str(exc)) from exc
 
             if not callable(stream):
-                started_assistant = _started_assistant_item(
-                    step.assistant_item)
-                assistant_item = _completed_assistant_item(
-                    step.assistant_item)
-                request.turn.upsert_item(started_assistant)
-                yield TurnEvent.item_started(
-                    session_id=request.session_id,
-                    turn_id=request.turn_id,
-                    item=started_assistant,
-                )
-                request.turn.upsert_item(assistant_item)
-                for delta in step.deltas:
-                    yield TurnEvent.item_delta(
-                        session_id=request.session_id,
-                        turn_id=request.turn_id,
-                        item_id=assistant_item.id,
-                        item_type="agent_message",
-                        delta={"text_append": delta},
-                    )
-                yield TurnEvent.item_completed(
-                    session_id=request.session_id,
-                    turn_id=request.turn_id,
-                    item=assistant_item,
-                )
-                if step.reasoning_item is not None:
+                if (
+                    step.reasoning_item is not None
+                    and step.reasoning_item.text.strip()
+                ):
                     started_reasoning = _started_reasoning_item(
                         step.reasoning_item,
                     )
@@ -285,6 +310,34 @@ class AgentLoop:
                             turn_id=request.turn_id,
                             item=reasoning_item,
                         )
+                if step.assistant_item.text.strip():
+                    started_assistant = _started_assistant_item(
+                        step.assistant_item,
+                    )
+                    assistant_item = _completed_assistant_item(
+                        step.assistant_item,
+                        started_item=started_assistant,
+                    )
+                    request.turn.upsert_item(started_assistant)
+                    yield TurnEvent.item_started(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=started_assistant,
+                    )
+                    for delta in step.deltas:
+                        yield TurnEvent.item_delta(
+                            session_id=request.session_id,
+                            turn_id=request.turn_id,
+                            item_id=assistant_item.id,
+                            item_type="agent_message",
+                            delta={"text_append": delta},
+                        )
+                    request.turn.upsert_item(assistant_item)
+                    yield TurnEvent.item_completed(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=assistant_item,
+                    )
 
             if step.stop_reason in {"error", "aborted"}:
                 if step.stop_reason == "aborted":
@@ -360,14 +413,28 @@ def _started_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
     return item.model_copy(update={
         "status": SessionItemStatus.IN_PROGRESS,
         "completed_at": None,
+        "text": "",
     })
 
 
-def _completed_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
-    """Return an assistant item marked as completed."""
+def _completed_assistant_item(
+    item: AgentMessageItem,
+    *,
+    started_item: AgentMessageItem | None = None,
+    streamed_text: str = "",
+) -> AgentMessageItem:
+    """Return one completed assistant item for a model sampling step."""
+    text = item.text or streamed_text
     return item.model_copy(update={
+        "id": started_item.id if started_item is not None else item.id,
+        "created_at": (
+            started_item.created_at
+            if started_item is not None
+            else item.created_at
+        ),
         "status": SessionItemStatus.COMPLETED,
         "completed_at": item.completed_at or datetime.now(UTC),
+        "text": text,
     })
 
 

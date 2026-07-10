@@ -7,6 +7,7 @@ import { createI18n } from 'vue-i18n'
 
 import enUS from '../../../../../shared/presentation/i18n/locales/en-US'
 import type {
+  AgentMessageTimelineItem,
   PlanTimelineItem,
   ReasoningTimelineItem,
   TimelineItem as TimelineItemModel,
@@ -92,6 +93,16 @@ test('TimelineItem aligns user messages right and agent messages left', () => {
 
   assert.equal(user.classes().includes('justify-end'), true)
   assert.equal(agent.classes().includes('justify-start'), true)
+})
+
+test('AgentMessageItem starts the bubble at the timeline edge without an avatar', () => {
+  const wrapper = shallowMount(AgentMessageItem, {
+    props: { item: timelineItems[2] as AgentMessageTimelineItem },
+  })
+
+  assert.equal(wrapper.element.children.length, 1)
+  assert.equal(wrapper.find('.rounded-full').exists(), false)
+  assert.equal(wrapper.get('[data-testid="agent-message-bubble"]').classes().includes('w-full'), true)
 })
 
 test('ReasoningItem expands while streaming and collapses when completed', async () => {

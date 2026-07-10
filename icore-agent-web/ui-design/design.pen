@@ -9894,448 +9894,44 @@
                   "id": "o2ZyNJ",
                   "name": "Workspace chat timeline",
                   "width": 780,
+                  "height": 586,
                   "layout": "vertical",
                   "gap": 16,
                   "children": [
                     {
-                      "type": "frame",
-                      "id": "kfKny",
-                      "name": "User message row",
-                      "width": "fill_container",
-                      "justifyContent": "end",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "d5N9K",
-                          "name": "User message bubble",
-                          "width": 450,
-                          "fill": "#FFFFFF12",
-                          "cornerRadius": 18,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "M3SxmS",
-                              "name": "User message text",
-                              "fill": "$white",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "请汇总北美市场中与我们产品定位相近的竞品，并整理它们最近一周的内容策略变化。",
-                              "lineHeight": 1.5,
-                              "fontFamily": "$font-body",
-                              "fontSize": 13,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "qmiOd",
-                              "name": "User attachment chip",
-                              "height": 26,
-                              "fill": "#FFFFFF0D",
-                              "cornerRadius": 8,
-                              "gap": 7,
-                              "padding": [
-                                0,
-                                8
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "kLmKo",
-                                  "name": "User attachment icon",
-                                  "width": 12,
-                                  "height": 12,
-                                  "icon": "file-text",
-                                  "library": "lucide",
-                                  "fill": "#A78BFA"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "R5L7ux",
-                                  "name": "User attachment text",
-                                  "fill": "#D4D4D8",
-                                  "content": "north-america-brief.pdf · RAG",
-                                  "fontFamily": "$font-body",
-                                  "fontSize": 10,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
+                      "id": "Y3PpmQ",
+                      "type": "ref",
+                      "ref": "JiI07",
+                      "name": "Timeline · User Message",
+                      "width": "fill_container"
                     },
                     {
-                      "type": "frame",
-                      "id": "XvYAw",
-                      "name": "Agent message row",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "O74YAp",
-                          "name": "Agent avatar",
-                          "width": 30,
-                          "height": 30,
-                          "fill": {
-                            "type": "gradient",
-                            "gradientType": "linear",
-                            "enabled": true,
-                            "rotation": 135,
-                            "size": {
-                              "height": 1
-                            },
-                            "colors": [
-                              {
-                                "color": "#8B5CF6",
-                                "position": 0
-                              },
-                              {
-                                "color": "#4F46E5",
-                                "position": 1
-                              }
-                            ]
-                          },
-                          "cornerRadius": 15,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "rnzV9",
-                              "name": "Agent avatar text",
-                              "fill": "$white",
-                              "content": "A",
-                              "fontFamily": "$font-body",
-                              "fontSize": 11,
-                              "fontWeight": "700"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "lTj9y",
-                          "name": "Agent message bubble",
-                          "width": 610,
-                          "fill": "#FFFFFF08",
-                          "cornerRadius": 18,
-                          "stroke": "#FFFFFF12",
-                          "strokeWidth": 1,
-                          "layout": "vertical",
-                          "gap": 10,
-                          "padding": 18,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "RlxyD",
-                              "name": "Agent message heading",
-                              "fill": "$white",
-                              "content": "我会先锁定竞品范围，再抓取最新页面与内容信号。",
-                              "fontFamily": "$font-body",
-                              "fontSize": 14,
-                              "fontWeight": "700"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "f3iMzH",
-                              "name": "Agent message list",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 6,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "EL3h4",
-                                  "name": "Agent list 已识别 5 个核心竞品与 3 个相邻替代方案",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "FTN73",
-                                      "name": "Agent list dot 已识别 5 个核心竞品与 3 个相邻替代方案",
-                                      "fill": "#A78BFA",
-                                      "width": 6,
-                                      "height": 6
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "oaPti",
-                                      "name": "Agent list text 已识别 5 个核心竞品与 3 个相邻替代方案",
-                                      "fill": "#D4D4D8",
-                                      "content": "已识别 5 个核心竞品与 3 个相邻替代方案",
-                                      "fontFamily": "$font-body",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "Tl3I5",
-                                  "name": "Agent list 正在对比最新定价、内容主题和投放切角",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "uDQex",
-                                      "name": "Agent list dot 正在对比最新定价、内容主题和投放切角",
-                                      "fill": "#A78BFA",
-                                      "width": 6,
-                                      "height": 6
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "H9Zbm",
-                                      "name": "Agent list text 正在对比最新定价、内容主题和投放切角",
-                                      "fill": "#D4D4D8",
-                                      "content": "正在对比最新定价、内容主题和投放切角",
-                                      "fontFamily": "$font-body",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "NdSNa",
-                                  "name": "Agent list 将输出结构化结论与可执行建议",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "O3Tx8",
-                                      "name": "Agent list dot 将输出结构化结论与可执行建议",
-                                      "fill": "#A78BFA",
-                                      "width": 6,
-                                      "height": 6
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "YwIXN",
-                                      "name": "Agent list text 将输出结构化结论与可执行建议",
-                                      "fill": "#D4D4D8",
-                                      "content": "将输出结构化结论与可执行建议",
-                                      "fontFamily": "$font-body",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
+                      "id": "Q8HVBW",
+                      "type": "ref",
+                      "ref": "iLVhZ",
+                      "name": "Timeline · Agent Message",
+                      "width": "fill_container"
                     },
                     {
-                      "type": "frame",
-                      "id": "S2tYl4",
-                      "name": "Chat plan card",
-                      "width": "fill_container",
-                      "fill": "#7C3AED22",
-                      "cornerRadius": 16,
-                      "stroke": "#8B5CF655",
-                      "strokeWidth": 1,
-                      "layout": "vertical",
-                      "gap": 9,
-                      "padding": 15,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "nBRlu",
-                          "name": "Chat plan header",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "hFR0w",
-                              "name": "Chat plan icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "list-checks",
-                              "library": "lucide",
-                              "fill": "#C4B5FD"
-                            },
-                            {
-                              "type": "text",
-                              "id": "v1xGv",
-                              "name": "Chat plan title",
-                              "fill": "#DDD6FE",
-                              "content": "执行计划 · 3 步",
-                              "fontFamily": "$font-body",
-                              "fontSize": 11,
-                              "fontWeight": "700"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "oaY44",
-                          "name": "Chat plan item 抓取竞品主页与近 7 日内容更新",
-                          "fill": "#D4D4D8",
-                          "content": "• 抓取竞品主页与近 7 日内容更新",
-                          "fontFamily": "$font-body",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "M4Gxig",
-                          "name": "Chat plan item 归类市场、内容、本地化与定价信号",
-                          "fill": "#D4D4D8",
-                          "content": "• 归类市场、内容、本地化与定价信号",
-                          "fontFamily": "$font-body",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "yQfNx",
-                          "name": "Chat plan item 生成可审核的竞品动态周报",
-                          "fill": "#D4D4D8",
-                          "content": "• 生成可审核的竞品动态周报",
-                          "fontFamily": "$font-body",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "id": "KVf0x",
+                      "type": "ref",
+                      "ref": "knHFt",
+                      "name": "Timeline · Plan",
+                      "width": "fill_container"
                     },
                     {
-                      "type": "frame",
-                      "id": "w4bdxA",
-                      "name": "Chat tool call card",
-                      "width": "fill_container",
-                      "fill": "#FFFFFF08",
-                      "cornerRadius": 16,
-                      "stroke": "#FFFFFF12",
-                      "strokeWidth": 1,
-                      "layout": "vertical",
-                      "gap": 9,
-                      "padding": 15,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "GB0JN",
-                          "name": "Chat tool call header",
-                          "width": "fill_container",
-                          "justifyContent": "space_between",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "gAkEg",
-                              "name": "Chat tool call copy",
-                              "gap": 8,
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "oyXwA",
-                                  "name": "Chat tool call icon",
-                                  "width": 15,
-                                  "height": 15,
-                                  "icon": "search-code",
-                                  "library": "lucide",
-                                  "fill": "#A1A1AA"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "aZtyK",
-                                  "name": "Chat tool call title",
-                                  "fill": "#E4E4E7",
-                                  "content": "Web research · 竞品动态抓取",
-                                  "fontFamily": "$font-body",
-                                  "fontSize": 11,
-                                  "fontWeight": "700"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "uwxVY",
-                              "name": "Chat tool call status",
-                              "height": 22,
-                              "fill": "#065F4633",
-                              "cornerRadius": 999,
-                              "padding": [
-                                0,
-                                8
-                              ],
-                              "justifyContent": "center",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "V40OP",
-                                  "name": "Chat tool call status text",
-                                  "fill": "#6EE7B7",
-                                  "content": "已完成",
-                                  "fontFamily": "$font-body",
-                                  "fontSize": 9,
-                                  "fontWeight": "700"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "ca8J5",
-                          "name": "Chat tool call detail",
-                          "fill": "#A1A1AA",
-                          "content": "已采集 8 个网页、4 份内容资产和 2 组渠道更新。",
-                          "fontFamily": "$font-body",
-                          "fontSize": 10,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "id": "q3f0Nf",
+                      "type": "ref",
+                      "ref": "j7AXdS",
+                      "name": "Timeline · Tool Call · Completed",
+                      "width": "fill_container"
                     },
                     {
-                      "type": "frame",
-                      "id": "wELbG",
-                      "name": "Chat reasoning card",
-                      "width": "fill_container",
-                      "height": 44,
-                      "fill": "#0EA5E922",
-                      "cornerRadius": 14,
-                      "stroke": "#38BDF855",
-                      "strokeWidth": 1,
-                      "gap": 9,
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "A7CI3H",
-                          "name": "Chat reasoning icon",
-                          "width": 15,
-                          "height": 15,
-                          "icon": "brain-circuit",
-                          "library": "lucide",
-                          "fill": "#7DD3FC"
-                        },
-                        {
-                          "type": "text",
-                          "id": "f5ysuF",
-                          "name": "Chat reasoning text",
-                          "fill": "#BAE6FD",
-                          "content": "推理摘要 · 正在把竞品信号映射为可执行的团队动作",
-                          "fontFamily": "$font-body",
-                          "fontSize": 11,
-                          "fontWeight": "700"
-                        }
-                      ]
+                      "id": "K9g5G",
+                      "type": "ref",
+                      "ref": "O17Jsd",
+                      "name": "Timeline · Reasoning · Streaming",
+                      "width": "fill_container"
                     }
                   ]
                 }
@@ -10500,6 +10096,1040 @@
                   ]
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Vqc7D",
+      "x": 3120,
+      "y": 0,
+      "name": "Timeline Item Component Board",
+      "clip": true,
+      "width": 1740,
+      "fill": "#09090B",
+      "cornerRadius": 8,
+      "stroke": "#FFFFFF12",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 28,
+      "padding": 32,
+      "children": [
+        {
+          "type": "frame",
+          "id": "pvBXj",
+          "name": "Timeline Item Board Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "children": [
+            {
+              "type": "text",
+              "id": "kI0NF",
+              "name": "Timeline Item Board Title",
+              "fill": "$white",
+              "content": "Timeline Item System",
+              "fontFamily": "$font-body",
+              "fontSize": 24,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "jIXJp",
+              "name": "Timeline Item Board Subtitle",
+              "fill": "#71717A",
+              "content": "Reusable session primitives · six item types · operational states",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "YVBC0",
+          "name": "Timeline Item Board Columns",
+          "width": "fill_container",
+          "gap": 28,
+          "children": [
+            {
+              "type": "frame",
+              "id": "yMFgV",
+              "name": "Timeline Item Board Left Column",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 26,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "t0ItLz",
+                  "name": "Message Item Components",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OlvAd",
+                      "name": "Message Item Components Label",
+                      "fill": "#71717A",
+                      "content": "MESSAGE ITEMS",
+                      "fontFamily": "$font-body",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "wQqQ0",
+                      "name": "User Message Type Label",
+                      "fill": "#A1A1AA",
+                      "content": "user_message",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "WsFfs",
+                      "type": "ref",
+                      "ref": "JiI07",
+                      "name": "User Message Component Specimen",
+                      "width": 780
+                    },
+                    {
+                      "type": "text",
+                      "id": "Y6EHJd",
+                      "name": "Agent Message Type Label",
+                      "fill": "#A1A1AA",
+                      "content": "agent_message",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "WoakI",
+                      "type": "ref",
+                      "ref": "iLVhZ",
+                      "name": "Agent Message Component Specimen",
+                      "width": 780
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YS8mM",
+                  "name": "Plan Item Component",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vHcih",
+                      "name": "Plan Item Component Label",
+                      "fill": "#71717A",
+                      "content": "PLAN",
+                      "fontFamily": "$font-body",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "W6IJZr",
+                      "name": "Plan Type Label",
+                      "fill": "#A1A1AA",
+                      "content": "plan",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "u0Nl22",
+                      "type": "ref",
+                      "ref": "knHFt",
+                      "name": "Plan Component Specimen",
+                      "width": 780
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "tgAFV",
+              "name": "Timeline Item Board Right Column",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 26,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "V5P8ZZ",
+                  "name": "Tool Call Item States",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Psubv",
+                      "name": "Tool Call Item States Label",
+                      "fill": "#71717A",
+                      "content": "TOOL CALL · RUNNING / COMPLETED / FAILED",
+                      "fontFamily": "$font-body",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "z0OWj",
+                      "name": "Tool Call Completed Label",
+                      "fill": "#6EE7B7",
+                      "content": "completed",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "NQJ14",
+                      "type": "ref",
+                      "ref": "j7AXdS",
+                      "name": "Tool Call Completed Specimen",
+                      "width": 780
+                    },
+                    {
+                      "type": "text",
+                      "id": "qgKS8",
+                      "name": "Tool Call Running Label",
+                      "fill": "#FBBF24",
+                      "content": "running",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "p9ys5",
+                      "type": "ref",
+                      "ref": "j7AXdS",
+                      "name": "Timeline Item · Tool Call · Running",
+                      "width": 780,
+                      "fill": "#B453091A",
+                      "stroke": "#B4530955",
+                      "descendants": {
+                        "JYlqh": {
+                          "icon": "loader-circle",
+                          "fill": "#FBBF24"
+                        },
+                        "XHZnu": {
+                          "content": "Browser · 正在读取竞品定价页"
+                        },
+                        "cnVay": {
+                          "fill": "#B4530933"
+                        },
+                        "g90ZH": {
+                          "content": "进行中",
+                          "fill": "#FBBF24"
+                        },
+                        "J03P4": {
+                          "content": "正在解析 5 个页面，已完成 3 个。"
+                        }
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "cRCsA",
+                      "name": "Tool Call Failed Label",
+                      "fill": "#FDA4AF",
+                      "content": "failed",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "lLiAL",
+                      "type": "ref",
+                      "ref": "j7AXdS",
+                      "name": "Timeline Item · Tool Call · Failed",
+                      "width": 780,
+                      "fill": "#BE123C14",
+                      "stroke": "#BE123C66",
+                      "descendants": {
+                        "JYlqh": {
+                          "icon": "circle-x",
+                          "fill": "#FDA4AF"
+                        },
+                        "XHZnu": {
+                          "content": "Web research · 渠道更新抓取"
+                        },
+                        "cnVay": {
+                          "fill": "#BE123C33"
+                        },
+                        "g90ZH": {
+                          "content": "失败",
+                          "fill": "#FDA4AF"
+                        },
+                        "J03P4": {
+                          "content": "目标站点返回 403。可重试或更换数据源。",
+                          "fill": "#FDA4AF"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XZLB8",
+                  "name": "Reasoning Item States",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PFAmU",
+                      "name": "Reasoning Item States Label",
+                      "fill": "#71717A",
+                      "content": "REASONING · STREAMING / COMPLETED",
+                      "fontFamily": "$font-body",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "fbClc",
+                      "name": "Reasoning Streaming Label",
+                      "fill": "#7DD3FC",
+                      "content": "streaming",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "xmiGm",
+                      "type": "ref",
+                      "ref": "O17Jsd",
+                      "name": "Reasoning Streaming Specimen",
+                      "width": 780
+                    },
+                    {
+                      "type": "text",
+                      "id": "aIhHi",
+                      "name": "Reasoning Completed Label",
+                      "fill": "#6EE7B7",
+                      "content": "completed",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "qMla0",
+                      "type": "ref",
+                      "ref": "O17Jsd",
+                      "name": "Timeline Item · Reasoning · Completed",
+                      "width": 780,
+                      "fill": "#0478571A",
+                      "stroke": "#10B98155",
+                      "descendants": {
+                        "O2HDZ": {
+                          "icon": "circle-check",
+                          "fill": "#6EE7B7"
+                        },
+                        "XLHe1": {
+                          "content": "推理摘要 · 已完成竞品信号到团队动作的映射",
+                          "fill": "#A7F3D0"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UE6d4",
+                  "name": "Context Item States",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "x2n0w",
+                      "name": "Context Item States Label",
+                      "fill": "#71717A",
+                      "content": "CONTEXT · COLLAPSED / EXPANDED",
+                      "fontFamily": "$font-body",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Bu3Ik",
+                      "name": "Context Collapsed Label",
+                      "fill": "#A1A1AA",
+                      "content": "collapsed",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "RI3gs",
+                      "type": "ref",
+                      "ref": "eC62r",
+                      "name": "Context Collapsed Specimen",
+                      "width": 780
+                    },
+                    {
+                      "type": "text",
+                      "id": "L3mmY5",
+                      "name": "Context Expanded Label",
+                      "fill": "#C4B5FD",
+                      "content": "expanded",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "id": "dhzRE",
+                      "type": "ref",
+                      "ref": "eC62r",
+                      "name": "Timeline Item · Context · Expanded",
+                      "width": 780,
+                      "fill": "#7C3AED14",
+                      "stroke": "#8B5CF655",
+                      "gap": 9,
+                      "descendants": {
+                        "f466GW": {
+                          "content": "4 条上下文",
+                          "fill": "#C4B5FD"
+                        },
+                        "jo31S": {
+                          "icon": "chevron-up",
+                          "fill": "#C4B5FD"
+                        },
+                        "CJwRt": {
+                          "enabled": true,
+                          "height": "fit_content",
+                          "clip": false,
+                          "padding": [
+                            4,
+                            0,
+                            0,
+                            24
+                          ]
+                        },
+                        "V2nsQp": {
+                          "enabled": true
+                        },
+                        "x79ju": {
+                          "enabled": true
+                        },
+                        "DhGWx": {
+                          "enabled": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "JiI07",
+      "x": 4960,
+      "y": 0,
+      "name": "Timeline Item · User Message",
+      "reusable": true,
+      "width": 780,
+      "justifyContent": "end",
+      "children": [
+        {
+          "type": "frame",
+          "id": "CA0ZB",
+          "name": "User Message Bubble",
+          "width": 450,
+          "fill": "#FFFFFF12",
+          "cornerRadius": 18,
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 16,
+          "children": [
+            {
+              "type": "text",
+              "id": "cx2oE",
+              "name": "User Message Text",
+              "fill": "$white",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "请汇总北美市场中与我们产品定位相近的竞品，并整理它们最近一周的内容策略变化。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-body",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "FAQ5N",
+              "name": "User Message Attachment",
+              "height": 26,
+              "fill": "#FFFFFF0D",
+              "cornerRadius": 8,
+              "gap": 7,
+              "padding": [
+                0,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "SHf9u",
+                  "name": "User Message Attachment Icon",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "file-text",
+                  "library": "lucide",
+                  "fill": "#A78BFA"
+                },
+                {
+                  "type": "text",
+                  "id": "n9WRv2",
+                  "name": "User Message Attachment Text",
+                  "fill": "#D4D4D8",
+                  "content": "north-america-brief.pdf · RAG",
+                  "fontFamily": "$font-body",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "iLVhZ",
+      "x": 4960,
+      "y": 160,
+      "name": "Timeline Item · Agent Message",
+      "reusable": true,
+      "width": 780,
+      "gap": 12,
+      "children": [
+        {
+          "type": "frame",
+          "id": "jMI4k",
+          "name": "Agent Message Avatar",
+          "width": 30,
+          "height": 30,
+          "fill": {
+            "type": "gradient",
+            "gradientType": "linear",
+            "enabled": true,
+            "rotation": 135,
+            "size": {
+              "height": 1
+            },
+            "colors": [
+              {
+                "color": "#8B5CF6",
+                "position": 0
+              },
+              {
+                "color": "#4F46E5",
+                "position": 1
+              }
+            ]
+          },
+          "cornerRadius": 15,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "xz7Mn",
+              "name": "Agent Message Avatar Text",
+              "fill": "$white",
+              "content": "A",
+              "fontFamily": "$font-body",
+              "fontSize": 11,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "USHQ0",
+          "name": "Agent Message Bubble",
+          "width": 610,
+          "fill": "#FFFFFF08",
+          "cornerRadius": 18,
+          "stroke": "#FFFFFF12",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 18,
+          "children": [
+            {
+              "type": "text",
+              "id": "WGYUt",
+              "name": "Agent Message Heading",
+              "fill": "$white",
+              "content": "我会先锁定竞品范围，再抓取最新页面与内容信号。",
+              "fontFamily": "$font-body",
+              "fontSize": 14,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "ZO6lX",
+              "name": "Agent Message List",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "x3xTN",
+                  "name": "Agent Message List Row 1",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "RtScq",
+                      "name": "Agent Message List Bullet 1",
+                      "fill": "#A78BFA",
+                      "width": 5,
+                      "height": 5
+                    },
+                    {
+                      "type": "text",
+                      "id": "fJfVj",
+                      "name": "Agent Message Line 1",
+                      "fill": "#A1A1AA",
+                      "content": "已识别 5 个核心竞品与 3 个相邻替代方案",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vPL1c",
+                  "name": "Agent Message List Row 2",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "l4ccr",
+                      "name": "Agent Message List Bullet 2",
+                      "fill": "#A78BFA",
+                      "width": 5,
+                      "height": 5
+                    },
+                    {
+                      "type": "text",
+                      "id": "vWkxz",
+                      "name": "Agent Message Line 2",
+                      "fill": "#A1A1AA",
+                      "content": "正在对比最新定价、内容主题和投放切角",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bnSaL",
+                  "name": "Agent Message List Row 3",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "FEGgm",
+                      "name": "Agent Message List Bullet 3",
+                      "fill": "#A78BFA",
+                      "width": 5,
+                      "height": 5
+                    },
+                    {
+                      "type": "text",
+                      "id": "M4exm7",
+                      "name": "Agent Message Line 3",
+                      "fill": "#A1A1AA",
+                      "content": "将输出结构化结论与可执行建议",
+                      "fontFamily": "$font-body",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "knHFt",
+      "x": 4960,
+      "y": 350,
+      "name": "Timeline Item · Plan",
+      "reusable": true,
+      "width": 780,
+      "fill": "#7C3AED22",
+      "cornerRadius": 16,
+      "stroke": "#8B5CF655",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 9,
+      "padding": 15,
+      "children": [
+        {
+          "type": "frame",
+          "id": "IJw2W",
+          "name": "Plan Header",
+          "width": "fill_container",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "ilogR",
+              "name": "Plan Header Icon",
+              "width": 15,
+              "height": 15,
+              "icon": "list-checks",
+              "library": "lucide",
+              "fill": "#C4B5FD"
+            },
+            {
+              "type": "text",
+              "id": "cVi3F",
+              "name": "Plan Title",
+              "fill": "#DDD6FE",
+              "content": "执行计划 · 3 步",
+              "fontFamily": "$font-body",
+              "fontSize": 11,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "CXe4t",
+          "name": "Plan Line 1",
+          "fill": "#D4D4D8",
+          "content": "• 抓取竞品主页与近 7 日内容更新",
+          "fontFamily": "$font-body",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "miqKt",
+          "name": "Plan Line 2",
+          "fill": "#D4D4D8",
+          "content": "• 归类市场、内容、本地化与定价信号",
+          "fontFamily": "$font-body",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "vdvUi",
+          "name": "Plan Line 3",
+          "fill": "#D4D4D8",
+          "content": "• 生成可审核的竞品动态周报",
+          "fontFamily": "$font-body",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "j7AXdS",
+      "x": 4960,
+      "y": 530,
+      "name": "Timeline Item · Tool Call",
+      "reusable": true,
+      "width": 780,
+      "fill": "#FFFFFF08",
+      "cornerRadius": 16,
+      "stroke": "#FFFFFF12",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 9,
+      "padding": 15,
+      "children": [
+        {
+          "type": "frame",
+          "id": "ClnSc",
+          "name": "Tool Call Header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "jAFv6",
+              "name": "Tool Call Copy",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "JYlqh",
+                  "name": "Tool Call Icon",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "search-code",
+                  "library": "lucide",
+                  "fill": "#A1A1AA"
+                },
+                {
+                  "type": "text",
+                  "id": "XHZnu",
+                  "name": "Tool Call Title",
+                  "fill": "#E4E4E7",
+                  "content": "Web research · 竞品动态抓取",
+                  "fontFamily": "$font-body",
+                  "fontSize": 11,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cnVay",
+              "name": "Tool Call Status",
+              "height": 22,
+              "fill": "#065F4633",
+              "cornerRadius": 999,
+              "padding": [
+                0,
+                8
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "g90ZH",
+                  "name": "Tool Call Status Text",
+                  "fill": "#6EE7B7",
+                  "content": "已完成",
+                  "fontFamily": "$font-body",
+                  "fontSize": 9,
+                  "fontWeight": "700"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "J03P4",
+          "name": "Tool Call Detail",
+          "fill": "#A1A1AA",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "已采集 8 个网页、4 份内容资产和 2 组渠道更新。",
+          "fontFamily": "$font-body",
+          "fontSize": 10,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "O17Jsd",
+      "x": 4960,
+      "y": 665,
+      "name": "Timeline Item · Reasoning",
+      "reusable": true,
+      "width": 780,
+      "height": 44,
+      "fill": "#0EA5E922",
+      "cornerRadius": 14,
+      "stroke": "#38BDF855",
+      "strokeWidth": 1,
+      "gap": 9,
+      "padding": [
+        0,
+        14
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "O2HDZ",
+          "name": "Reasoning Icon",
+          "width": 15,
+          "height": 15,
+          "icon": "brain-circuit",
+          "library": "lucide",
+          "fill": "#7DD3FC"
+        },
+        {
+          "type": "text",
+          "id": "XLHe1",
+          "name": "Reasoning Text",
+          "fill": "#BAE6FD",
+          "content": "推理摘要 · 正在把竞品信号映射为可执行的团队动作",
+          "fontFamily": "$font-body",
+          "fontSize": 11,
+          "fontWeight": "700"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "eC62r",
+      "x": 4960,
+      "y": 770,
+      "name": "Timeline Item · Context",
+      "reusable": true,
+      "width": 780,
+      "fill": "#FFFFFF08",
+      "cornerRadius": 14,
+      "stroke": "#FFFFFF12",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "padding": [
+        12,
+        14
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "Gwf0X",
+          "name": "Context Header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "bSJBJ",
+              "name": "Context Copy",
+              "gap": 9,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Vco0G",
+                  "name": "Context Icon",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "layers",
+                  "library": "lucide",
+                  "fill": "#A78BFA"
+                },
+                {
+                  "type": "text",
+                  "id": "dto4Y",
+                  "name": "Context Title",
+                  "fill": "#E4E4E7",
+                  "content": "已注入运行上下文",
+                  "fontFamily": "$font-body",
+                  "fontSize": 11,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "TPFyV",
+              "name": "Context Meta",
+              "gap": 7,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "f466GW",
+                  "name": "Context Meta Text",
+                  "fill": "#71717A",
+                  "content": "4 条",
+                  "fontFamily": "$font-body",
+                  "fontSize": 9,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "jo31S",
+                  "name": "Context Chevron",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "chevron-down",
+                  "library": "lucide",
+                  "fill": "#71717A"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "CJwRt",
+          "name": "Context Detail",
+          "width": 752,
+          "height": 0,
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "V2nsQp",
+              "x": 24,
+              "y": 4,
+              "name": "Context Detail Line 1",
+              "enabled": false,
+              "fill": "#A1A1AA",
+              "content": "north-america-brief.pdf · 2 chunks",
+              "fontFamily": "$font-body",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "x79ju",
+              "x": 24,
+              "y": 22,
+              "name": "Context Detail Line 2",
+              "enabled": false,
+              "fill": "#A1A1AA",
+              "content": "workspace / Summer Launch · market criteria",
+              "fontFamily": "$font-body",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "DhGWx",
+              "x": 24,
+              "y": 40,
+              "name": "Context Detail Line 3",
+              "enabled": false,
+              "fill": "#A1A1AA",
+              "content": "session memory · latest competitor shortlist",
+              "fontFamily": "$font-body",
+              "fontSize": 10,
+              "fontWeight": "normal"
             }
           ]
         }

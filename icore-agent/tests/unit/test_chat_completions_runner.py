@@ -7,9 +7,17 @@ from typing import Any
 import pytest
 
 from icore_agent.contexts.agent.domain import ChatCompletionRole
+from icore_agent.contexts.agent.domain.loop import (
+    ModelReasoningDelta,
+    ModelStepResult,
+    ModelToolCallCompleted,
+    ModelToolCallDelta,
+    ModelToolCallStarted,
+)
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
+    ReasoningItem,
     ToolCallItem,
     ToolCallResult,
     ToolCallStatus,
@@ -19,12 +27,6 @@ from icore_agent.contexts.agent.domain.session import (
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.tool import ToolChoice, ToolDefinition
-from icore_agent.contexts.agent.domain.loop import (
-    ModelStepResult,
-    ModelToolCallCompleted,
-    ModelToolCallDelta,
-    ModelToolCallStarted,
-)
 from icore_agent.contexts.agent.infrastructure.chat_completions import (
     ChatCompletionsModelClient,
     render_chat_completions_messages,
@@ -45,6 +47,7 @@ async def test_chat_completions_model_client_samples_once_without_running_tools(
             "choices": [{
                 "message": {
                     "content": None,
+                    "reasoning_content": "I should compare both numbers.",
                     "tool_calls": [{
                         "id": "tool-1",
                         "type": "function",
@@ -80,6 +83,8 @@ async def test_chat_completions_model_client_samples_once_without_running_tools(
     assert calls[0]["tools"][0]["function"]["name"] == "number_comparator"
     assert calls[0]["tool_choice"] == "auto"
     assert result.assistant_item.text == ""
+    assert result.reasoning_item is not None
+    assert result.reasoning_item.text == "I should compare both numbers."
     assert result.stop_reason == "tool_calls"
     assert result.model == "test-provider/test-model"
     assert result.provider == "test-provider"
@@ -109,6 +114,20 @@ async def test_chat_completions_model_client_collects_streaming_deltas(
         calls.append(kwargs)
 
         async def chunks() -> Any:
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"reasoning_content": "Compare "},
+                    "finish_reason": None,
+                }],
+            }
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"reasoning_content": "the values."},
+                    "finish_reason": None,
+                }],
+            }
             yield {
                 "id": "response-1",
                 "choices": [{
@@ -146,12 +165,64 @@ async def test_chat_completions_model_client_collects_streaming_deltas(
     assert calls[0]["stream"] is True
     assert result.deltas == ["Hel", "lo"]
     assert result.assistant_item.text == "Hello"
+    assert result.reasoning_item is not None
+    assert result.reasoning_item.text == "Compare the values."
     assert result.stop_reason == "stop"
     assert result.usage == {
         "prompt_tokens": 2,
         "completion_tokens": 1,
         "total_tokens": 3,
     }
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_model_client_streams_reasoning_deltas(
+    monkeypatch,
+) -> None:
+    """Model client should expose LiteLLM reasoning_content independently."""
+
+    async def fake_completion(**kwargs: Any) -> Any:
+        _ = kwargs
+
+        async def chunks() -> Any:
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"reasoning_content": "Inspect evidence."},
+                    "finish_reason": None,
+                }],
+            }
+            yield {
+                "id": "response-1",
+                "choices": [{
+                    "delta": {"content": "Answer"},
+                    "finish_reason": "stop",
+                }],
+            }
+
+        return chunks()
+
+    monkeypatch.setattr(
+        "icore_agent.contexts.agent.infrastructure.chat_completions.runner.litellm.acompletion",
+        fake_completion,
+    )
+    client = ChatCompletionsModelClient(
+        model_id="test-provider/test-model",
+        client_args={},
+        params={},
+    )
+
+    events = [event async for event in client.stream(_envelope(_tool_definition()))]
+
+    assert [
+        event.text
+        for event in events
+        if isinstance(event, ModelReasoningDelta)
+    ] == ["Inspect evidence."]
+    final = events[-1]
+    assert isinstance(final, ModelStepResult)
+    assert final.reasoning_item is not None
+    assert final.reasoning_item.text == "Inspect evidence."
 
 
 @pytest.mark.asyncio
@@ -252,6 +323,7 @@ def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> Non
         tool_definition,
         turn_items=[
             AgentMessageItem(text=""),
+            ReasoningItem(text="I need the comparator tool."),
             tool_call,
         ],
     )
@@ -261,6 +333,7 @@ def test_chat_completions_renderer_projects_turn_tool_state_to_messages() -> Non
     assert messages[-2] == {
         "role": ChatCompletionRole.ASSISTANT.value,
         "content": None,
+        "reasoning_content": "I need the comparator tool.",
         "tool_calls": [{
             "id": "tool-1",
             "type": "function",
@@ -308,7 +381,7 @@ def test_chat_completions_renderer_projects_turn_user_items_to_messages() -> Non
 def _envelope(
     tool_definition: ToolDefinition,
     *,
-    turn_items: list[AgentMessageItem |
+    turn_items: list[AgentMessageItem | ReasoningItem |
                      ToolCallItem | UserMessageItem] | None = None,
 ) -> PromptEnvelope:
     """Build a prompt envelope for chat completions model-client tests."""

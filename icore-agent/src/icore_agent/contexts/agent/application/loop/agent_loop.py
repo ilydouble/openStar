@@ -7,18 +7,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from icore_agent.contexts.agent.domain.session import (
-    AgentMessageItem,
-    SessionItemStatus,
-    ToolCallItem,
-    ToolCallStatus,
-    ToolFunction,
-)
 from icore_agent.contexts.agent.domain.loop import (
     AgentLoopControl,
     ModelClient,
-    ModelStreamWarning,
+    ModelReasoningDelta,
     ModelStepResult,
+    ModelStreamWarning,
     ModelTextDelta,
     ModelToolCallCompleted,
     ModelToolCallDelta,
@@ -26,6 +20,14 @@ from icore_agent.contexts.agent.domain.loop import (
     NoopAgentLoopControl,
     PromptContextManager,
     ToolRuntimePort,
+)
+from icore_agent.contexts.agent.domain.session import (
+    AgentMessageItem,
+    ReasoningItem,
+    SessionItemStatus,
+    ToolCallItem,
+    ToolCallStatus,
+    ToolFunction,
 )
 from icore_agent.contexts.agent.domain.turn import Turn, TurnEvent
 from icore_agent.shared.logging.app_logger import get_logger
@@ -93,8 +95,33 @@ class AgentLoop:
                         turn_id=request.turn_id,
                         item=started_assistant,
                     )
+                    started_reasoning: ReasoningItem | None = None
                     streamed_text = ""
+                    streamed_reasoning = ""
                     async for stream_event in stream(envelope):
+                        if isinstance(stream_event, ModelReasoningDelta):
+                            if not stream_event.text:
+                                continue
+                            if started_reasoning is None:
+                                started_reasoning = ReasoningItem(
+                                    text="",
+                                    status=SessionItemStatus.IN_PROGRESS,
+                                )
+                                request.turn.upsert_item(started_reasoning)
+                                yield TurnEvent.item_started(
+                                    session_id=request.session_id,
+                                    turn_id=request.turn_id,
+                                    item=started_reasoning,
+                                )
+                            streamed_reasoning += stream_event.text
+                            yield TurnEvent.item_delta(
+                                session_id=request.session_id,
+                                turn_id=request.turn_id,
+                                item_id=started_reasoning.id,
+                                item_type="reasoning",
+                                delta={"text_append": stream_event.text},
+                            )
+                            continue
                         if isinstance(stream_event, ModelTextDelta):
                             if not stream_event.text:
                                 continue
@@ -147,11 +174,17 @@ class AgentLoop:
                                 retryable=stream_event.retryable,
                             )
                             continue
-                        step = stream_event
+                        if isinstance(stream_event, ModelStepResult):
+                            step = stream_event
                     if step is None:
                         step = ModelStepResult(
                             assistant_item=AgentMessageItem(
                                 text=streamed_text,
+                            ),
+                            reasoning_item=(
+                                ReasoningItem(text=streamed_reasoning)
+                                if streamed_reasoning
+                                else None
                             ),
                         )
                     assistant_item = _completed_assistant_item(
@@ -161,8 +194,14 @@ class AgentLoop:
                             or streamed_text,
                         }),
                     )
+                    reasoning_item = _completed_reasoning_item(
+                        step.reasoning_item,
+                        started_item=started_reasoning,
+                        streamed_text=streamed_reasoning,
+                    )
                     step = ModelStepResult(
                         assistant_item=assistant_item,
+                        reasoning_item=reasoning_item,
                         tool_calls=step.tool_calls,
                         deltas=[],
                         usage=step.usage,
@@ -178,6 +217,13 @@ class AgentLoop:
                         turn_id=request.turn_id,
                         item=assistant_item,
                     )
+                    if reasoning_item is not None:
+                        request.turn.upsert_item(reasoning_item)
+                        yield TurnEvent.item_completed(
+                            session_id=request.session_id,
+                            turn_id=request.turn_id,
+                            item=reasoning_item,
+                        )
                 else:
                     step = await request.model_client.sample(envelope)
             except Exception as exc:
@@ -209,6 +255,36 @@ class AgentLoop:
                     turn_id=request.turn_id,
                     item=assistant_item,
                 )
+                if step.reasoning_item is not None:
+                    started_reasoning = _started_reasoning_item(
+                        step.reasoning_item,
+                    )
+                    reasoning_item = _completed_reasoning_item(
+                        step.reasoning_item,
+                        started_item=started_reasoning,
+                        streamed_text=step.reasoning_item.text,
+                    )
+                    request.turn.upsert_item(started_reasoning)
+                    yield TurnEvent.item_started(
+                        session_id=request.session_id,
+                        turn_id=request.turn_id,
+                        item=started_reasoning,
+                    )
+                    if step.reasoning_item.text:
+                        yield TurnEvent.item_delta(
+                            session_id=request.session_id,
+                            turn_id=request.turn_id,
+                            item_id=started_reasoning.id,
+                            item_type="reasoning",
+                            delta={"text_append": step.reasoning_item.text},
+                        )
+                    if reasoning_item is not None:
+                        request.turn.upsert_item(reasoning_item)
+                        yield TurnEvent.item_completed(
+                            session_id=request.session_id,
+                            turn_id=request.turn_id,
+                            item=reasoning_item,
+                        )
 
             if step.stop_reason in {"error", "aborted"}:
                 if step.stop_reason == "aborted":
@@ -292,6 +368,39 @@ def _completed_assistant_item(item: AgentMessageItem) -> AgentMessageItem:
     return item.model_copy(update={
         "status": SessionItemStatus.COMPLETED,
         "completed_at": item.completed_at or datetime.now(UTC),
+    })
+
+
+def _started_reasoning_item(item: ReasoningItem) -> ReasoningItem:
+    """Return a reasoning item marked as in progress."""
+    return item.model_copy(update={
+        "status": SessionItemStatus.IN_PROGRESS,
+        "completed_at": None,
+        "text": "",
+    })
+
+
+def _completed_reasoning_item(
+    item: ReasoningItem | None,
+    *,
+    started_item: ReasoningItem | None,
+    streamed_text: str,
+) -> ReasoningItem | None:
+    """Return one completed reasoning item for a model sampling step."""
+    text = item.text if item is not None and item.text else streamed_text
+    if not text.strip():
+        return None
+    source = item or started_item or ReasoningItem(text=text)
+    return source.model_copy(update={
+        "id": started_item.id if started_item is not None else source.id,
+        "created_at": (
+            started_item.created_at
+            if started_item is not None
+            else source.created_at
+        ),
+        "status": SessionItemStatus.COMPLETED,
+        "completed_at": source.completed_at or datetime.now(UTC),
+        "text": text,
     })
 
 

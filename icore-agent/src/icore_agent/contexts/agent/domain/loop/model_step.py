@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from icore_agent.contexts.agent.domain.session import AgentMessageItem, ToolCallItem
+from icore_agent.contexts.agent.domain.session import (
+    AgentMessageItem,
+    ReasoningItem,
+    ToolCallItem,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,6 +17,7 @@ class ModelStepResult:
     """Provider-neutral result from one model sampling step."""
 
     assistant_item: AgentMessageItem
+    reasoning_item: ReasoningItem | None = None
     tool_calls: list[ToolCallItem] = field(default_factory=list)
     deltas: list[str] = field(default_factory=list)
     usage: dict[str, int] | None = None
@@ -26,6 +31,13 @@ class ModelStepResult:
 @dataclass(frozen=True, slots=True)
 class ModelTextDelta:
     """One streamed assistant text delta from the model provider."""
+
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class ModelReasoningDelta:
+    """One streamed model reasoning delta from the provider."""
 
     text: str
 
@@ -69,6 +81,7 @@ class ModelStreamWarning:
 
 ModelStreamEvent = (
     ModelTextDelta
+    | ModelReasoningDelta
     | ModelToolCallStarted
     | ModelToolCallDelta
     | ModelToolCallCompleted

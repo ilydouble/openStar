@@ -17,9 +17,9 @@ class ModelClient(Protocol):
         """Return one model step without executing any requested tools."""
         ...
 
-    async def stream(
+    def stream(
         self,
         envelope: PromptEnvelope,
     ) -> AsyncIterator[ModelStreamEvent]:
-        """Yield model text deltas and one final sampling result."""
+        """Yield model text/reasoning deltas and one final sampling result."""
         ...

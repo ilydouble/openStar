@@ -7,13 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
+    ReasoningItem,
     ToolCallItem,
     UserMessageItem,
 )
 from icore_agent.contexts.agent.domain.tool import ToolChoice, ToolDefinition
 
 PromptHistoryItem = UserMessageItem | AgentMessageItem
-PromptTurnItem = UserMessageItem | AgentMessageItem | ToolCallItem
+PromptTurnItem = UserMessageItem | AgentMessageItem | ReasoningItem | ToolCallItem
 
 
 class PromptEnvelope(BaseModel):
@@ -51,6 +52,8 @@ def _turn_item_text(item: PromptTurnItem) -> str:
     if isinstance(item, UserMessageItem):
         return item.to_text()
     if isinstance(item, AgentMessageItem):
+        return item.text
+    if isinstance(item, ReasoningItem):
         return item.text
     if item.result and item.result.content:
         return item.result.content

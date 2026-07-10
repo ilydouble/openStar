@@ -1,4 +1,4 @@
-"""Reasoning summary timeline item."""
+"""Model reasoning timeline item."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from .session_item_type import SessionItemType
 
 
 class ReasoningItem(SessionItemBase):
-    """A model reasoning summary item."""
+    """Model reasoning content captured for one sampling step."""
 
     type: Literal[SessionItemType.REASONING] = SessionItemType.REASONING
     text: str = ""

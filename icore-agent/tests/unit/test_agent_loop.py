@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
@@ -14,15 +13,17 @@ from icore_agent.contexts.agent.application.loop import (
     AgentLoopRequest,
 )
 from icore_agent.contexts.agent.domain.loop import (
+    ModelReasoningDelta,
+    ModelStepResult,
+    ModelTextDelta,
     ModelToolCallCompleted,
     ModelToolCallDelta,
     ModelToolCallStarted,
-    ModelTextDelta,
-    ModelStepResult,
 )
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
+    ReasoningItem,
     SessionItem,
     ToolCallItem,
     ToolCallResult,
@@ -47,6 +48,8 @@ async def test_agent_loop_owns_tool_cycle_between_model_samples() -> None:
     model_client = ScriptedModelClient([
         ModelStepResult(
             assistant_item=AgentMessageItem(text=""),
+            reasoning_item=ReasoningItem(
+                text="The comparator is appropriate."),
             tool_calls=[_tool_call()],
         ),
         ModelStepResult(
@@ -68,13 +71,16 @@ async def test_agent_loop_owns_tool_cycle_between_model_samples() -> None:
         TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_COMPLETED,
+        TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_COMPLETED,
         TurnEventKind.ITEM_STARTED,
         TurnEventKind.ITEM_COMPLETED,
     ]
     assert model_client.prompt_turn_item_types == [
         [],
-        ["agent_message", "tool_call"],
+        ["agent_message", "reasoning", "tool_call"],
     ]
     assert turn.reply_text() == "2 is greater than 1."
 
@@ -146,6 +152,46 @@ async def test_agent_loop_emits_model_streaming_deltas_before_completion() -> No
     ]
     assert events[-1].item.text == "Hello"
     assert events[1].item_id == events[0].item.id
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_emits_and_persists_streaming_reasoning_item() -> None:
+    """AgentLoop should expose reasoning without adding it to final reply text."""
+    turn = Turn(session_id="session-1")
+    request = AgentLoopRequest(
+        session_id="session-1",
+        turn_id=turn.id,
+        turn=turn,
+        context_manager=RecordingContextManager(),
+        model_client=StreamingReasoningModelClient(),
+        tool_runtime=CompletingToolRuntime(),
+    )
+
+    events = [event async for event in AgentLoop(wall_budget_sec=60).run(request)]
+    reasoning_events = [
+        event
+        for event in events
+        if event.item_type == "reasoning"
+        or isinstance(event.item, ReasoningItem)
+    ]
+
+    assert [event.kind for event in reasoning_events] == [
+        TurnEventKind.ITEM_STARTED,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_DELTA,
+        TurnEventKind.ITEM_COMPLETED,
+    ]
+    assert [event.delta for event in reasoning_events if event.delta] == [
+        {"text_append": "Inspect "},
+        {"text_append": "the evidence."},
+    ]
+    assert reasoning_events[-1].item.text == "Inspect the evidence."
+    assert any(
+        isinstance(item, ReasoningItem)
+        and item.text == "Inspect the evidence."
+        for item in turn.items
+    )
+    assert turn.reply_text() == "Final answer"
 
 
 @pytest.mark.asyncio
@@ -274,6 +320,26 @@ class StreamingModelClient:
         )
 
 
+class StreamingReasoningModelClient:
+    """Model client fake that streams reasoning separately from answer text."""
+
+    async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
+        """Fail if AgentLoop falls back to non-streaming sampling."""
+        _ = envelope
+        raise AssertionError("AgentLoop should use stream() when available")
+
+    async def stream(self, envelope: PromptEnvelope):
+        """Yield reasoning, final text, and a completed model result."""
+        _ = envelope
+        yield ModelReasoningDelta(text="Inspect ")
+        yield ModelReasoningDelta(text="the evidence.")
+        yield ModelTextDelta(text="Final answer")
+        yield ModelStepResult(
+            assistant_item=AgentMessageItem(text="Final answer"),
+            reasoning_item=ReasoningItem(text="Inspect the evidence."),
+        )
+
+
 class StreamingToolCallModelClient:
     """Model client fake that streams a tool call before returning a step."""
 
@@ -371,7 +437,7 @@ class RecordingContextManager:
             turn_items=[
                 item
                 for item in session_items
-                if isinstance(item, AgentMessageItem | ToolCallItem)
+                if isinstance(item, AgentMessageItem | ReasoningItem | ToolCallItem)
                 or (
                     isinstance(item, UserMessageItem)
                     and item.metadata.get("runtime_input") == "steering"

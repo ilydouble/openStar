@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
+    ReasoningItem,
     SessionItemStatus,
     ToolCallItem,
     ToolCallResult,
@@ -103,6 +104,42 @@ def test_repository_persists_tool_call_as_session_item() -> None:
         "temperature": "22C",
     }
     assert stored_item.payload["duration_ms"] == 12
+
+
+def test_repository_persists_reasoning_as_session_item() -> None:
+    """Completed reasoning should remain available in canonical turn history."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repo = SqlAlchemyChatHistoryRepository(session)
+        chat_session = repo.create_session(
+            "session-public-id",
+            "user-public-id",
+            title="Reasoning",
+        )
+        persisted_turn = repo.create_turn(
+            chat_session,
+            Turn(session_id="session-public-id"),
+        )
+        repo.upsert_session_item(
+            chat_session,
+            persisted_turn,
+            ReasoningItem(
+                id="reasoning-item-1",
+                status=SessionItemStatus.COMPLETED,
+                text="Inspect the available evidence.",
+                completed_at=datetime.now(UTC),
+            ),
+        )
+        session.commit()
+
+        stored_item = session.execute(select(ChatSessionItem)).scalar_one()
+
+    assert stored_item.item_type == "reasoning"
+    assert stored_item.public_id == "reasoning-item-1"
+    assert stored_item.status == "completed"
+    assert stored_item.payload["text"] == "Inspect the available evidence."
 
 
 def test_repository_persists_turn_context_user_item_and_usage() -> None:

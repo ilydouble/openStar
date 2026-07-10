@@ -14,6 +14,7 @@ from icore_agent.contexts.agent.domain.prompt import (
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
+    ReasoningItem,
     ToolCallItem,
     UserMessageItem,
 )
@@ -67,7 +68,9 @@ def _render_history_message(item: PromptHistoryItem) -> dict[str, Any]:
     }
 
 
-def _render_current_user_content(item: Any) -> str | list[dict[str, Any]]:
+def _render_current_user_content(
+    item: UserMessageItem,
+) -> str | list[dict[str, Any]]:
     """Render the current user item as text or multimodal Chat Completions content."""
     blocks: list[dict[str, Any]] = []
     has_image = False
@@ -93,7 +96,7 @@ def _history_item_text(item: PromptHistoryItem) -> str:
 
 
 def _render_turn_messages(
-    items: list[AgentMessageItem | ToolCallItem | UserMessageItem],
+    items: list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem],
 ) -> list[dict[str, Any]]:
     """Render current-turn assistant/tool state for a follow-up model step."""
     messages: list[dict[str, Any]] = []
@@ -101,9 +104,15 @@ def _render_turn_messages(
     while index < len(items):
         item = items[index]
         if isinstance(item, AgentMessageItem):
-            tool_calls, next_index = _following_tool_calls(items, index + 1)
+            reasoning, content_index = _following_reasoning(items, index + 1)
+            tool_calls, next_index = _following_tool_calls(
+                items, content_index)
             if tool_calls:
-                messages.append(_assistant_tool_call_message(item, tool_calls))
+                messages.append(_assistant_tool_call_message(
+                    item,
+                    tool_calls,
+                    reasoning=reasoning,
+                ))
                 messages.extend(
                     _tool_result_message(tool_call)
                     for tool_call in tool_calls
@@ -111,11 +120,16 @@ def _render_turn_messages(
                 )
                 index = next_index
                 continue
-            if item.text:
-                messages.append({
+            if item.text or reasoning is not None:
+                message: dict[str, Any] = {
                     "role": ChatCompletionRole.ASSISTANT.value,
-                    "content": item.text,
-                })
+                    "content": item.text or None,
+                }
+                if reasoning is not None:
+                    message["reasoning_content"] = reasoning.text
+                messages.append(message)
+                index = content_index
+                continue
         elif isinstance(item, UserMessageItem):
             content = _render_current_user_content(item)
             if content:
@@ -123,31 +137,48 @@ def _render_turn_messages(
                     "role": ChatCompletionRole.USER.value,
                     "content": content,
                 })
-        elif _tool_result_content(item) is not None:
+        elif isinstance(item, ToolCallItem) and _tool_result_content(item) is not None:
             messages.append(_tool_result_message(item))
         index += 1
     return messages
 
 
 def _following_tool_calls(
-    items: list[AgentMessageItem | ToolCallItem | UserMessageItem],
+    items: list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem],
     start: int,
 ) -> tuple[list[ToolCallItem], int]:
     """Return tool calls immediately following an assistant item."""
     tool_calls: list[ToolCallItem] = []
     index = start
-    while index < len(items) and isinstance(items[index], ToolCallItem):
-        tool_calls.append(items[index])
+    while index < len(items):
+        item = items[index]
+        if not isinstance(item, ToolCallItem):
+            break
+        tool_calls.append(item)
         index += 1
     return tool_calls, index
+
+
+def _following_reasoning(
+    items: list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem],
+    start: int,
+) -> tuple[ReasoningItem | None, int]:
+    """Return optional reasoning immediately following an assistant item."""
+    if start < len(items):
+        item = items[start]
+        if isinstance(item, ReasoningItem):
+            return item, start + 1
+    return None, start
 
 
 def _assistant_tool_call_message(
     assistant: AgentMessageItem,
     tool_calls: list[ToolCallItem],
+    *,
+    reasoning: ReasoningItem | None = None,
 ) -> dict[str, Any]:
     """Render an assistant message that requested tool calls."""
-    return {
+    message: dict[str, Any] = {
         "role": ChatCompletionRole.ASSISTANT.value,
         "content": assistant.text or None,
         "tool_calls": [
@@ -162,6 +193,9 @@ def _assistant_tool_call_message(
             for tool_call in tool_calls
         ],
     }
+    if reasoning is not None:
+        message["reasoning_content"] = reasoning.text
+    return message
 
 
 def _tool_result_message(tool_call: ToolCallItem) -> dict[str, Any]:

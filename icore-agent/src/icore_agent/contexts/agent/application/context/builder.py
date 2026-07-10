@@ -9,6 +9,7 @@ from icore_agent.contexts.agent.domain.context import TurnPromptSources
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
+    ReasoningItem,
     SessionItem,
     ToolCallItem,
     UserMessageItem,
@@ -46,12 +47,12 @@ class AgentTurnPromptBuilder:
 
 def _model_visible_turn_items(
     session_items: list[SessionItem],
-) -> list[AgentMessageItem | ToolCallItem | UserMessageItem]:
-    """Return current-turn assistant/tool items visible to the next sample."""
+) -> list[AgentMessageItem | ReasoningItem | ToolCallItem | UserMessageItem]:
+    """Return current-turn items visible to the next model sample."""
     return [
         item
         for item in session_items
-        if isinstance(item, (AgentMessageItem, ToolCallItem))
+        if isinstance(item, (AgentMessageItem, ReasoningItem, ToolCallItem))
         or (
             isinstance(item, UserMessageItem)
             and item.metadata.get("runtime_input") == "steering"

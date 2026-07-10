@@ -12,6 +12,7 @@ def test_resolve_litellm_config_splits_zai_client_args_and_params(monkeypatch):
     monkeypatch.setenv("ZAI_API_KEY", "zai-key")
     monkeypatch.setenv("TIMEOUT_INTERVAL", "30")
     monkeypatch.setenv("MAX_RETRIES", "3")
+    monkeypatch.setenv("DISABLE_THINKING", "true")
     monkeypatch.delenv("MODEL_API_BASE", raising=False)
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
 
@@ -37,6 +38,26 @@ def test_resolve_litellm_config_splits_zai_client_args_and_params(monkeypatch):
     }
     assert resolved.params["extra_body"] == {"thinking": {"type": "disabled"}}
     assert "api_key" not in resolved.params
+
+
+def test_default_glm_51_config_enables_thinking(monkeypatch):
+    """Default Z.AI requests should explicitly enable GLM-5.1 thinking."""
+    monkeypatch.delenv("MODEL_ID", raising=False)
+    monkeypatch.delenv("MODEL_ID_FAST", raising=False)
+    monkeypatch.delenv("DISABLE_THINKING", raising=False)
+
+    settings = Settings(_env_file=None)
+    resolved = settings.resolve_litellm_config()
+
+    assert settings.model_id == "zai/glm-5.1"
+    assert settings.model_id_fast == "zai/glm-5.1"
+    assert settings.disable_thinking is False
+    assert resolved.params["extra_body"] == {
+        "thinking": {
+            "type": "enabled",
+            "clear_thinking": True,
+        },
+    }
 
 
 def test_litellm_kwargs_keeps_direct_completion_compatibility(monkeypatch):

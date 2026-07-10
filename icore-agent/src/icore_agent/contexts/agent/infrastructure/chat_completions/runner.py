@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import litellm
 
+from icore_agent.config import settings
 from icore_agent.contexts.agent.domain.loop import (
+    ModelReasoningDelta,
     ModelStepResult,
+    ModelStreamEvent,
     ModelTextDelta,
     ModelToolCallCompleted,
     ModelToolCallDelta,
     ModelToolCallStarted,
 )
-from icore_agent.config import settings
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
+    ReasoningItem,
     SessionItemStatus,
     ToolCallItem,
     ToolCallStatus,
@@ -50,11 +54,14 @@ class ChatCompletionsModelClient:
     async def sample(self, envelope: PromptEnvelope) -> ModelStepResult:
         """Call LiteLLM once and return provider-neutral assistant/tool items."""
         deltas: list[str] = []
+        reasoning_parts: list[str] = []
         result: ModelStepResult | None = None
         async for event in self.stream(envelope):
             if isinstance(event, ModelTextDelta):
                 deltas.append(event.text)
-            else:
+            elif isinstance(event, ModelReasoningDelta):
+                reasoning_parts.append(event.text)
+            elif isinstance(event, ModelStepResult):
                 result = event
         if result is None:
             return ModelStepResult(
@@ -62,6 +69,7 @@ class ChatCompletionsModelClient:
                     text="".join(deltas),
                     status=SessionItemStatus.COMPLETED,
                 ),
+                reasoning_item=_reasoning_item("".join(reasoning_parts)),
                 deltas=deltas,
                 model=self._model_id,
                 provider=self._provider,
@@ -69,7 +77,10 @@ class ChatCompletionsModelClient:
             )
         return _model_step_result_copy(result, deltas=deltas)
 
-    async def stream(self, envelope: PromptEnvelope):
+    async def stream(
+        self,
+        envelope: PromptEnvelope,
+    ) -> AsyncIterator[ModelStreamEvent]:
         """Call LiteLLM once and yield provider-neutral streaming events."""
         kwargs = {
             "model": self._model_id,
@@ -143,6 +154,7 @@ def _response_step_result(
             text=content,
             status=SessionItemStatus.COMPLETED,
         ),
+        reasoning_item=_reasoning_item(_message_reasoning_content(message)),
         tool_calls=tool_calls,
         usage=_response_usage(response),
         model=model_id,
@@ -165,9 +177,10 @@ async def _stream_step_events(
     *,
     model_id: str,
     provider: str | None,
-):
-    """Yield text deltas while collecting a final streaming model result."""
+) -> AsyncIterator[ModelStreamEvent]:
+    """Yield text/reasoning deltas while collecting a final model result."""
     content_parts: list[str] = []
+    reasoning_parts: list[str] = []
     chunks: list[Any] = []
     usage: dict[str, int] | None = None
     finish_reason = ""
@@ -187,6 +200,10 @@ async def _stream_step_events(
         if reason:
             finish_reason = str(reason)
         delta = _get(choice, "delta") or {}
+        reasoning_delta = _delta_reasoning_content(delta)
+        if reasoning_delta:
+            reasoning_parts.append(reasoning_delta)
+            yield ModelReasoningDelta(text=reasoning_delta)
         text_delta = _delta_content(delta)
         if text_delta:
             content_parts.append(text_delta)
@@ -233,6 +250,7 @@ async def _stream_step_events(
             text=content,
             status=SessionItemStatus.COMPLETED,
         ),
+        reasoning_item=_reasoning_item("".join(reasoning_parts)),
         tool_calls=tool_calls,
         deltas=content_parts,
         usage=usage,
@@ -252,6 +270,7 @@ def _model_step_result_copy(
     """Return a model step result with collected compatibility deltas."""
     return ModelStepResult(
         assistant_item=result.assistant_item,
+        reasoning_item=result.reasoning_item,
         tool_calls=result.tool_calls,
         deltas=deltas,
         usage=result.usage,
@@ -263,7 +282,7 @@ def _model_step_result_copy(
     )
 
 
-async def _iter_stream_chunks(response: Any):
+async def _iter_stream_chunks(response: Any) -> AsyncIterator[Any]:
     """Yield chunks from either an async or sync LiteLLM stream."""
     if hasattr(response, "__aiter__"):
         async for chunk in response:
@@ -284,6 +303,14 @@ def _first_choice(response: Any) -> Any:
 def _delta_content(delta: Any) -> str:
     """Extract one streamed assistant text delta."""
     content = _get(delta, "content")
+    return str(content) if content is not None else ""
+
+
+def _delta_reasoning_content(delta: Any) -> str:
+    """Extract one streamed model reasoning delta."""
+    content = _get(delta, "reasoning_content")
+    if content is None:
+        content = _get(delta, "reasoning")
     return str(content) if content is not None else ""
 
 
@@ -339,6 +366,24 @@ def _message_content(message: Any) -> str:
     return str(_get(message, "content") or "")
 
 
+def _message_reasoning_content(message: Any) -> str:
+    """Extract model reasoning from a full assistant message."""
+    content = _get(message, "reasoning_content")
+    if content is None:
+        content = _get(message, "reasoning")
+    return str(content) if content is not None else ""
+
+
+def _reasoning_item(content: str) -> ReasoningItem | None:
+    """Build a completed reasoning item when the provider returned content."""
+    if not content.strip():
+        return None
+    return ReasoningItem(
+        text=content,
+        status=SessionItemStatus.COMPLETED,
+    )
+
+
 def _message_tool_calls(message: Any) -> list[Any]:
     """Extract tool calls from a message object or dict."""
     calls = _get(message, "tool_calls") or []
@@ -348,16 +393,22 @@ def _message_tool_calls(message: Any) -> list[Any]:
 def _tool_call_item(tool_call: Any, *, item_id: str | None = None) -> ToolCallItem:
     """Convert one provider tool call into a domain ToolCallItem."""
     arguments_text = _tool_call_arguments_text(tool_call)
-    kwargs = {"id": item_id} if item_id else {}
+    function = ToolFunction(
+        name=_tool_call_name(tool_call),
+        arguments_text=arguments_text,
+        arguments_json=_tool_call_arguments(arguments_text),
+    )
+    if item_id:
+        return ToolCallItem(
+            id=item_id,
+            provider_tool_call_id=_tool_call_id(tool_call),
+            index=_tool_call_index(tool_call),
+            function=function,
+        )
     return ToolCallItem(
-        **kwargs,
         provider_tool_call_id=_tool_call_id(tool_call),
         index=_tool_call_index(tool_call),
-        function=ToolFunction(
-            name=_tool_call_name(tool_call),
-            arguments_text=arguments_text,
-            arguments_json=_tool_call_arguments(arguments_text),
-        ),
+        function=function,
     )
 
 

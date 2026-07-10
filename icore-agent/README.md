@@ -34,7 +34,8 @@ icore-agent
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| MODEL_ID | 主力模型 ID | zai/glm-4.7 |
+| MODEL_ID | 主力模型 ID | zai/glm-5.1 |
+| DISABLE_THINKING | 是否关闭 Z.AI 模型思考 | false |
 | ZAI_API_KEY | 智谱 API Key | - |
 | ZAI_BASE_URL | 智谱 API 地址 | https://open.bigmodel.cn/api/paas/v4/ |
 | ANTHROPIC_API_KEY | Anthropic API Key | - |

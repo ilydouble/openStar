@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from icore_agent.contexts.account.domain.user import AuthenticatedUser
 from icore_agent.contexts.agent.application.turn import (
     AgentTurnRunnerFactory,
     TurnLifecycle,
@@ -18,23 +19,24 @@ from icore_agent.contexts.agent.domain.context import (
     AgentFileAttachment,
     AgentImageAttachment,
 )
-from icore_agent.contexts.agent.domain.turn import AgentTurnCommand
 from icore_agent.contexts.agent.domain.loop import ModelStepResult
 from icore_agent.contexts.agent.domain.prompt import PromptEnvelope
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
     ContextItem,
+    ReasoningItem,
     SessionItemStatus,
-    ToolCallItem,
-    ToolCallResult,
-    ToolCallStatus,
-    ToolFunction,
     UserInput,
     UserInputType,
     UserMessageItem,
 )
-from icore_agent.contexts.agent.domain.turn import Turn, TurnError, TurnEvent, TurnStatus
-from icore_agent.contexts.account.domain.user import AuthenticatedUser
+from icore_agent.contexts.agent.domain.turn import (
+    AgentTurnCommand,
+    Turn,
+    TurnError,
+    TurnEvent,
+    TurnStatus,
+)
 
 
 def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
@@ -51,7 +53,15 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
     lifecycle.apply_agent_event(TurnEvent.item_delta(
         session_id="session-1",
         turn_id=lifecycle.turn.id,
+        item_id="reasoning-1",
+        item_type="reasoning",
+        delta={"text_append": "Internal reasoning"},
+    ))
+    lifecycle.apply_agent_event(TurnEvent.item_delta(
+        session_id="session-1",
+        turn_id=lifecycle.turn.id,
         item_id="assistant-1",
+        item_type="agent_message",
         delta={"text_append": "Hel"},
     ))
     lifecycle.apply_agent_event(TurnEvent.item_completed(
@@ -70,6 +80,7 @@ def test_turn_lifecycle_tracks_user_item_reply_and_completion() -> None:
     assert started.turn_id == lifecycle.turn.id
     assert user_event.item.content[0].text == "Hello"
     assert lifecycle.reply == "Hello back"
+    assert "Internal reasoning" not in lifecycle.reply
     assert lifecycle.turn.items[0].id == user_event.item.id
     assert lifecycle.turn.items[1].id == "assistant-1"
     assert final.status is TurnStatus.COMPLETED
@@ -236,6 +247,14 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
         session_items=[],
         tools=request.tool_runtime.visible_tools(),
     )
+    continuation_envelope = request.context_manager.build_prompt(
+        turn=request.turn,
+        session_items=[
+            AgentMessageItem(text=""),
+            ReasoningItem(text="Inspect the uploaded notes."),
+        ],
+        tools=request.tool_runtime.visible_tools(),
+    )
 
     assert request.session_id == "session-1"
     assert request.turn_id == "turn-1"
@@ -248,6 +267,10 @@ def test_agent_turn_runner_factory_builds_runner_and_loop_request() -> None:
     assert 'file_attachment filename="notes.txt" uuid="file-1"' in attachment_context
     assert "read_uploaded_file" in attachment_context
     assert request.model_client is factory.client
+    assert [str(item.type) for item in continuation_envelope.turn_items] == [
+        "agent_message",
+        "reasoning",
+    ]
     assert prompt_envelope.history_items[0].content[0].text == "old"
     assert prompt_envelope.tools
     assert "enable_tools" not in factory.calls[0]

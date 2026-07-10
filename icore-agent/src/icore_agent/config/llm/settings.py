@@ -66,12 +66,12 @@ class LLMSettings(DomainSettings):
 
     env_domains = ("llm",)
 
-    model_id: str = "zai/glm-4.7"
-    model_id_fast: str = "zai/glm-4.7"
+    model_id: str = "zai/glm-5.1"
+    model_id_fast: str = "zai/glm-5.1"
     model_api_base: str = ""
     zai_base_url: str = ""
     model_api_key: str = ""
-    disable_thinking: bool = True
+    disable_thinking: bool = False
     timeout_interval: int = Field(30, ge=1, le=600)
     max_retries: int = Field(3, ge=0, le=10)
     agent_max_tokens: int = 8192
@@ -171,8 +171,13 @@ class LLMSettings(DomainSettings):
             params["max_tokens"] = max_tokens
         if temperature is not None:
             params["temperature"] = temperature
-        if self.disable_thinking and self._is_zai_model(model_id):
-            params["extra_body"] = {"thinking": {"type": "disabled"}}
+        if self._is_zai_model(model_id):
+            thinking: dict[str, Any] = {
+                "type": "disabled" if self.disable_thinking else "enabled",
+            }
+            if not self.disable_thinking:
+                thinking["clear_thinking"] = True
+            params["extra_body"] = {"thinking": thinking}
         if (
             self.model_id_fast
             and model_id == self.model_id
@@ -265,7 +270,7 @@ class LLMSettings(DomainSettings):
         max_tokens: int | None = None,
         temperature: float | None = None,
         extra_params: Mapping[str, Any] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Return merged kwargs for direct litellm completion calls."""
         resolved = self.resolve_litellm_config(
             model_id=model_id,

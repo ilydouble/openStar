@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from icore_agent.shared.time.utils import start_to_completed_duration_ms
 
 from icore_agent.contexts.agent.domain.session import (
     AgentMessageItem,
+    SessionItemType,
     UserInput,
     UserInputType,
     UserMessageItem,
@@ -20,6 +20,7 @@ from icore_agent.contexts.agent.domain.turn import (
     TurnEventKind,
     TurnStatus,
 )
+from icore_agent.shared.time.utils import start_to_completed_duration_ms
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +99,11 @@ class TurnLifecycle:
         """Apply an item event emitted during the agent turn."""
         if event.item is not None:
             self.turn.upsert_item(event.item)
-        if event.kind is TurnEventKind.ITEM_DELTA and event.delta:
+        if (
+            event.kind is TurnEventKind.ITEM_DELTA
+            and event.item_type == SessionItemType.AGENT_MESSAGE
+            and event.delta
+        ):
             self.reply += str(
                 event.delta.get("text_append")
                 or event.delta.get("text")

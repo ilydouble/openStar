@@ -83,7 +83,7 @@ import { computed } from 'vue'
 import {
   DOCUMENT_FILE_ICON_COLORS,
   resolveDocumentFileKind,
-} from '../../domain/documentFileType'
+} from '../../presentation/models/documentFileType'
 
 const props = defineProps({
   filename: { type: String, default: '' },

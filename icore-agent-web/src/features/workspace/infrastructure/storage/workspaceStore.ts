@@ -2,15 +2,12 @@ import {
   getBrowserStorage,
   readStoredString,
   writeStoredString,
-} from '../../../shared/infrastructure/storage'
+} from '../../../../shared/infrastructure/storage'
+import type { RecentSession } from '../../domain/models/workspace'
+import type { WorkspacePreferencesRepository } from '../../domain/repositories/workspacePreferencesRepository'
 
 export const WORKSPACE_ONBOARDING_KEY = 'icore_onboarding_completed'
 export const WORKSPACE_RECENT_SESSIONS_KEY = 'icore_recent_sessions'
-
-export interface RecentSession {
-  sessionId?: string
-  [key: string]: unknown
-}
 
 /**
  * Read whether the onboarding modal has already been completed.
@@ -54,4 +51,12 @@ export function setRecentSessions(
   sessions: RecentSession[] = [],
 ): void {
   writeStoredString(storage, WORKSPACE_RECENT_SESSIONS_KEY, JSON.stringify(sessions))
+}
+
+export const browserWorkspacePreferences: WorkspacePreferencesRepository = {
+  isOnboardingComplete: () => getWorkspaceOnboardingComplete(),
+  setOnboardingComplete: (completed = true) =>
+    setWorkspaceOnboardingComplete(undefined, completed),
+  getRecentSessions: () => getRecentSessions(),
+  setRecentSessions: (sessions) => setRecentSessions(undefined, sessions),
 }

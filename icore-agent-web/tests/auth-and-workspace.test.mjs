@@ -2,7 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { readAgentError } from '../src/features/workspace/infrastructure/agentApi'
+import { readAgentError } from '../src/features/workspace/infrastructure/http/agentApi'
 import { routes } from '../src/router'
 import zhCN from '../src/shared/presentation/i18n/locales/zh-CN'
 import enUS from '../src/shared/presentation/i18n/locales/en-US'

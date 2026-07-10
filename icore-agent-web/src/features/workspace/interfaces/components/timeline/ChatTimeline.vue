@@ -33,7 +33,7 @@
 <script setup>
 import { computed } from 'vue'
 import TurnGroup from './TurnGroup.vue'
-import { isVisibleTimelineItem } from '../../../domain/sessionTimeline'
+import { isVisibleTimelineItem } from '../../../presentation/models/sessionTimeline'
 
 const props = defineProps({
   timeline: { type: Object, required: true },

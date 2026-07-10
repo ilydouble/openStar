@@ -361,10 +361,12 @@ import {
   LockOpen,
 } from 'lucide-vue-next'
 
-import { transcribeSpeech } from '../../infrastructure/agentApi'
+import { workspaceApplication } from '../../index'
 import DocumentFileIcon from './DocumentFileIcon.vue'
 
 const TEXTAREA_MAX_HEIGHT = 200
+
+const { transcribeSpeech } = workspaceApplication
 
 const { t, locale } = useI18n()
 

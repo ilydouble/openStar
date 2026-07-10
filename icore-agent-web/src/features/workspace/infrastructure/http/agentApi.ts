@@ -3,63 +3,32 @@ import {
   apiClient,
   getFileTimeoutMs,
   readFetchResponse,
-} from '../../../shared/infrastructure/http'
+} from '../../../../shared/infrastructure/http'
 import {
   completeFileUpload,
   deleteFileStorageAsset,
   fetchFileDownloadUrl,
   putPresignedFile,
   requestFileUploadUrl,
-} from './http/file-storage-client'
-import { openSseResponse } from '../../../shared/infrastructure/http'
+} from './file-storage-client'
+import { openSseResponse } from '../../../../shared/infrastructure/http'
+import type {
+  ChatStreamOptions,
+  PageOptions,
+  QuotaExceededData,
+  SessionPage,
+  SessionSearchResult,
+  TranscriptionOptions,
+  WorkspaceRecord,
+} from '../../domain/models/workspace'
+import type { WorkspaceGateway } from '../../domain/repositories/workspaceGateway'
+import { QuotaExceededError } from '../../domain/errors/quotaExceededError'
 
 const BASE = '/agent'
 
-type AnyRecord = Record<string, any>
+type AnyRecord = WorkspaceRecord
 
-export interface QuotaExceededData {
-  current_plan?: string
-  upgrade_url?: string
-}
-
-export interface ChatStreamOptions {
-  signal?: AbortSignal
-  fileUuids?: string[]
-  displayCaption?: string
-  agentMessage?: string
-  templateId?: string
-  incognito?: boolean
-}
-
-export interface PageOptions {
-  limit?: number
-  offset?: number
-}
-
-export interface SessionSearchResult {
-  query: string
-  sessions: AnyRecord[]
-  total: number
-  limit: number
-  offset: number
-}
-
-/**
- * Thrown when the backend returns 402 quota_exceeded.
- * Carries the current plan and the upgrade URL so the UI can show
- * an upgrade modal without needing extra API calls.
- */
-export class QuotaExceededError extends Error {
-  currentPlan: string
-  upgradeUrl: string
-
-  constructor(data: QuotaExceededData = {}) {
-    super('quota_exceeded')
-    this.name = 'QuotaExceededError'
-    this.currentPlan = data.current_plan || 'trial'
-    this.upgradeUrl = data.upgrade_url || '/pricing'
-  }
-}
+export type { ChatStreamOptions, PageOptions, SessionSearchResult }
 
 /**
  * Parse an agent API error response.
@@ -84,7 +53,7 @@ function throwAgentError(error: unknown): never {
     const data = error.data && typeof error.data === 'object'
       ? error.data as QuotaExceededData
       : {}
-    throw new QuotaExceededError(data)
+    throw new QuotaExceededError(data.current_plan || 'trial', data.upgrade_url || '/pricing')
   }
   throw error
 }
@@ -353,17 +322,17 @@ export async function clearSession(sessionId: string): Promise<unknown> {
 }
 
 /** Fetch the durable state for one chat session. */
-export async function getSessionState(sessionId: string): Promise<unknown> {
-  return requestAgent(() => apiClient.get(`${BASE}/session/${sessionId}`))
+export async function getSessionState(sessionId: string): Promise<WorkspaceRecord> {
+  return requestAgent(() => apiClient.get<WorkspaceRecord>(`${BASE}/session/${sessionId}`))
 }
 
 /**
  * Fetch one page of the user's chat sessions from PostgreSQL.
  */
-export async function fetchSessions(opts: PageOptions = {}): Promise<AnyRecord> {
+export async function fetchSessions(opts: PageOptions = {}): Promise<SessionPage> {
   const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100)
   const offset = Math.max(Number(opts.offset) || 0, 0)
-  return requestAgent(() => apiClient.get<AnyRecord>(`${BASE}/sessions`, {
+  return requestAgent(() => apiClient.get<SessionPage>(`${BASE}/sessions`, {
     params: { limit, offset },
   }))
 }
@@ -494,7 +463,7 @@ export async function deleteFileAsset(fileUuid: string): Promise<unknown> {
  */
 export async function transcribeSpeech(
   audioBlob: Blob,
-  opts: { language?: string; signal?: AbortSignal; filename?: string } = {},
+  opts: TranscriptionOptions = {},
 ): Promise<string> {
   const { language = '', signal, filename = 'recording.webm' } = opts
   const form = new FormData()
@@ -508,4 +477,22 @@ export async function transcribeSpeech(
   ))
   const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
   return text
+}
+
+export const httpWorkspaceGateway: WorkspaceGateway = {
+  chatEventStream,
+  chatStream,
+  chat,
+  runSequential,
+  finalizeSession,
+  clearSession,
+  getSessionState,
+  fetchSessions,
+  fetchAllSessions,
+  searchSessions,
+  newSessionId,
+  uploadFileAsset,
+  getFileDownloadUrl,
+  deleteFileAsset,
+  transcribeSpeech,
 }

@@ -8,7 +8,7 @@ import {
   resolveTemplateBubbleText,
   resolveUserMessageDisplayContent,
   stripScenarioPromptEnvelope,
-} from './scenarioPrompt'
+} from '../../application/services/scenarioPrompt'
 import {
   collectMessageAttachmentUuids,
   hydrateSessionMessages,

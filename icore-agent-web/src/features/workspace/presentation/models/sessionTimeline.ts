@@ -4,36 +4,16 @@ import {
   collectMessageAttachmentUuids,
   resolveAttachmentCaption,
 } from './sessionMessageHydration'
-import { resolveUserMessageDisplayContent } from './scenarioPrompt'
+import { resolveUserMessageDisplayContent } from '../../application/services/scenarioPrompt'
+import type {
+  SessionTimeline,
+  TimelineItem,
+  TimelineTurn,
+} from '../../domain/models/timeline'
 
 type AnyRecord = Record<string, any>
 
-export interface TimelineItem {
-  itemId: string
-  type: string
-  status: string
-  payload: AnyRecord
-}
-
-export interface TimelineTurn {
-  turnId: string
-  status: string
-  model: unknown
-  provider: unknown
-  usage: unknown
-  error: unknown
-  startedAt: unknown
-  completedAt: unknown
-  durationMs: unknown
-  items: TimelineItem[]
-}
-
-export interface SessionTimeline {
-  sessionId: string
-  summary: unknown
-  turns: TimelineTurn[]
-  attachments: AnyRecord[]
-}
+export type { SessionTimeline, TimelineItem, TimelineTurn }
 
 interface TimelineRow extends AnyRecord {
   id: string

@@ -414,26 +414,10 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  chatEventStream,
-  clearSession,
-  deleteFileAsset,
-  fetchAllSessions,
-  finalizeSession,
-  getSessionState,
-  getFileDownloadUrl,
-  newSessionId,
-  uploadFileAsset,
-  searchSessions,
-  QuotaExceededError,
-} from '../infrastructure/agentApi'
+import { QuotaExceededError, workspaceApplication } from '../index'
 import { isDark as isDarkFn } from '../../../shared/presentation/theme/theme'
 import { accountApplication } from '../../account'
 import { authApplication } from '../../auth'
-import {
-  getWorkspaceOnboardingComplete,
-  setWorkspaceOnboardingComplete,
-} from '../application/workspaceStore'
 import HomeSidebar from './components/HomeSidebar.vue'
 import OnboardingModal from './components/OnboardingModal.vue'
 import QuotaExceededModal from './components/QuotaExceededModal.vue'
@@ -442,12 +426,27 @@ import ChatTimeline from './components/timeline/ChatTimeline.vue'
 import {
   composeScenarioPrompt,
   resolveTemplateBubbleText,
-} from '../domain/scenarioPrompt'
+} from '../application/services/scenarioPrompt'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,
   timelineToChatRows,
-} from '../domain/sessionTimeline'
+} from '../presentation/models/sessionTimeline'
+
+const {
+  completeOnboarding: setWorkspaceOnboardingComplete,
+  createSessionId: newSessionId,
+  deleteFile: deleteFileAsset,
+  deleteSession: clearSession,
+  finalizeSession,
+  getFileDownloadUrl,
+  isOnboardingComplete: getWorkspaceOnboardingComplete,
+  loadSession: getSessionState,
+  loadSessions: fetchAllSessions,
+  searchSessions,
+  streamTurn: chatEventStream,
+  uploadFile: uploadFileAsset,
+} = workspaceApplication
 
 const { t, locale, tm } = useI18n()
 const route = useRoute()
@@ -482,7 +481,7 @@ function handleOnboardingScenario(agentHint) {
     activeShortcutId.value = shortcutId
     searchRefHome.value?.focus?.()
   }
-  setWorkspaceOnboardingComplete(undefined, true)
+  setWorkspaceOnboardingComplete()
   showOnboarding.value = false
 }
 

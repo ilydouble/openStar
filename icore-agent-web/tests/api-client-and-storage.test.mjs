@@ -9,7 +9,7 @@ import {
   formatApiErrorMessage,
 } from '../src/shared/infrastructure/http'
 import i18n from '../src/shared/presentation/i18n'
-import { fetchAllSessions, searchSessions } from '../src/features/workspace/infrastructure/agentApi'
+import { fetchAllSessions, searchSessions } from '../src/features/workspace/infrastructure/http/agentApi'
 import {
   WORKSPACE_ONBOARDING_KEY,
   WORKSPACE_RECENT_SESSIONS_KEY,
@@ -17,7 +17,7 @@ import {
   getRecentSessions,
   setWorkspaceOnboardingComplete,
   setRecentSessions,
-} from '../src/features/workspace/application/workspaceStore'
+} from '../src/features/workspace/infrastructure/storage/workspaceStore'
 
 afterEach(() => {
   configureApiClient({ tokenReader: () => '' })

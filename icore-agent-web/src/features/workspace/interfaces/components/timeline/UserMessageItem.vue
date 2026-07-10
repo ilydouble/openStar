@@ -60,9 +60,9 @@
 <script setup>
 import { computed } from 'vue'
 import DocumentFileIcon from '../DocumentFileIcon.vue'
-import { isAutoAttachmentPrompt } from '../../../domain/sessionMessageHydration'
-import { resolveUserMessageDisplayContent } from '../../../domain/scenarioPrompt'
-import { userMessageText } from '../../../domain/sessionTimeline'
+import { isAutoAttachmentPrompt } from '../../../presentation/models/sessionMessageHydration'
+import { resolveUserMessageDisplayContent } from '../../../application/services/scenarioPrompt'
+import { userMessageText } from '../../../presentation/models/sessionTimeline'
 
 const props = defineProps({
   item: { type: Object, required: true },

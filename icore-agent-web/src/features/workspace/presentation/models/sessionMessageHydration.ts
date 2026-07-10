@@ -1,7 +1,6 @@
-import enUS from '../../../shared/presentation/i18n/locales/en-US'
-import zhCN from '../../../shared/presentation/i18n/locales/zh-CN'
-import { getFileDownloadUrl } from '../infrastructure/agentApi'
-import { resolveUserMessageDisplayContent } from './scenarioPrompt'
+import enUS from '../../../../shared/presentation/i18n/locales/en-US'
+import zhCN from '../../../../shared/presentation/i18n/locales/zh-CN'
+import { resolveUserMessageDisplayContent } from '../../application/services/scenarioPrompt'
 
 type AnyRecord = Record<string, any>
 
@@ -188,7 +187,11 @@ export function hydrateSessionMessages({
 }
 
 /** Refresh expiring image download URLs for hydrated chat messages. */
-export async function refreshHydratedImageUrls(messageList: HydratedMessage[] = []): Promise<void> {
+export async function refreshHydratedImageUrls(
+  messageList: HydratedMessage[] = [],
+  resolveDownloadUrl?: (fileUuid: string) => Promise<{ download_url?: string }>,
+): Promise<void> {
+  if (!resolveDownloadUrl) return
   const tasks: Array<Promise<void>> = []
   for (const msg of messageList || []) {
     if (!msg?.images?.length) continue
@@ -196,7 +199,7 @@ export async function refreshHydratedImageUrls(messageList: HydratedMessage[] = 
       const fileUuid = String(image?.file_uuid || '').trim()
       if (!fileUuid) continue
       tasks.push(
-        getFileDownloadUrl(fileUuid)
+        resolveDownloadUrl(fileUuid)
           .then((payload: any) => {
             if (payload?.download_url) image.content = payload.download_url
           })

@@ -124,19 +124,21 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  chatEventStream,
-  newSessionId,
-  deleteFileAsset,
-  getFileDownloadUrl,
-  uploadFileAsset,
-} from '../../infrastructure/agentApi'
+import { workspaceApplication } from '../../index'
 import ChatTimeline from './timeline/ChatTimeline.vue'
 import { isDark as isDarkFn } from '../../../../shared/presentation/theme/theme'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,
-} from '../../domain/sessionTimeline'
+} from '../../presentation/models/sessionTimeline'
+
+const {
+  createSessionId: newSessionId,
+  deleteFile: deleteFileAsset,
+  getFileDownloadUrl,
+  streamTurn: chatEventStream,
+  uploadFile: uploadFileAsset,
+} = workspaceApplication
 
 const { t } = useI18n()
 

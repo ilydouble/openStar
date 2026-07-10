@@ -28,7 +28,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineItem from './TimelineItem.vue'
-import { isVisibleTimelineItem } from '../../../domain/sessionTimeline'
+import { isVisibleTimelineItem } from '../../../presentation/models/sessionTimeline'
 
 const props = defineProps({
   turn: { type: Object, required: true },

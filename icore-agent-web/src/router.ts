@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
 import { authApplication, loadAuthPage } from './features/auth'
 import { loadAccountPage } from './features/account'
+import { loadWorkspacePage } from './features/workspace'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'landing', component: () => import('./features/landing/interfaces/LandingView.vue') },
@@ -15,13 +16,13 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/app',
     name: 'workspace',
-    component: () => import('./features/workspace/interfaces/HomeView.vue'),
+    component: loadWorkspacePage,
     meta: { requiresAuth: true },
   },
   {
     path: '/app/:sessionId',
     name: 'workspace-session',
-    component: () => import('./features/workspace/interfaces/HomeView.vue'),
+    component: loadWorkspacePage,
     meta: { requiresAuth: true },
   },
   {

@@ -65,25 +65,26 @@
   </footer>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../../../shared/presentation/i18n/localePreference'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm, locale } = useI18n()
 const currentLocale = computed(() => locale.value)
 const primaryDomain = 'www.stellarmesh.net'
 const primaryDomainUrl = `https://${primaryDomain}`
-const extraServices = computed(() => {
-  const items = tm('landing.footer.extraServices')
-  return Array.isArray(items) ? items : []
-})
+interface FooterService { name: string; href: string; tag: string; description: string }
+const extraServices = computed(() =>
+  translatedArray<FooterService>(tm, 'landing.footer.extraServices'),
+)
 
 /**
  * Toggle the marketing site locale and persist the user's selection locally.
  */
-function toggleLocale() {
+function toggleLocale(): void {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
   setLocalePreference(locale.value)
 }

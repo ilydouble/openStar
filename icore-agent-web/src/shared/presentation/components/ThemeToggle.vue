@@ -121,27 +121,23 @@
   </button>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isDark as isDarkFn, toggleTheme as toggleThemeFn } from '../theme/theme'
 
-defineProps({
-  variant: {
-    type: String,
-    default: 'icon',
-    validator: (v) => v === 'icon' || v === 'row' || v === 'navbar',
-  },
-})
+withDefaults(defineProps<{ variant?: 'icon' | 'row' | 'navbar' }>(), { variant: 'icon' })
 
 const { t } = useI18n()
 const dark = ref(false)
 
-function sync() {
+/** Synchronize local button state with the document theme. */
+function sync(): void {
   dark.value = isDarkFn()
 }
 
-function onClick() {
+/** Toggle the document theme and refresh the button state. */
+function onClick(): void {
   toggleThemeFn()
   sync()
 }

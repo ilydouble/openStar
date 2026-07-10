@@ -85,14 +85,24 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
-const tiers = computed(() => {
-  const raw = tm('landing.plans.tiers')
-  return Array.isArray(raw) ? raw : []
-})
+interface PlanTier {
+  name: string
+  audience: string
+  badge?: string
+  price: string
+  period: string
+  description: string
+  features: string[]
+  link: string
+  cta: string
+  featured: boolean
+}
+const tiers = computed(() => translatedArray<PlanTier>(tm, 'landing.plans.tiers'))
 </script>

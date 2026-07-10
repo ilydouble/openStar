@@ -211,31 +211,28 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import heroBackdropImage from '../../assets/hero-ops-cockpit.jpg'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
 
-const proofItems = computed(() => {
-  const items = tm('landing.hero.proof')
-  return Array.isArray(items) ? items : []
-})
+interface HeroCopyItem { title: string; body: string }
+interface WorkflowCard extends HeroCopyItem { metric: string }
+interface FocusMetric { value: string; label: string }
 
-const workflowCards = computed(() => {
-  const items = tm('landing.hero.workflowCards')
-  return Array.isArray(items) ? items : []
-})
+const proofItems = computed(() => translatedArray<HeroCopyItem>(tm, 'landing.hero.proof'))
 
-const trustPills = computed(() => {
-  const items = tm('landing.hero.trustPills')
-  return Array.isArray(items) ? items : []
-})
+const workflowCards = computed(() =>
+  translatedArray<WorkflowCard>(tm, 'landing.hero.workflowCards'),
+)
 
-const focusMetrics = computed(() => {
-  const items = tm('landing.hero.focusMetrics')
-  return Array.isArray(items) ? items : []
-})
+const trustPills = computed(() => translatedArray<string>(tm, 'landing.hero.trustPills'))
+
+const focusMetrics = computed(() =>
+  translatedArray<FocusMetric>(tm, 'landing.hero.focusMetrics'),
+)
 </script>

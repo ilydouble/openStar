@@ -29,13 +29,12 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
-const steps = computed(() => {
-  const raw = tm('landing.workflow.steps')
-  return Array.isArray(raw) ? raw : []
-})
+interface WorkflowStep { title: string; body: string; progress: number }
+const steps = computed(() => translatedArray<WorkflowStep>(tm, 'landing.workflow.steps'))
 </script>

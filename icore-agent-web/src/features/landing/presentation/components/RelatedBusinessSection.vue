@@ -52,16 +52,17 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
 
 const apiSiteUrl = 'https://api.stellarmesh.net'
 
-const items = computed(() => {
-  const raw = tm('landing.relatedBusiness.items')
-  return Array.isArray(raw) ? raw : []
-})
+interface RelatedBusinessItem { kicker: string; title: string; body: string }
+const items = computed(() =>
+  translatedArray<RelatedBusinessItem>(tm, 'landing.relatedBusiness.items'),
+)
 </script>

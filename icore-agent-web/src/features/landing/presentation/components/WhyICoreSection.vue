@@ -32,13 +32,12 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
-const items = computed(() => {
-  const raw = tm('landing.why.items')
-  return Array.isArray(raw) ? raw : []
-})
+interface WhyItem { kicker: string; title: string; body: string }
+const items = computed(() => translatedArray<WhyItem>(tm, 'landing.why.items'))
 </script>

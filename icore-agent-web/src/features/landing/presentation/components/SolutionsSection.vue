@@ -59,14 +59,19 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import solutionsImage from '../../assets/solutions-workflows.jpg'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
-const items = computed(() => {
-  const raw = tm('landing.solutions.items')
-  return Array.isArray(raw) ? raw : []
-})
+interface SolutionItem {
+  icon: string
+  title: string
+  tag: string
+  body: string
+  outcome: string
+}
+const items = computed(() => translatedArray<SolutionItem>(tm, 'landing.solutions.items'))
 </script>

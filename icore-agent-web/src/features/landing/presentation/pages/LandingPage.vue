@@ -23,23 +23,23 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import HeroSection from './components/HeroSection.vue'
-import FinalCtaSection from './components/FinalCtaSection.vue'
-import HowItWorksSection from './components/HowItWorksSection.vue'
-import LandingFooter from './components/LandingFooter.vue'
-import LandingNavbar from './components/LandingNavbar.vue'
-import PlansSection from './components/PlansSection.vue'
-import ResultsSection from './components/ResultsSection.vue'
-import SignalsSection from './components/SignalsSection.vue'
-import SolutionsSection from './components/SolutionsSection.vue'
-import WhyICoreSection from './components/WhyICoreSection.vue'
+import HeroSection from '../components/HeroSection.vue'
+import FinalCtaSection from '../components/FinalCtaSection.vue'
+import HowItWorksSection from '../components/HowItWorksSection.vue'
+import LandingFooter from '../components/LandingFooter.vue'
+import LandingNavbar from '../components/LandingNavbar.vue'
+import PlansSection from '../components/PlansSection.vue'
+import ResultsSection from '../components/ResultsSection.vue'
+import SignalsSection from '../components/SignalsSection.vue'
+import SolutionsSection from '../components/SolutionsSection.vue'
+import WhyICoreSection from '../components/WhyICoreSection.vue'
 
-let observer
+let observer: IntersectionObserver | undefined
 
 onMounted(() => {
-  const items = document.querySelectorAll('[data-reveal]')
+  const items = document.querySelectorAll<HTMLElement>('[data-reveal]')
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -54,7 +54,7 @@ onMounted(() => {
 
   items.forEach((item, index) => {
     item.style.setProperty('--reveal-delay', `${Math.min(index * 70, 280)}ms`)
-    observer.observe(item)
+    observer?.observe(item)
   })
 })
 

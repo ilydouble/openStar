@@ -2,11 +2,13 @@ import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from
 import { authApplication, loadAuthPage } from './features/auth'
 import { loadAccountPage } from './features/account'
 import { loadWorkspacePage } from './features/workspace'
+import { loadEnterprisePage } from './features/enterprise'
+import { loadLandingPage } from './features/landing'
 
 export const routes: RouteRecordRaw[] = [
-  { path: '/', name: 'landing', component: () => import('./features/landing/interfaces/LandingView.vue') },
+  { path: '/', name: 'landing', component: loadLandingPage },
   { path: '/auth', name: 'auth', component: loadAuthPage },
-  { path: '/enterprise', name: 'enterprise', component: () => import('./features/enterprise/interfaces/EnterpriseView.vue') },
+  { path: '/enterprise', name: 'enterprise', component: loadEnterprisePage },
   {
     path: '/account',
     name: 'account',

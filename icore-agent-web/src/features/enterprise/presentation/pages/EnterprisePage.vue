@@ -48,7 +48,7 @@
               </label>
               <label class="block">
                 <span class="mb-2 block text-sm font-medium">{{ t('enterprise.teamSize') }}</span>
-                <select v-model="form.team_size" class="form-select form-select-teal">
+                <select v-model="form.teamSize" class="form-select form-select-teal">
                   <option value="1-10">1-10</option>
                   <option value="11-50">11-50</option>
                   <option value="51-200">51-200</option>
@@ -59,16 +59,16 @@
 
             <label class="block">
               <span class="mb-2 block text-sm font-medium">{{ t('enterprise.useCase') }}</span>
-              <textarea v-model="form.use_case" rows="5" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-teal-300 dark:focus:ring-teal-500/10" />
+              <textarea v-model="form.useCase" rows="5" class="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-teal-300 dark:focus:ring-teal-500/10" />
             </label>
 
             <div class="grid gap-3 md:grid-cols-2">
               <label class="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/[0.04]">
-                <input v-model="form.needs_byok" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500" />
+                <input v-model="form.needsByok" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500" />
                 <span>{{ t('enterprise.needsByok') }}</span>
               </label>
               <label class="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/[0.04]">
-                <input v-model="form.needs_private_deploy" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500" />
+                <input v-model="form.needsPrivateDeploy" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500" />
                 <span>{{ t('enterprise.needsPrivateDeploy') }}</span>
               </label>
             </div>
@@ -103,47 +103,10 @@
   </div>
 </template>
 
-<script setup>
-import { computed, reactive, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { captureLead } from '../infrastructure/leadApi'
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
 
-const { t, tm } = useI18n()
-const route = useRoute()
-const submitting = ref(false)
-const success = ref(false)
-const error = ref('')
+import { useEnterpriseLeadForm } from '../composables/useEnterpriseLeadForm'
 
-const form = reactive({
-  name: '',
-  email: '',
-  company: '',
-  team_size: route.query.plan === 'enterprise' ? '51-200' : '11-50',
-  use_case: '',
-  needs_byok: route.query.plan === 'enterprise',
-  needs_private_deploy: false,
-  source: 'enterprise-page',
-  intent: route.query.intent || (route.query.plan === 'team' ? 'upgrade-team' : route.query.plan === 'enterprise' ? 'upgrade-enterprise' : 'demo'),
-})
-
-const valueCards = computed(() => {
-  const raw = tm('enterprise.cards')
-  return Array.isArray(raw) ? raw : []
-})
-
-async function submit() {
-  if (submitting.value) return
-  submitting.value = true
-  success.value = false
-  error.value = ''
-  try {
-    await captureLead(form)
-    success.value = true
-  } catch (err) {
-    error.value = err.message || t('enterprise.failed')
-  } finally {
-    submitting.value = false
-  }
-}
+const { error, form, submit, submitting, success, t, valueCards } = useEnterpriseLeadForm()
 </script>

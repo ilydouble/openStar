@@ -32,19 +32,15 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
 
-const stats = computed(() => {
-  const raw = tm('landing.signals.stats')
-  return Array.isArray(raw) ? raw : []
-})
+interface SignalStat { value: string; label: string; body: string }
+const stats = computed(() => translatedArray<SignalStat>(tm, 'landing.signals.stats'))
 
-const badges = computed(() => {
-  const raw = tm('landing.signals.badges')
-  return Array.isArray(raw) ? raw : []
-})
+const badges = computed(() => translatedArray<string>(tm, 'landing.signals.badges'))
 </script>

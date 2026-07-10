@@ -78,19 +78,28 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { translatedArray } from '../../../../shared/presentation/i18n/translatedArray'
 
 const { t, tm } = useI18n()
 
-const resultItems = computed(() => {
-  const raw = tm('landing.results.items')
-  return Array.isArray(raw) ? raw : []
-})
+interface ResultItem {
+  bgClass: string
+  emoji: string
+  badgeClass: string
+  badge: string
+  value: string
+  label: string
+  body: string
+}
+interface ImpactMetric { value: string; label: string }
+const resultItems = computed(() =>
+  translatedArray<ResultItem>(tm, 'landing.results.items'),
+)
 
-const impactMetrics = computed(() => {
-  const raw = tm('landing.results.impact.metrics')
-  return Array.isArray(raw) ? raw : []
-})
+const impactMetrics = computed(() =>
+  translatedArray<ImpactMetric>(tm, 'landing.results.impact.metrics'),
+)
 </script>

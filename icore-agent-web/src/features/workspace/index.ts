@@ -8,5 +8,5 @@ export type {
 
 /** Load the primary workspace page through the feature route boundary. */
 export function loadWorkspacePage() {
-  return import('./interfaces/HomeView.vue')
+  return import('./presentation/pages/HomePage.vue')
 }

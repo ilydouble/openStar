@@ -30,21 +30,29 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import TurnGroup from './TurnGroup.vue'
-import { isVisibleTimelineItem } from '../../../presentation/models/sessionTimeline'
+import { isVisibleTimelineItem } from '../../models/sessionTimeline'
+import type { SessionTimeline } from '../../../domain/models/timeline'
+import type { WorkspaceAttachment } from '../../models/viewModels'
 
-const props = defineProps({
-  timeline: { type: Object, required: true },
-  attachments: { type: Array, default: null },
-  loading: { type: Boolean, default: false },
-  dark: { type: Boolean, default: false },
-  showContext: { type: Boolean, default: false },
-  templateLabels: { type: Object, default: () => ({}) },
+const props = withDefaults(defineProps<{
+  timeline: SessionTimeline
+  attachments?: WorkspaceAttachment[] | null
+  loading?: boolean
+  dark?: boolean
+  showContext?: boolean
+  templateLabels?: Record<string, string>
+}>(), {
+  attachments: null,
+  loading: false,
+  dark: false,
+  showContext: false,
+  templateLabels: () => ({}),
 })
 
-defineEmits(['open-document'])
+defineEmits<{ 'open-document': [attachment: WorkspaceAttachment] }>()
 
 const visibleTurns = computed(() =>
   (props.timeline?.turns || []).filter((turn) =>
@@ -54,7 +62,9 @@ const visibleTurns = computed(() =>
   ),
 )
 const resolvedAttachments = computed(() =>
-  Array.isArray(props.attachments) ? props.attachments : props.timeline?.attachments || [],
+  Array.isArray(props.attachments)
+    ? props.attachments
+    : props.timeline.attachments as WorkspaceAttachment[],
 )
 const activeTurnHasVisibleOutput = computed(() => {
   const active = visibleTurns.value.at(-1)

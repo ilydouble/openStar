@@ -35,20 +35,32 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
 const FEATURED_BADGES = new Set(['精选', '推荐', 'Recommended'])
 
-function badgePillClass(agent) {
+interface AgentCardModel {
+  iconBg: string
+  icon: string
+  badge?: string
+  badgeClass?: string
+  name: string
+  category: string
+  description: string
+}
+
+const { agent } = defineProps<{ agent: AgentCardModel }>()
+defineEmits<{ open: [agent: AgentCardModel] }>()
+
+/** Resolve the badge color for one agent card. */
+function badgePillClass(agent: AgentCardModel): string {
   if (agent.badgeClass) return agent.badgeClass
-  return FEATURED_BADGES.has(agent.badge)
+  return FEATURED_BADGES.has(agent.badge || '')
     ? 'bg-amber-100 text-amber-700'
     : 'bg-emerald-100 text-emerald-700'
 }
 
-defineProps({ agent: Object })
-defineEmits(['open'])
 </script>

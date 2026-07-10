@@ -343,8 +343,8 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+<script setup lang="ts">
+import { ref, computed, nextTick, onMounted, onUnmounted, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus,
@@ -363,6 +363,12 @@ import {
 
 import { workspaceApplication } from '../../index'
 import DocumentFileIcon from './DocumentFileIcon.vue'
+import { usePendingAttachments } from '../composables/usePendingAttachments'
+import { useVoiceInput } from '../composables/useVoiceInput'
+import type {
+  ComposerMode,
+  ComposerSubmitPayload,
+} from '../models/viewModels'
 
 const TEXTAREA_MAX_HEIGHT = 200
 
@@ -370,347 +376,77 @@ const { transcribeSpeech } = workspaceApplication
 
 const { t, locale } = useI18n()
 
-const props = defineProps({
-  placeholder: { type: String, default: '' },
-  modePill: { type: Object, default: null },
-  /** 与首页快捷方式同源：id / label / emoji / panel */
-  modeMenuItems: { type: Array, default: () => [] },
-  activeModeId: { type: String, default: '' },
-  /** 正在接收助手流式回复：主按钮切换为「停止」 */
-  streaming: { type: Boolean, default: false },
-  /** 上传等场景下禁止发起新一轮发送（非流式阶段） */
-  sendBlocked: { type: Boolean, default: false },
-  /** 无痕模式：不写入历史、不注入记忆 */
-  incognito: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  placeholder?: string
+  modePill?: ComposerMode | null
+  modeMenuItems?: ComposerMode[]
+  activeModeId?: string
+  streaming?: boolean
+  sendBlocked?: boolean
+  incognito?: boolean
+}>(), {
+  placeholder: '',
+  modePill: null,
+  modeMenuItems: () => [],
+  activeModeId: '',
+  streaming: false,
+  sendBlocked: false,
+  incognito: false,
 })
-const emit = defineEmits(['submit', 'file-selected', 'clear-mode', 'stop', 'select-mode', 'toggle-incognito'])
+const emit = defineEmits<{
+  submit: [payload: ComposerSubmitPayload]
+  'file-selected': [file: File]
+  'clear-mode': []
+  stop: []
+  'select-mode': [id: string]
+  'toggle-incognito': []
+}>()
 
 const modeMenuItemsList = computed(() =>
   Array.isArray(props.modeMenuItems) ? props.modeMenuItems : [],
 )
 
-/** Voice input: idle | recording | transcribing */
-const voiceStage = ref('idle')
-const voiceError = ref('')
-/** @type {import('vue').Ref<AbortController | null>} */
-const transcribeAbort = ref(null)
-/** @type {import('vue').Ref<MediaStream | null>} */
-const micStream = ref(null)
-/** @type {import('vue').Ref<MediaRecorder | null>} */
-const mediaRecorder = ref(null)
-/** @type {import('vue').Ref<Blob[]>} */
-const micChunks = ref([])
-/** After stop: optionally submit composer once transcription finishes */
-const voiceSubmitAfterTranscribe = ref(false)
-
-/** Level meter (px height per bar), driven by AnalyserNode during recording */
-const NUM_METER_BARS = 14
-const meterBars = ref(Array.from({ length: NUM_METER_BARS }, () => 4))
-
-let audioContext = /** @type {AudioContext | null} */ (null)
-let mediaStreamSource = /** @type {MediaStreamAudioSourceNode | null} */ (null)
-let analyserNode = /** @type {AnalyserNode | null} */ (null)
-let meterRaf = 0
-
-const isRecordingMic = computed(() => voiceStage.value === 'recording')
-const isTranscribingVoice = computed(() => voiceStage.value === 'transcribing')
-
-const micDisabled = computed(
-  () => props.streaming || props.sendBlocked || isTranscribingVoice.value,
-)
-
-function stopMeterLoop() {
-  if (meterRaf) cancelAnimationFrame(meterRaf)
-  meterRaf = 0
-  meterBars.value = Array.from({ length: NUM_METER_BARS }, () => 4)
-}
-
-function startMeterLoop() {
-  stopMeterLoop()
-  const tick = () => {
-    if (!analyserNode || voiceStage.value !== 'recording') return
-    const n = analyserNode.frequencyBinCount
-    const data = new Uint8Array(n)
-    analyserNode.getByteFrequencyData(data)
-    const binSize = Math.max(1, Math.floor(n / NUM_METER_BARS))
-    const next = []
-    for (let i = 0; i < NUM_METER_BARS; i++) {
-      let sum = 0
-      const start = i * binSize
-      const end = Math.min(n, start + binSize)
-      for (let j = start; j < end; j++) sum += data[j]
-      const avg = sum / (end - start) / 255
-      const h = Math.round(4 + avg * 26)
-      next.push(Math.min(28, Math.max(4, h)))
-    }
-    meterBars.value = next
-    meterRaf = requestAnimationFrame(tick)
-  }
-  meterRaf = requestAnimationFrame(tick)
-}
-
-function teardownAudioGraph() {
-  stopMeterLoop()
-  try {
-    mediaStreamSource?.disconnect()
-  } catch {
-    /* ignore */
-  }
-  mediaStreamSource = null
-  try {
-    analyserNode?.disconnect()
-  } catch {
-    /* ignore */
-  }
-  analyserNode = null
-  try {
-    if (audioContext && audioContext.state !== 'closed')
-      void audioContext.close()
-  } catch {
-    /* ignore */
-  }
-  audioContext = null
-}
-
-function stopMicTracks() {
-  micStream.value?.getTracks().forEach((t) => {
-    try {
-      t.stop()
-    } catch {
-      /* ignore */
-    }
-  })
-  micStream.value = null
-}
-
-function pickRecorderMime() {
-  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-  for (const c of cands) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c
-  }
-  return ''
-}
-
-function insertTranscript(text) {
-  const raw = String(text || '').trim()
-  if (!raw) return
-  const el = area.value
-  const spacer = input.value && !input.value.endsWith(' ') ? ' ' : ''
-  const chunk = spacer + raw
-  if (!el) {
-    input.value += chunk
-    nextTick(autoGrow)
-    return
-  }
-  const start = typeof el.selectionStart === 'number' ? el.selectionStart : input.value.length
-  const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : input.value.length
-  const v = input.value
-  input.value = v.slice(0, start) + chunk + v.slice(end)
-  nextTick(() => {
-    autoGrow()
-    const pos = start + chunk.length
-    try {
-      el.selectionStart = el.selectionEnd = pos
-      el.focus()
-    } catch {
-      /* ignore */
-    }
-  })
-}
-
-async function runTranscription(blob, filename, submitAfter = false) {
-  transcribeAbort.value?.abort()
-  const ac = new AbortController()
-  transcribeAbort.value = ac
-  voiceStage.value = 'transcribing'
-  try {
-    const text = await transcribeSpeech(blob, {
-      language: locale.value,
-      signal: ac.signal,
-      filename,
-    })
-    if (text) insertTranscript(text)
-    if (submitAfter && !props.streaming && !props.sendBlocked) {
-      await nextTick()
-      handleSubmit()
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError') return
-    const msg = err && typeof err.message === 'string' ? err.message.trim() : ''
-    voiceError.value = msg || t('home.voice.transcribeFailed')
-  } finally {
-    if (transcribeAbort.value === ac) transcribeAbort.value = null
-    voiceStage.value = 'idle'
-  }
-}
-
-function discardActiveRecorderWithoutTranscript() {
-  teardownAudioGraph()
-  voiceSubmitAfterTranscribe.value = false
-  const rec = mediaRecorder.value
-  if (rec) {
-    rec.onstop = null
-    if (rec.state !== 'inactive') {
-      try {
-        rec.stop()
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  mediaRecorder.value = null
-  micChunks.value = []
-  stopMicTracks()
-  if (voiceStage.value !== 'transcribing') voiceStage.value = 'idle'
-}
-
-function attachRecorderStopForTranscribe(rec) {
-  rec.onstop = () => {
-    const submitAfter = voiceSubmitAfterTranscribe.value
-    voiceSubmitAfterTranscribe.value = false
-    teardownAudioGraph()
-
-    const mt = rec.mimeType || 'audio/webm'
-    const parts = micChunks.value
-    micChunks.value = []
-    mediaRecorder.value = null
-    stopMicTracks()
-
-    const blob = new Blob(parts, { type: mt })
-    if (!blob.size) {
-      voiceError.value = t('home.voice.emptyRecording')
-      voiceStage.value = 'idle'
-      if (submitAfter && !props.streaming && !props.sendBlocked) {
-        void nextTick(() => handleSubmit())
-      }
-      return
-    }
-    const ext = mt.includes('mp4') ? 'm4a' : 'webm'
-    void runTranscription(blob, `speech.${ext}`, submitAfter)
-  }
-}
-
-async function startVoiceCapture() {
-  if (props.streaming || props.sendBlocked || voiceStage.value === 'transcribing') return
-  discardActiveRecorderWithoutTranscript()
-  voiceError.value = ''
-  transcribeAbort.value?.abort()
-  transcribeAbort.value = null
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-    voiceError.value = t('home.voice.micUnavailable')
-    return
-  }
-  let stream
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-    })
-  } catch (err) {
-    voiceError.value =
-      err && err.name === 'NotAllowedError'
-        ? t('home.voice.permissionDenied')
-        : t('home.voice.micUnavailable')
-    return
-  }
-  micStream.value = stream
-
-  teardownAudioGraph()
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext
-    if (AC) {
-      audioContext = new AC()
-      if (audioContext.state === 'suspended')
-        await audioContext.resume()
-      mediaStreamSource = audioContext.createMediaStreamSource(stream)
-      analyserNode = audioContext.createAnalyser()
-      analyserNode.fftSize = 256
-      analyserNode.smoothingTimeConstant = 0.62
-      mediaStreamSource.connect(analyserNode)
-      startMeterLoop()
-    }
-  } catch {
-    /* metering is optional */
-  }
-
-  micChunks.value = []
-  const mime = pickRecorderMime()
-  let rec
-  try {
-    rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
-  } catch {
-    rec = new MediaRecorder(stream)
-  }
-  mediaRecorder.value = rec
-  rec.ondataavailable = (e) => {
-    if (e.data && e.data.size) micChunks.value.push(e.data)
-  }
-  attachRecorderStopForTranscribe(rec)
-  try {
-    rec.start(250)
-    voiceStage.value = 'recording'
-  } catch {
-    discardActiveRecorderWithoutTranscript()
-    voiceError.value = t('home.voice.micUnavailable')
-  }
-}
-
-/** @param {{ submitAfter?: boolean }} [opts] */
-function stopVoiceCaptureAndTranscribe(opts = {}) {
-  const { submitAfter = false } = opts
-  voiceSubmitAfterTranscribe.value = submitAfter
-  const rec = mediaRecorder.value
-  if (!rec || rec.state === 'inactive') {
-    const wantsSubmit = submitAfter
-    discardActiveRecorderWithoutTranscript()
-    if (wantsSubmit && !props.streaming && !props.sendBlocked) void nextTick(() => handleSubmit())
-    return
-  }
-  try {
-    rec.stop()
-  } catch {
-    voiceSubmitAfterTranscribe.value = false
-    discardActiveRecorderWithoutTranscript()
-  }
-}
-
-function onMicToggle() {
-  if (micDisabled.value && voiceStage.value === 'idle') return
-  if (isTranscribingVoice.value) return
-  if (isRecordingMic.value) {
-    stopVoiceCaptureAndTranscribe({ submitAfter: false })
-    return
-  }
-  void startVoiceCapture()
-}
-
-function disposeVoiceUi() {
-  transcribeAbort.value?.abort()
-  transcribeAbort.value = null
-  discardActiveRecorderWithoutTranscript()
-}
 const input = ref('')
-const area = ref(null)
-const fileInputEl = ref(null)
+const area = ref<HTMLTextAreaElement | null>(null)
+const {
+  disposeVoiceInput,
+  isRecordingMic,
+  isTranscribingVoice,
+  meterBars,
+  micDisabled,
+  onMicToggle,
+  stopVoiceCapture: stopVoiceCaptureAndTranscribe,
+  voiceError,
+} = useVoiceInput({
+  input,
+  textarea: area,
+  isStreaming: () => props.streaming,
+  isSendBlocked: () => props.sendBlocked,
+  onResize: autoGrow,
+  onSubmit: handleSubmit,
+})
 const plusMenuOpen = ref(false)
 const modePickerOpen = ref(false)
-const plusRootRef = ref(null)
-const isDragging = ref(false)
-
-const MAX_PENDING_IMAGES = 5
-const MAX_PENDING_DATA_FILES = 5
-
-/** @type {import('vue').Ref<Array<{ id: string, file: File, url: string }>>} */
-const pendingImages = ref([])
-/** 最近一次批量选择时因上限丢弃的张数（展示提示后于下次添加时清零） */
-const pendingTrimmedCount = ref(0)
-
-/** @type {import('vue').Ref<Array<{ id: string, file: File }>>} */
-const pendingDataFiles = ref([])
-const pendingDataTrimmedCount = ref(0)
+const plusRootRef = ref<HTMLElement | null>(null)
+const {
+  MAX_PENDING_DATA_FILES,
+  MAX_PENDING_IMAGES,
+  clearPendingDataFiles,
+  clearPendingImage,
+  fileInputEl,
+  handleDrop,
+  handleFileSelect,
+  handlePaste: onPaste,
+  isDragging,
+  pendingDataFiles,
+  pendingDataTrimmedCount,
+  pendingImages,
+  pendingItemAlt,
+  pendingTrimmedCount,
+  removePendingDataFileItem,
+  removePendingImageItem,
+  resetFileInput,
+} = usePendingAttachments(autoGrow)
 
 const hasComposerPayload = computed(
   () =>
@@ -728,7 +464,7 @@ const mainActionDisabled = computed(() => {
   return !hasComposerPayload.value
 })
 
-function onMainAction() {
+function onMainAction(): void {
   if (props.streaming) {
     emit('stop')
     return
@@ -740,7 +476,7 @@ function onMainAction() {
   handleSubmit()
 }
 
-function onEnterInTextarea() {
+function onEnterInTextarea(): void {
   if (props.streaming) return
   if (isRecordingMic.value) {
     stopVoiceCaptureAndTranscribe({ submitAfter: true })
@@ -749,161 +485,13 @@ function onEnterInTextarea() {
   handleSubmit()
 }
 
-/** Ctrl+V / 剪贴板图片 → 与「选择图片」相同的待发送预览（支持多张） */
-function onPaste(e) {
-  const cd = e.clipboardData
-  if (!cd?.items?.length) return
-  const imageItems = [...cd.items].filter(
-    (it) => it.kind === 'file' && typeof it.type === 'string' && it.type.startsWith('image/'),
-  )
-  if (!imageItems.length) return
-  const files = []
-  for (const it of imageItems) {
-    let file = it.getAsFile()
-    if (!file?.size) continue
-    if (!file.name?.trim()) {
-      const ext = file.type?.split('/')[1] || 'png'
-      file = new File([file], `pasted-image.${ext}`, { type: file.type || 'image/png' })
-    }
-    files.push(file)
-  }
-  if (!files.length) return
-  e.preventDefault()
-  addPendingImageFiles(files)
-  nextTick(autoGrow)
+interface PlusMenuItem {
+  icon: Component
+  labelKey: string
+  action: 'openModePicker' | 'openFile' | null
 }
 
-const ACCEPTED_EXTS = new Set([
-  '.pdf', '.doc', '.docx', '.txt', '.md',
-  '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif',
-  '.csv', '.xls', '.xlsx',
-])
-
-const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
-/** 所有非图片的可上传扩展名（与 Excel 共用同一 pending 流程） */
-const DOCUMENT_EXTS = new Set([
-  '.pdf', '.doc', '.docx', '.txt', '.md',
-  '.csv', '.xls', '.xlsx',
-])
-
-function extOf(name) {
-  const i = name.lastIndexOf('.')
-  return i >= 0 ? name.slice(i).toLowerCase() : ''
-}
-
-function makePendingId() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `pi-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-function pendingItemAlt(item) {
-  const f = item?.file
-  if (!f?.name) return t('chat.imageUploadedAltGeneric')
-  return t('chat.imageUploadedAlt', { name: f.name })
-}
-
-/** 将图片文件加入待发送列表（总数不超过 MAX_PENDING_IMAGES） */
-function addPendingImageFiles(files) {
-  pendingTrimmedCount.value = 0
-  const list = Array.isArray(files) ? files : [files]
-  let trimmed = 0
-  const next = [...pendingImages.value]
-  for (const file of list) {
-    if (next.length >= MAX_PENDING_IMAGES) {
-      trimmed += 1
-      continue
-    }
-    if (!file?.size) continue
-    const ext = extOf(file.name)
-    if (!IMAGE_EXTS.has(ext)) continue
-    next.push({
-      id: makePendingId(),
-      file,
-      url: URL.createObjectURL(file),
-    })
-  }
-  pendingImages.value = next
-  if (trimmed > 0) pendingTrimmedCount.value = trimmed
-}
-
-function removePendingImageItem(id) {
-  const item = pendingImages.value.find((p) => p.id === id)
-  if (item?.url) URL.revokeObjectURL(item.url)
-  pendingImages.value = pendingImages.value.filter((p) => p.id !== id)
-  if (!pendingImages.value.length) pendingTrimmedCount.value = 0
-  if (fileInputEl.value) fileInputEl.value.value = ''
-}
-
-function clearPendingImage() {
-  for (const p of pendingImages.value) {
-    if (p.url) URL.revokeObjectURL(p.url)
-  }
-  pendingImages.value = []
-  pendingTrimmedCount.value = 0
-  if (fileInputEl.value) fileInputEl.value.value = ''
-}
-
-/** 将非图片文件加入待发送列表（总数不超过 MAX_PENDING_DATA_FILES） */
-function addPendingDataFiles(files) {
-  pendingDataTrimmedCount.value = 0
-  const list = Array.isArray(files) ? files : [files]
-  let trimmed = 0
-  const next = [...pendingDataFiles.value]
-  for (const file of list) {
-    if (next.length >= MAX_PENDING_DATA_FILES) {
-      trimmed += 1
-      continue
-    }
-    if (!file?.size) continue
-    const ext = extOf(file.name)
-    if (!DOCUMENT_EXTS.has(ext)) continue
-    next.push({ id: makePendingId(), file })
-  }
-  pendingDataFiles.value = next
-  if (trimmed > 0) pendingDataTrimmedCount.value = trimmed
-}
-
-function removePendingDataFileItem(id) {
-  pendingDataFiles.value = pendingDataFiles.value.filter((p) => p.id !== id)
-  if (!pendingDataFiles.value.length) pendingDataTrimmedCount.value = 0
-  if (fileInputEl.value) fileInputEl.value.value = ''
-}
-
-function clearPendingDataFiles() {
-  pendingDataFiles.value = []
-  pendingDataTrimmedCount.value = 0
-  if (fileInputEl.value) fileInputEl.value.value = ''
-}
-
-function handleDrop(e) {
-  isDragging.value = false
-  const raw = e.dataTransfer?.files
-  if (!raw?.length) return
-  const files = [...raw]
-  const allImages = files.length > 0 && files.every((f) => IMAGE_EXTS.has(extOf(f.name)))
-  if (allImages) {
-    addPendingImageFiles(files)
-    return
-  }
-  const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
-  if (allDocuments) {
-    addPendingDataFiles(files)
-    return
-  }
-  const file = files[0]
-  const ext = extOf(file.name)
-  if (!ACCEPTED_EXTS.has(ext)) return
-  if (IMAGE_EXTS.has(ext)) {
-    addPendingImageFiles([file])
-    return
-  }
-  if (DOCUMENT_EXTS.has(ext)) {
-    addPendingDataFiles([file])
-  }
-}
-
-const plusMenuItems = [
+const plusMenuItems: PlusMenuItem[] = [
   { icon: LayoutGrid, labelKey: 'home.chatInput.selectMode', action: 'openModePicker' },
   { icon: Paperclip, labelKey: 'home.chatInput.addFileOrPhoto', action: 'openFile' },
   { icon: Image,     labelKey: 'home.chatInput.createImage',    action: null },
@@ -911,12 +499,12 @@ const plusMenuItems = [
   { icon: Search,    labelKey: 'home.chatInput.searchInternet', action: null },
 ]
 
-function closePlusMenu() {
+function closePlusMenu(): void {
   plusMenuOpen.value = false
   modePickerOpen.value = false
 }
 
-function togglePlusMenu() {
+function togglePlusMenu(): void {
   if (plusMenuOpen.value) {
     closePlusMenu()
   } else {
@@ -925,7 +513,7 @@ function togglePlusMenu() {
   }
 }
 
-function handleMenuItemClick(item) {
+function handleMenuItemClick(item: PlusMenuItem): void {
   if (item.action === 'openModePicker') {
     if (!modeMenuItemsList.value.length) return
     modePickerOpen.value = true
@@ -933,43 +521,20 @@ function handleMenuItemClick(item) {
   }
   closePlusMenu()
   if (item.action === 'openFile') {
-    // 重置 value 使得同一文件可重复选
-    if (fileInputEl.value) fileInputEl.value.value = ''
+    resetFileInput()
     fileInputEl.value?.click()
   }
 }
 
-function selectComposerMode(id) {
+function selectComposerMode(id: string): void {
   emit('select-mode', id)
   closePlusMenu()
   nextTick(() => area.value?.focus())
 }
 
-function handleFileSelect(e) {
-  const files = [...(e.target.files || [])]
-  if (!files.length) return
-  const allImages = files.length > 0 && files.every((f) => IMAGE_EXTS.has(extOf(f.name)))
-  if (allImages) {
-    addPendingImageFiles(files)
-  } else {
-    const allDocuments = files.length > 0 && files.every((f) => DOCUMENT_EXTS.has(extOf(f.name)))
-    if (allDocuments) {
-      addPendingDataFiles(files)
-    } else {
-      const file = files[0]
-      const ext = extOf(file.name)
-      if (IMAGE_EXTS.has(ext)) {
-        addPendingImageFiles([file])
-      } else if (DOCUMENT_EXTS.has(ext)) {
-        addPendingDataFiles([file])
-      }
-    }
-  }
-  e.target.value = ''
-}
-
-function onDocumentClick(e) {
-  if (plusRootRef.value && !plusRootRef.value.contains(e.target)) {
+function onDocumentClick(event: MouseEvent): void {
+  const target = event.target as Node | null
+  if (target && plusRootRef.value && !plusRootRef.value.contains(target)) {
     closePlusMenu()
   }
 }
@@ -981,12 +546,12 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
-  disposeVoiceUi()
+  disposeVoiceInput()
   clearPendingImage()
   clearPendingDataFiles()
 })
 
-function autoGrow() {
+function autoGrow(): void {
   const el = area.value
   if (!el) return
   el.style.overflow = 'hidden'
@@ -995,7 +560,7 @@ function autoGrow() {
   el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`
 }
 
-function handleSubmit() {
+function handleSubmit(): void {
   const msg = input.value.trim()
   const imageFiles = pendingImages.value.map((p) => p.file)
   const dataFiles = pendingDataFiles.value.map((p) => p.file)

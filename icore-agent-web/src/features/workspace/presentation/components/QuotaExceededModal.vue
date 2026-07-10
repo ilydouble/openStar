@@ -93,24 +93,33 @@
 </template>
 
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-const props = defineProps({
-  show: { type: Boolean, default: false },
-  /** The user's current plan key e.g. 'trial', 'pro'. */
-  currentPlan: { type: String, default: 'trial' },
-})
+const props = withDefaults(defineProps<{
+  show?: boolean
+  currentPlan?: string
+}>(), { show: false, currentPlan: 'trial' })
 
-const emit = defineEmits(['dismiss'])
+const emit = defineEmits<{ dismiss: [] }>()
 
 const { t } = useI18n()
 const router = useRouter()
 
 /** Task limit per plan tier — mirrors backend Plan enum for display only. */
-const TASK_LIMITS = { trial: 10, pro: 200, team: 1000, premium: 5000, byok: null }
+const TASK_LIMITS: Record<string, number | null> = {
+  trial: 10,
+  pro: 200,
+  team: 1000,
+  premium: 5000,
+  byok: null,
+}
+
+interface UpgradePlan {
+  route: string
+}
 
 /** Human-readable plan label shown in the subtitle. */
 const planLabel = computed(() => props.currentPlan.charAt(0).toUpperCase() + props.currentPlan.slice(1))
@@ -166,9 +175,9 @@ const plans = computed(() => [
 ])
 
 /** Navigate to the upgrade page and close the modal. */
-function handleUpgrade(plan) {
+function handleUpgrade(plan: UpgradePlan): void {
   emit('dismiss')
-  router.push(plan.route)
+  void router.push(plan.route)
 }
 </script>
 

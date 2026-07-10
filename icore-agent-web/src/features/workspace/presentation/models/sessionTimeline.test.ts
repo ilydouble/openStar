@@ -1,4 +1,3 @@
-// @ts-nocheck
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
@@ -9,6 +8,7 @@ import {
   timelineToChatRows,
   upsertTimelineItem,
 } from './sessionTimeline'
+import type { TimelineTurn } from '../../domain/models/timeline'
 
 test('hydrateSessionTimeline reads canonical turns and attachments', () => {
   const timeline = hydrateSessionTimeline({
@@ -37,7 +37,18 @@ test('hydrateSessionTimeline reads canonical turns and attachments', () => {
 })
 
 test('upsertTimelineItem updates existing items by stable item id', () => {
-  const turn = { turnId: 'turn-1', status: 'in_progress', items: [] }
+  const turn: TimelineTurn = {
+    turnId: 'turn-1',
+    status: 'in_progress',
+    model: null,
+    provider: null,
+    usage: null,
+    error: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    items: [],
+  }
 
   upsertTimelineItem(turn, {
     item_id: 'assistant-1',
@@ -90,7 +101,7 @@ test('applyTurnEvent builds turns, appends deltas, and preserves failed items', 
   })
 
   assert.equal(timeline.turns[0].status, 'failed')
-  assert.equal(timeline.turns[0].error.message, 'model unavailable')
+  assert.equal((timeline.turns[0].error as { message: string }).message, 'model unavailable')
   assert.equal(timeline.turns[0].items[0].payload.text, 'Hello')
 })
 
@@ -216,16 +227,19 @@ test('timelineToChatRows renders user attachments and hides context items by def
 
 test('isVisibleTimelineItem hides empty assistant text placeholders', () => {
   assert.equal(isVisibleTimelineItem({
+    itemId: 'assistant-1',
     type: 'agent_message',
     status: 'in_progress',
     payload: { text: '' },
   }), false)
   assert.equal(isVisibleTimelineItem({
+    itemId: 'assistant-2',
     type: 'agent_message',
     status: 'completed',
     payload: { text: '  ' },
   }), false)
   assert.equal(isVisibleTimelineItem({
+    itemId: 'assistant-3',
     type: 'agent_message',
     status: 'in_progress',
     payload: { text: 'Hel' },

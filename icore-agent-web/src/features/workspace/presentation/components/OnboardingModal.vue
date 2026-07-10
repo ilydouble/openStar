@@ -83,33 +83,50 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t, tm } = useI18n()
+const translateMessage = tm as unknown as (key: string) => unknown
 
-defineProps({
-  show: {
-    type: Boolean,
-    default: false,
-  },
+withDefaults(defineProps<{ show?: boolean }>(), { show: false })
+
+const emit = defineEmits<{
+  'select-scenario': [agentHint: string]
+  close: []
+}>()
+
+interface OnboardingScenario {
+  agentHint: string
+  bgClass: string
+  emoji: string
+  title: string
+  body: string
+}
+
+const scenarios = computed<OnboardingScenario[]>(() => {
+  const raw = translateMessage('onboarding.scenarios')
+  return Array.isArray(raw) ? raw.filter(isOnboardingScenario) : []
 })
 
-const emit = defineEmits(['select-scenario', 'close'])
-
-const scenarios = computed(() => {
-  const raw = tm('onboarding.scenarios')
-  return Array.isArray(raw) ? raw : []
-})
-
-function handleSelectScenario(agentHint) {
+/** Select one onboarding scenario and close the modal. */
+function handleSelectScenario(agentHint: string): void {
   emit('select-scenario', agentHint)
   emit('close')
 }
 
-function handleSkip() {
+/** Close onboarding without selecting a scenario. */
+function handleSkip(): void {
   emit('close')
+}
+
+/** Narrow translated locale data to the onboarding scenario model. */
+function isOnboardingScenario(value: unknown): value is OnboardingScenario {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const scenario = value as Partial<OnboardingScenario>
+  return ['agentHint', 'bgClass', 'emoji', 'title', 'body']
+    .every((key) => typeof scenario[key as keyof OnboardingScenario] === 'string')
 }
 </script>
 

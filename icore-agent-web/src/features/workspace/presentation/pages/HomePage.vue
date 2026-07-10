@@ -410,28 +410,42 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { QuotaExceededError, workspaceApplication } from '../index'
-import { isDark as isDarkFn } from '../../../shared/presentation/theme/theme'
-import { accountApplication } from '../../account'
-import { authApplication } from '../../auth'
-import HomeSidebar from './components/HomeSidebar.vue'
-import OnboardingModal from './components/OnboardingModal.vue'
-import QuotaExceededModal from './components/QuotaExceededModal.vue'
-import SearchBar from './components/SearchBar.vue'
-import ChatTimeline from './components/timeline/ChatTimeline.vue'
+import { QuotaExceededError, workspaceApplication } from '../../index'
+import { isDark as isDarkFn } from '../../../../shared/presentation/theme/theme'
+import { accountApplication } from '../../../account'
+import type { AccountPlan, AccountProject } from '../../../account'
+import { authApplication } from '../../../auth'
+import HomeSidebar from '../components/HomeSidebar.vue'
+import OnboardingModal from '../components/OnboardingModal.vue'
+import QuotaExceededModal from '../components/QuotaExceededModal.vue'
+import SearchBar from '../components/SearchBar.vue'
+import ChatTimeline from '../components/timeline/ChatTimeline.vue'
+import {
+  SHORTCUT_HINT,
+  useWorkspaceCatalog,
+} from '../composables/useWorkspaceCatalog'
 import {
   composeScenarioPrompt,
   resolveTemplateBubbleText,
-} from '../application/services/scenarioPrompt'
+} from '../../application/services/scenarioPrompt'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,
   timelineToChatRows,
-} from '../presentation/models/sessionTimeline'
+} from '../models/sessionTimeline'
+import type { TimelineItem } from '../../domain/models/timeline'
+import type { WorkspaceRecord } from '../../domain/models/workspace'
+import type {
+  ComposerSubmitPayload,
+  ProjectSummary,
+  SearchBarExpose,
+  SessionListItem,
+  WorkspaceAttachment,
+} from '../models/viewModels'
 
 const {
   completeOnboarding: setWorkspaceOnboardingComplete,
@@ -448,7 +462,7 @@ const {
   uploadFile: uploadFileAsset,
 } = workspaceApplication
 
-const { t, locale, tm } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -475,7 +489,8 @@ onMounted(() => {
   }
 })
 
-function handleOnboardingScenario(agentHint) {
+/** Activate the scenario selected from onboarding. */
+function handleOnboardingScenario(agentHint: string): void {
   const shortcutId = String(agentHint || '').trim()
   if (shortcutItems.value.some((item) => item.id === shortcutId)) {
     activeShortcutId.value = shortcutId
@@ -486,7 +501,7 @@ function handleOnboardingScenario(agentHint) {
 }
 
 /** Open one uploaded document in a new browser tab. */
-async function openDocumentAttachment(row) {
+async function openDocumentAttachment(row: WorkspaceAttachment): Promise<void> {
   const fileUuid = String(row?.file_uuid || '').trim()
   if (!fileUuid) return
   try {
@@ -496,39 +511,6 @@ async function openDocumentAttachment(row) {
   } catch (err) {
     console.error('Failed to open document attachment:', err)
   }
-}
-
-const UI_BY_ID = {
-  research: {
-    emoji: '\u{1F50D}',
-    panel:
-      'bg-gradient-to-br from-rose-100 to-rose-50 border-rose-200/80 dark:from-rose-600/40 dark:to-rose-950/55 dark:border-rose-400/20',
-  },
-  code: {
-    emoji: '\u{26A1}',
-    panel:
-      'bg-gradient-to-br from-amber-100 to-amber-50 border-amber-200/80 dark:from-amber-500/35 dark:to-amber-950/55 dark:border-amber-400/20',
-  },
-  docs: {
-    emoji: '\u{1F4C4}',
-    panel:
-      'bg-gradient-to-br from-sky-100 to-sky-50 border-sky-200/80 dark:from-sky-500/35 dark:to-sky-950/55 dark:border-sky-400/20',
-  },
-  chat: {
-    emoji: '\u{1F4AC}',
-    panel:
-      'bg-gradient-to-br from-violet-100 to-violet-50 border-violet-200/80 dark:from-violet-500/40 dark:to-violet-950/55 dark:border-violet-400/20',
-  },
-  image: {
-    emoji: '\u{2728}',
-    panel:
-      'bg-gradient-to-br from-fuchsia-100 to-fuchsia-50 border-fuchsia-200/80 dark:from-fuchsia-500/35 dark:to-fuchsia-950/55 dark:border-fuchsia-400/20',
-  },
-  data: {
-    emoji: '\u{1F4CA}',
-    panel:
-      'bg-gradient-to-br from-emerald-100 to-emerald-50 border-emerald-200/80 dark:from-emerald-500/35 dark:to-emerald-950/55 dark:border-emerald-400/20',
-  },
 }
 
 const sessionId = ref(typeof route.params.sessionId === 'string' ? route.params.sessionId : newSessionId())
@@ -547,31 +529,42 @@ const chatHasTimeline = computed(() =>
 )
 const loading = ref(false)
 /** 中止当前 /chat SSE（用户点击停止） */
-const streamAbortController = ref(null)
+const streamAbortController = ref<AbortController | null>(null)
 /** 中止当前 SSE 流（停止按钮） */
-function stopAssistantStream() {
+function stopAssistantStream(): void {
   streamAbortController.value?.abort()
 }
 /** When true, chat is ephemeral: no history, memory injection, or session finalize. */
 const incognitoMode = ref(false)
-const scrollEl = ref(null)
-const searchRefHome = ref(null)
-const searchRefChat = ref(null)
+const scrollEl = ref<HTMLElement | null>(null)
+const searchRefHome = ref<SearchBarExpose | null>(null)
+const searchRefChat = ref<SearchBarExpose | null>(null)
 const dark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
 
 // ── 附件状态 ──────────────────────────────────────────────────────────────
-const attachmentList = ref([])
+const attachmentList = ref<WorkspaceAttachment[]>([])
 const uploading = ref(false)
 const uploadError = ref('')
-const planSummary = ref(null)
+const planSummary = ref<AccountPlan | null>(null)
+const {
+  activeScenarioTemplate,
+  activeShortcut,
+  activeShortcutId,
+  activeShortcutPill,
+  homeShortcutItems,
+  quotaItems,
+  scenarioTemplates,
+  shortcutItems,
+  templateLabelById,
+} = useWorkspaceCatalog(planSummary)
 const QUOTA_STREAM_POLL_MS = 30_000
-let quotaPollTimer = null
-const recentSessions = ref([])
-const sessionSearchResults = ref([])
+let quotaPollTimer: ReturnType<typeof setInterval> | undefined
+const recentSessions = ref<SessionListItem[]>([])
+const sessionSearchResults = ref<SessionListItem[]>([])
 const sessionSearchLoading = ref(false)
 let sessionSearchRequestId = 0
-const projectRecords = ref([])
-const recentProjects = computed(() => {
+const projectRecords = ref<AccountProject[]>([])
+const recentProjects = computed<ProjectSummary[]>(() => {
   return projectRecords.value.map((project) => ({
     id: project.id,
     title: project.title,
@@ -582,7 +575,7 @@ const recentProjects = computed(() => {
 })
 
 /** Reset the canonical timeline for a session without touching composer state. */
-function resetTimelineState(nextSessionId = sessionId.value) {
+function resetTimelineState(nextSessionId = sessionId.value): void {
   timeline.value = hydrateSessionTimeline({
     session_id: nextSessionId,
     turns: [],
@@ -591,7 +584,7 @@ function resetTimelineState(nextSessionId = sessionId.value) {
 }
 
 /** Add a local-only failed turn when the request fails before backend events arrive. */
-function appendLocalErrorTurn(message) {
+function appendLocalErrorTurn(message: string): void {
   const now = Date.now()
   timeline.value.turns.push({
     turnId: `local-error-${now}`,
@@ -622,7 +615,7 @@ const composerAttachments = computed(() =>
   attachmentList.value.filter((a) => a.mode === 'rag'),
 )
 
-async function loadPlanSummary() {
+async function loadPlanSummary(): Promise<void> {
   try {
     planSummary.value = await accountApplication.loadPlan()
   } catch {
@@ -631,39 +624,39 @@ async function loadPlanSummary() {
 }
 
 /** Poll plan quota while a chat stream is active so token usage stays current. */
-function startQuotaPolling() {
+function startQuotaPolling(): void {
   stopQuotaPolling()
   quotaPollTimer = setInterval(() => {
-    loadPlanSummary()
+    void loadPlanSummary()
   }, QUOTA_STREAM_POLL_MS)
 }
 
-function stopQuotaPolling() {
-  if (quotaPollTimer) {
+function stopQuotaPolling(): void {
+  if (quotaPollTimer !== undefined) {
     clearInterval(quotaPollTimer)
-    quotaPollTimer = null
+    quotaPollTimer = undefined
   }
 }
 
-async function refreshAttachments() {
+async function refreshAttachments(): Promise<void> {
   // 文件资产由当前会话前端状态持有，旧 session-scoped attachment API 已移除。
 }
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
 
-function extOf(name) {
+function extOf(name: string): string {
   const i = name.lastIndexOf('.')
   return i >= 0 ? name.slice(i).toLowerCase() : ''
 }
 
-async function handleFileSelected(file) {
+async function handleFileSelected(file: File): Promise<void> {
   if (loading.value || uploading.value) return
   const ext = extOf(file.name)
   if (!IMAGE_EXTS.has(ext)) return
   uploading.value = true
   uploadError.value = ''
   try {
-    const uploaded = await uploadFileAsset(file)
+    const uploaded = await uploadFileAsset(file) as WorkspaceAttachment
     attachmentList.value = [...attachmentList.value, uploaded]
     ensureChatRoute()
     const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
@@ -676,26 +669,26 @@ async function handleFileSelected(file) {
     await loadSessions()
     await loadPlanSummary()
     await syncCurrentProject()
-  } catch (err) {
-    uploadError.value = err.message || t('chat.uploadFailed')
+  } catch (error: unknown) {
+    uploadError.value = readErrorMessage(error, t('chat.uploadFailed'))
   } finally {
     uploading.value = false
   }
 }
 
-async function deleteAttachment(fileUuid) {
+async function deleteAttachment(fileUuid: string): Promise<void> {
   try {
     await deleteFileAsset(fileUuid)
     attachmentList.value = attachmentList.value.filter((item) => item.file_uuid !== fileUuid)
     await loadPlanSummary()
     await loadSessions()
     await syncCurrentProject()
-  } catch (err) {
-    uploadError.value = err.message || t('chat.deleteFailed')
+  } catch (error: unknown) {
+    uploadError.value = readErrorMessage(error, t('chat.deleteFailed'))
   }
 }
 
-function resetConversationState() {
+function resetConversationState(): void {
   stopAssistantStream()
   const nextSessionId = newSessionId()
   sessionId.value = nextSessionId
@@ -716,7 +709,7 @@ function resetConversationState() {
 }
 
 /** Schedule durable memory extraction without blocking navigation. */
-function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
+function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value): void {
   if (incognitoMode.value) return
   if (!messages.value.length) return
   void finalizeSession(activeSessionId).catch((err) => {
@@ -725,7 +718,9 @@ function scheduleFinalizeSessionIfNeeded(activeSessionId = sessionId.value) {
 }
 
 /** Start a fresh session; optionally enable or disable incognito mode. */
-function startFreshSession({ incognito = false, navigate = true } = {}) {
+function startFreshSession(
+  { incognito = false, navigate = true }: { incognito?: boolean; navigate?: boolean } = {},
+): void {
   stopAssistantStream()
   const nextSessionId = newSessionId()
   sessionId.value = nextSessionId
@@ -736,7 +731,7 @@ function startFreshSession({ incognito = false, navigate = true } = {}) {
   uploadError.value = ''
   activeShortcutId.value = ''
   if (navigate) {
-    router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
+    void router.push({ name: 'workspace-session', params: { sessionId: nextSessionId } })
   }
   nextTick(() => {
     searchRefHome.value?.clearPendingImage?.()
@@ -749,7 +744,7 @@ function startFreshSession({ incognito = false, navigate = true } = {}) {
 }
 
 /** Toggle incognito mode; enabling starts a fresh ephemeral session immediately. */
-function toggleIncognitoMode() {
+function toggleIncognitoMode(): void {
   if (incognitoMode.value) {
     startFreshSession({ incognito: false })
     return
@@ -767,96 +762,13 @@ watch(
   },
 )
 
-function ensureChatRoute() {
+function ensureChatRoute(): void {
   if (route.name === 'workspace') {
-    router.replace({ name: 'workspace-session', params: { sessionId: sessionId.value } })
+    void router.replace({ name: 'workspace-session', params: { sessionId: sessionId.value } })
   }
 }
 
-const PILL_BY_ID = {
-  research: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:ring-rose-400/30',
-  code:     'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:ring-amber-400/30',
-  docs:     'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:ring-sky-400/30',
-  chat:     'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:ring-violet-400/30',
-  image:    'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-900/40 dark:text-fuchsia-200 dark:ring-fuchsia-400/30',
-  data:     'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-400/30',
-}
-
-const shortcutItems = computed(() => {
-  const raw = tm('home.shortcuts')
-  if (!Array.isArray(raw)) return []
-  return raw.map((row) => {
-    const id = row.id
-    const ui = UI_BY_ID[id] || {
-      emoji: '\u2728',
-      panel:
-        'bg-gradient-to-br from-zinc-200 to-zinc-100 border-zinc-300/80 dark:from-zinc-800/80 dark:to-zinc-950/80 dark:border-white/10',
-    }
-    return {
-      id,
-      label: row.label,
-      role: row.role || row.label,
-      summary: row.summary || '',
-      taskPreviews: Array.isArray(row.taskPreviews) ? row.taskPreviews : [],
-      placeholder: row.placeholder || '',
-      home: row.home !== false,
-      emoji: ui.emoji,
-      panel: ui.panel,
-    }
-  })
-})
-
-const homeShortcutItems = computed(() =>
-  shortcutItems.value.filter((item) => item.home !== false),
-)
-
-const scenarioTemplates = computed(() => {
-  const raw = tm('home.templates')
-  if (!Array.isArray(raw)) return []
-  const labelById = Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label]))
-  return raw.map((row) => ({
-    ...row,
-    label: labelById[row.id] || row.title,
-    phases: Array.isArray(row.phases) ? row.phases : [],
-  }))
-})
-
-const activeShortcutId = ref('')
-const activeShortcut = computed(
-  () => shortcutItems.value.find((it) => it.id === activeShortcutId.value) || null,
-)
-const activeScenarioTemplate = computed(
-  () => scenarioTemplates.value.find((it) => it.id === activeShortcutId.value) || null,
-)
-
-const templateLabelById = computed(() =>
-  Object.fromEntries(shortcutItems.value.map((item) => [item.id, item.label])),
-)
-const activeShortcutPill = computed(() => {
-  const it = activeShortcut.value
-  if (!it) return null
-  return {
-    label: it.label,
-    emoji: it.emoji,
-    pillClass: PILL_BY_ID[it.id] || '',
-  }
-})
-
-const quotaItems = computed(() => {
-  const usage = planSummary.value?.usage || {}
-  const limits = planSummary.value?.limits || {}
-  const formatLimit = (value) => (value == null ? '∞' : value)
-  const items = [
-    { label: t('home.quota.tokens'), value: `${usage.tokens ?? 0}` },
-    { label: t('home.quota.attachments'), value: `${usage.attachments ?? 0}/${formatLimit(limits.attachments)}` },
-  ]
-  if (limits.tasks !== null && limits.tasks !== undefined) {
-    items.unshift({ label: t('home.quota.tasks'), value: `${usage.tasks ?? 0}/${formatLimit(limits.tasks)}` })
-  }
-  return items
-})
-
-function syncTheme() {
+function syncTheme(): void {
   dark.value = isDarkFn()
 }
 
@@ -864,8 +776,8 @@ onMounted(async () => {
   syncTheme()
   window.addEventListener('icore-theme-change', syncTheme)
   await loadSessions()
-  loadPlanSummary()
-  loadProjects()
+  void loadPlanSummary()
+  void loadProjects()
   await hydrateCurrentSession()
 })
 
@@ -900,17 +812,17 @@ watch(
   () => [messages.value.length, loading.value],
   () => {
     if (loading.value) {
-      scrollBottom()
+      void scrollBottom()
     }
   },
 )
 
-async function scrollBottom() {
+async function scrollBottom(): Promise<void> {
   await nextTick()
   if (messages.value.length > 0) {
     await nextTick()
   }
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     requestAnimationFrame(() => {
       applyChatScrollBottom()
       requestAnimationFrame(() => {
@@ -922,23 +834,13 @@ async function scrollBottom() {
 }
 
 /** Scroll the chat container to the latest timeline item. */
-function applyChatScrollBottom() {
+function applyChatScrollBottom(): void {
   const el = scrollEl.value
   if (!el) return
   el.scrollTop = el.scrollHeight
 }
 
-// 前端 shortcut id → 后端 agent_hint 映射。docs 按钮走 knowledge_agent。
-const SHORTCUT_HINT = {
-  research: 'research',
-  code: 'chat',
-  docs: 'knowledge',
-  chat: 'chat',
-  image: 'image',
-  data: 'data',
-}
-
-function mapSessionSummary(item) {
+function mapSessionSummary(item: WorkspaceRecord): SessionListItem {
   const count = Number(item.turn_count ?? item.message_count ?? 0)
   return {
     sessionId: item.public_id,
@@ -949,7 +851,7 @@ function mapSessionSummary(item) {
   }
 }
 
-async function loadSessions() {
+async function loadSessions(): Promise<void> {
   try {
     const { sessions } = await fetchAllSessions()
     recentSessions.value = sessions.map(mapSessionSummary)
@@ -958,7 +860,7 @@ async function loadSessions() {
   }
 }
 
-async function onDeleteSession(deletedSessionId) {
+async function onDeleteSession(deletedSessionId: string): Promise<void> {
   try {
     await clearSession(deletedSessionId)
     recentSessions.value = recentSessions.value.filter(
@@ -976,7 +878,7 @@ async function onDeleteSession(deletedSessionId) {
   }
 }
 
-function mapSearchResult(item) {
+function mapSearchResult(item: WorkspaceRecord): SessionListItem {
   return {
     sessionId: item.public_id,
     title: (item.title || '').trim() || t('home.heroTitle'),
@@ -987,7 +889,7 @@ function mapSearchResult(item) {
 }
 
 /** Run sidebar session search against the backend full-text index. */
-async function onSessionSearch(query) {
+async function onSessionSearch(query: string): Promise<void> {
   const trimmed = String(query || '').trim()
   if (!trimmed) {
     sessionSearchResults.value = []
@@ -1010,7 +912,7 @@ async function onSessionSearch(query) {
   }
 }
 
-async function loadProjects() {
+async function loadProjects(): Promise<void> {
   try {
     const payload = await accountApplication.loadProjects()
     projectRecords.value = payload.projects || []
@@ -1019,7 +921,18 @@ async function loadProjects() {
   }
 }
 
-async function syncCurrentProject(meta = {}) {
+interface ProjectSyncMeta {
+  projectId?: string
+  projectTitle?: string
+  scenarioId?: string
+  sessionTitle?: string
+  sessionSubtitle?: string
+  title?: string
+  subtitle?: string
+  attachmentCount?: number
+}
+
+async function syncCurrentProject(meta: ProjectSyncMeta = {}): Promise<void> {
   const template = activeScenarioTemplate.value
   const projectId = meta.projectId || template?.id || 'general'
   const projectTitle = meta.projectTitle || template?.title || t('home.heroTitle')
@@ -1041,7 +954,7 @@ async function syncCurrentProject(meta = {}) {
   }
 }
 
-async function hydrateCurrentSession() {
+async function hydrateCurrentSession(): Promise<void> {
   const hasExplicitSession = typeof route.params.sessionId === 'string'
   if (!hasExplicitSession) {
     await refreshAttachments()
@@ -1049,7 +962,9 @@ async function hydrateCurrentSession() {
   }
   try {
     const state = await getSessionState(sessionId.value)
-    attachmentList.value = state.attachments || []
+    attachmentList.value = Array.isArray(state.attachments)
+      ? state.attachments as WorkspaceAttachment[]
+      : []
     timeline.value = hydrateSessionTimeline(state)
     await loadSessions()
     const sessionEntry = recentSessions.value.find((item) => item.sessionId === sessionId.value)
@@ -1070,7 +985,7 @@ async function hydrateCurrentSession() {
   }
 }
 
-function buildTemplateSendPayload(userQuery) {
+function buildTemplateSendPayload(userQuery: string) {
   const query = String(userQuery || '').trim()
   const template = activeScenarioTemplate.value
   if (!template) {
@@ -1081,23 +996,33 @@ function buildTemplateSendPayload(userQuery) {
     }
   }
   return {
-    bubbleText: resolveTemplateBubbleText(activeShortcut.value?.label, query),
+    bubbleText: resolveTemplateBubbleText(activeShortcut.value?.label || '', query),
     agentMessage: composeScenarioPrompt(query, template),
     templateId: activeShortcutId.value || template.id || '',
   }
 }
 
-async function sendUserMessage(msg, agentHint = '', {
-  skipUserBubble = false,
-  displayCaption = '',
-  turnFileUuids = null,
-} = {}) {
+interface SendUserMessageOptions {
+  skipUserBubble?: boolean
+  displayCaption?: string
+  turnFileUuids?: string[] | null
+}
+
+async function sendUserMessage(
+  msg: string,
+  agentHint = '',
+  {
+    skipUserBubble = false,
+    displayCaption = '',
+    turnFileUuids = null,
+  }: SendUserMessageOptions = {},
+): Promise<void> {
   const text = String(msg ?? '').trim()
   if (!text || loading.value) return
   const { bubbleText, agentMessage, templateId } = buildTemplateSendPayload(text)
   const captionForApi = String(displayCaption || '').trim()
   const fileUuids = Array.isArray(turnFileUuids)
-    ? turnFileUuids.map((item) => String(item || '').trim()).filter(Boolean)
+      ? turnFileUuids.map((item: string) => item.trim()).filter(Boolean)
     : []
 
   void skipUserBubble
@@ -1122,18 +1047,18 @@ async function sendUserMessage(msg, agentHint = '', {
       applyTurnEvent(timeline.value, evt)
       await scrollBottom()
     }
-  } catch (e) {
-    const aborted = typeof e?.name === 'string' && e.name === 'AbortError'
+  } catch (error: unknown) {
+    const aborted = error instanceof Error && error.name === 'AbortError'
     if (!aborted) {
-      if (e instanceof QuotaExceededError) {
+      if (error instanceof QuotaExceededError) {
         // 超出 Token 配额 → 显示升级弹窗，而不是报错
-        quotaExceededPlan.value = e.currentPlan
+        quotaExceededPlan.value = error.currentPlan
         showQuotaModal.value = true
       } else {
-        const errorMsg = String(e?.message || '')
+        const errorMsg = readErrorMessage(error, '')
         if (errorMsg.includes('401')) {
           authApplication.signOut()
-          router.push({ name: 'auth' })
+          void router.push({ name: 'auth' })
         } else {
           appendLocalErrorTurn(t('chat.requestFailed', { msg: errorMsg }))
         }
@@ -1155,12 +1080,16 @@ async function sendUserMessage(msg, agentHint = '', {
   }
 }
 
-async function handleSubmit({ message, imageFiles, dataFiles }) {
+async function handleSubmit({
+  message,
+  imageFiles,
+  dataFiles,
+}: ComposerSubmitPayload): Promise<void> {
   if (loading.value || uploading.value) return
   const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
   const text = (message || '').trim()
-  const imgs = Array.isArray(imageFiles) ? imageFiles.filter((f) => f && f.size) : []
-  const datas = Array.isArray(dataFiles) ? dataFiles.filter((f) => f && f.size) : []
+  const imgs = imageFiles.filter((file) => file.size)
+  const datas = dataFiles.filter((file) => file.size)
 
   if (!imgs.length && !datas.length) {
     if (text) await sendUserMessage(text, hint)
@@ -1170,9 +1099,9 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
   uploadError.value = ''
   uploading.value = true
   try {
-    const uploadedImages = []
+    const uploadedImages: Array<{ file_uuid: string; content: string; filename: string }> = []
     for (const imageFile of imgs) {
-      const uploaded = await uploadFileAsset(imageFile)
+      const uploaded = await uploadFileAsset(imageFile) as WorkspaceAttachment
       attachmentList.value = [...attachmentList.value, uploaded]
       const url = uploaded.download_url || URL.createObjectURL(imageFile)
       if (url) {
@@ -1183,9 +1112,9 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
         })
       }
     }
-    const uploadedDataMeta = []
+    const uploadedDataMeta: Array<{ file_uuid: string; filename: string }> = []
     for (const df of datas) {
-      const meta = await uploadFileAsset(df)
+      const meta = await uploadFileAsset(df) as WorkspaceAttachment
       attachmentList.value = [...attachmentList.value, meta]
       uploadedDataMeta.push({
         file_uuid: meta.file_uuid,
@@ -1220,8 +1149,8 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
       turnFileUuids,
       ...(text ? { displayCaption: text } : {}),
     })
-  } catch (err) {
-    uploadError.value = err.message || t('chat.uploadFailed')
+  } catch (error: unknown) {
+    uploadError.value = readErrorMessage(error, t('chat.uploadFailed'))
   } finally {
     uploading.value = false
     nextTick(() => {
@@ -1233,56 +1162,61 @@ async function handleSubmit({ message, imageFiles, dataFiles }) {
   }
 }
 
-function toggleShortcut(id) {
+function toggleShortcut(id: string): void {
   activeShortcutId.value = activeShortcutId.value === id ? '' : id
   nextTick(() => {
     ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
   })
 }
 
-function setComposerMode(id) {
+function setComposerMode(id: string): void {
   activeShortcutId.value = id
   nextTick(() => {
     ;(isChatRoute.value ? searchRefChat.value : searchRefHome.value)?.focus?.()
   })
 }
 
-function clearShortcut() {
+function clearShortcut(): void {
   activeShortcutId.value = ''
 }
 
-function applyStarter(starter) {
+function applyStarter(starter: string): void {
   const hint = SHORTCUT_HINT[activeShortcutId.value] || ''
-  sendUserMessage(starter, hint)
+  void sendUserMessage(starter, hint)
 }
 
-function startShortcutTask(id, task) {
+function startShortcutTask(id: string, task: string): void {
   activeShortcutId.value = id
   const hint = SHORTCUT_HINT[id] || ''
-  sendUserMessage(task, hint)
+  void sendUserMessage(task, hint)
 }
 
-function openRecentSession(targetSessionId) {
-  router.push({ name: 'workspace-session', params: { sessionId: targetSessionId } })
+function openRecentSession(targetSessionId: string): void {
+  void router.push({ name: 'workspace-session', params: { sessionId: targetSessionId } })
 }
 
-function onSidebarNew() {
+function onSidebarNew(): void {
   if (!incognitoMode.value) {
     scheduleFinalizeSessionIfNeeded()
   }
   startFreshSession({ incognito: false })
-  syncCurrentProject({
+  void syncCurrentProject({
     title: activeScenarioTemplate.value?.title || t('home.heroTitle'),
     subtitle: t('home.subtitle'),
   })
 }
 
-function goAccount() {
-  router.push({ name: 'account' })
+function goAccount(): void {
+  void router.push({ name: 'account' })
 }
 
-function handleSignOut() {
+function handleSignOut(): void {
   authApplication.signOut()
-  router.push({ name: 'auth' })
+  void router.push({ name: 'auth' })
+}
+
+/** Convert an unknown workspace failure into safe user-facing text. */
+function readErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 </script>

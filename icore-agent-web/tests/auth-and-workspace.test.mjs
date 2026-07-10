@@ -36,7 +36,7 @@ test('workspace locales expose scenario content and account copy', () => {
 })
 
 test('home sidebar links only use registered workspace route names', () => {
-  const sidebarSource = readFileSync(new URL('../src/features/workspace/interfaces/components/HomeSidebar.vue', import.meta.url), 'utf8')
+  const sidebarSource = readFileSync(new URL('../src/features/workspace/presentation/components/HomeSidebar.vue', import.meta.url), 'utf8')
 
   assert.ok(sidebarSource.includes(":to=\"{ name: 'workspace' }\""), 'expected workspace route link in sidebar')
   assert.ok(!sidebarSource.includes(":to=\"{ name: 'chat' }\""), 'expected sidebar to avoid removed chat route name')

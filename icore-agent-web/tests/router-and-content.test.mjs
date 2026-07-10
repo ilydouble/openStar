@@ -7,7 +7,7 @@ import enUS from '../src/shared/presentation/i18n/locales/en-US'
 import { existsSync, readFileSync } from 'node:fs'
 
 test('sidebar chat nav targets workspace-session so home and chat are not both active', () => {
-  const sidebarSource = readFileSync(new URL('../src/features/workspace/interfaces/components/HomeSidebar.vue', import.meta.url), 'utf8')
+  const sidebarSource = readFileSync(new URL('../src/features/workspace/presentation/components/HomeSidebar.vue', import.meta.url), 'utf8')
 
   assert.ok(sidebarSource.includes("name: 'workspace'"), 'expected home nav to target workspace')
   assert.ok(sidebarSource.includes("name: 'workspace-session'"), 'expected chat nav to target workspace-session')

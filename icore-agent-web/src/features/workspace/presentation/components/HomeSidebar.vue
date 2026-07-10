@@ -460,7 +460,7 @@
   </aside>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -468,30 +468,27 @@ import { setLocalePreference } from '../../../../shared/presentation/i18n/locale
 import { authApplication } from '../../../auth'
 import ThemeToggle from '../../../../shared/presentation/components/ThemeToggle.vue'
 import { sanitizeHtml } from '../../../../shared/presentation/html/sanitizeHtml'
+import type { ProjectSummary, SessionListItem } from '../models/viewModels'
 
-const emit = defineEmits(['new', 'navigate', 'search', 'delete-session'])
+const emit = defineEmits<{
+  new: []
+  navigate: []
+  search: [query: string]
+  'delete-session': [sessionId: string]
+}>()
 
-const props = defineProps({
-  currentSessionId: {
-    type: String,
-    default: '',
-  },
-  recentSessions: {
-    type: Array,
-    default: () => [],
-  },
-  recentProjects: {
-    type: Array,
-    default: () => [],
-  },
-  searchResults: {
-    type: Array,
-    default: () => [],
-  },
-  searchLoading: {
-    type: Boolean,
-    default: false,
-  },
+const props = withDefaults(defineProps<{
+  currentSessionId?: string
+  recentSessions?: SessionListItem[]
+  recentProjects?: ProjectSummary[]
+  searchResults?: SessionListItem[]
+  searchLoading?: boolean
+}>(), {
+  currentSessionId: '',
+  recentSessions: () => [],
+  recentProjects: () => [],
+  searchResults: () => [],
+  searchLoading: false,
 })
 
 const { t, locale } = useI18n()
@@ -503,15 +500,15 @@ const PROJECTS_PREVIEW_COUNT = 2
 const SECTION_SCROLL_CLASS = 'sidebar-section-scroll max-h-60 overflow-y-auto overscroll-y-contain pr-0.5'
 const PROJECTS_SCROLL_CLASS = 'sidebar-section-scroll max-h-52 overflow-y-auto overscroll-y-contain pr-0.5'
 const searchInput = ref('')
-const searchInputRef = ref(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const sessionsExpanded = ref(false)
 const projectsExpanded = ref(false)
 const searchDebounceMs = 300
-let searchTimer = null
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 const deleteDialogOpen = ref(false)
-const pendingDeleteSessionId = ref(null)
-const cancelButtonRef = ref(null)
-const confirmButtonRef = ref(null)
+const pendingDeleteSessionId = ref<string | null>(null)
+const cancelButtonRef = ref<HTMLButtonElement | null>(null)
+const confirmButtonRef = ref<HTMLButtonElement | null>(null)
 const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
 
 const navRowClass = computed(() =>
@@ -546,14 +543,14 @@ watch(searchInput, (value) => {
   }, searchDebounceMs)
 })
 
-function clearSearch() {
+function clearSearch(): void {
   searchInput.value = ''
   emit('search', '')
 }
 
 const moreOpen = ref(false)
-const moreRootRef = ref(null)
-const morePanelRef = ref(null)
+const moreRootRef = ref<HTMLElement | null>(null)
+const morePanelRef = ref<HTMLElement | null>(null)
 const morePanelStyle = ref({ top: '0px', left: '0px', width: '11.5rem' })
 const morePanelId = `sidebar-more-${Math.random().toString(36).slice(2, 9)}`
 
@@ -569,14 +566,14 @@ const chatNavTo = computed(() => {
   }
 })
 
-function navItemClass(active) {
+function navItemClass(active: boolean): string {
   return active
     ? 'bg-zinc-200/90 text-zinc-950 shadow-sm ring-1 ring-zinc-300/50 dark:bg-white/[0.1] dark:text-white dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08)] dark:ring-white/10'
     : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-500 dark:hover:bg-white/[0.05] dark:hover:text-zinc-200'
 }
 
 /** In collapsed mode, highlight only the icon tile instead of the full row surface. */
-function navSurfaceClass(active) {
+function navSurfaceClass(active: boolean): string {
   if (sidebarCollapsed.value) {
     return active
       ? 'text-zinc-950 dark:text-white'
@@ -585,7 +582,7 @@ function navSurfaceClass(active) {
   return navItemClass(active)
 }
 
-function iconWrapClass(active) {
+function iconWrapClass(active: boolean): string[] {
   return [
     'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors duration-200',
     active
@@ -594,16 +591,16 @@ function iconWrapClass(active) {
   ]
 }
 
-function emitNavigate() {
+function emitNavigate(): void {
   emit('navigate')
 }
 
-function onNew() {
+function onNew(): void {
   emit('new')
   emitNavigate()
 }
 
-function toggleSidebarCollapse() {
+function toggleSidebarCollapse(): void {
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed.value))
   if (sidebarCollapsed.value) {
@@ -612,43 +609,43 @@ function toggleSidebarCollapse() {
 }
 
 /** Expand the sidebar and focus session search from the collapsed icon button. */
-async function openSearchFromCollapsed() {
+async function openSearchFromCollapsed(): Promise<void> {
   sidebarCollapsed.value = false
   localStorage.setItem('sidebarCollapsed', 'false')
   await nextTick()
   searchInputRef.value?.focus()
 }
 
-function handleDeleteSession(sessionId) {
+function handleDeleteSession(sessionId: string): void {
   pendingDeleteSessionId.value = sessionId
   deleteDialogOpen.value = true
 }
 
-function closeDeleteDialog() {
+function closeDeleteDialog(): void {
   deleteDialogOpen.value = false
   pendingDeleteSessionId.value = null
 }
 
-function confirmDelete() {
+function confirmDelete(): void {
   if (pendingDeleteSessionId.value) {
     emit('delete-session', pendingDeleteSessionId.value)
   }
   closeDeleteDialog()
 }
 
-function toggleMore() {
+function toggleMore(): void {
   moreOpen.value = !moreOpen.value
   if (moreOpen.value) {
     nextTick(updateMorePanelPosition)
   }
 }
 
-function closeMore() {
+function closeMore(): void {
   moreOpen.value = false
 }
 
 /** Position the teleported more menu beside or above the trigger button. */
-function updateMorePanelPosition() {
+function updateMorePanelPosition(): void {
   const trigger = moreRootRef.value
   if (!trigger) return
   const rect = trigger.getBoundingClientRect()
@@ -678,37 +675,38 @@ function updateMorePanelPosition() {
   }
 }
 
-function toggleLocale() {
+function toggleLocale(): void {
   locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
   setLocalePreference(locale.value)
   closeMore()
 }
 
 /** 清除 session 并跳转到登录页 */
-function handleSignOut() {
+function handleSignOut(): void {
   authApplication.signOut()
   closeMore()
-  router.push({ name: 'auth' })
+  void router.push({ name: 'auth' })
 }
 
-function onDocClick(e) {
+function onDocClick(event: MouseEvent): void {
   if (!moreOpen.value) return
-  const target = e.target
+  const target = event.target as Node | null
+  if (!target) return
   if (moreRootRef.value?.contains(target)) return
   if (morePanelRef.value?.contains(target)) return
   closeMore()
 }
 
-function onKeydown(e) {
+function onKeydown(event: KeyboardEvent): void {
   if (deleteDialogOpen.value) {
-    if (e.key === 'Escape') {
+    if (event.key === 'Escape') {
       closeDeleteDialog()
-    } else if (e.key === 'Enter') {
+    } else if (event.key === 'Enter') {
       confirmDelete()
     }
     return
   }
-  if (moreOpen.value && e.key === 'Escape') {
+  if (moreOpen.value && event.key === 'Escape') {
     closeMore()
   }
 }

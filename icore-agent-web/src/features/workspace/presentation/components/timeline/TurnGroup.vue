@@ -24,21 +24,28 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineItem from './TimelineItem.vue'
-import { isVisibleTimelineItem } from '../../../presentation/models/sessionTimeline'
+import { isVisibleTimelineItem } from '../../models/sessionTimeline'
+import type { TimelineTurn } from '../../../domain/models/timeline'
+import type { WorkspaceAttachment } from '../../models/viewModels'
 
-const props = defineProps({
-  turn: { type: Object, required: true },
-  attachments: { type: Array, default: () => [] },
-  dark: { type: Boolean, default: false },
-  showContext: { type: Boolean, default: false },
-  templateLabels: { type: Object, default: () => ({}) },
+const props = withDefaults(defineProps<{
+  turn: TimelineTurn
+  attachments?: WorkspaceAttachment[]
+  dark?: boolean
+  showContext?: boolean
+  templateLabels?: Record<string, string>
+}>(), {
+  attachments: () => [],
+  dark: false,
+  showContext: false,
+  templateLabels: () => ({}),
 })
 
-defineEmits(['open-document'])
+defineEmits<{ 'open-document': [attachment: WorkspaceAttachment] }>()
 
 const { t } = useI18n()
 const visibleItems = computed(() =>
@@ -47,6 +54,13 @@ const visibleItems = computed(() =>
   ),
 )
 const errorText = computed(() =>
-  String(props.turn.error?.message || props.turn.error?.code || t('chat.requestFailed', { msg: 'Agent turn failed' })),
+  String(readTurnError(props.turn.error) || t('chat.requestFailed', { msg: 'Agent turn failed' })),
 )
+
+/** Read a stable message from an unknown turn failure payload. */
+function readTurnError(error: unknown): string {
+  if (!error || typeof error !== 'object') return ''
+  const record = error as Record<string, unknown>
+  return String(record.message || record.code || '')
+}
 </script>

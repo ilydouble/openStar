@@ -57,23 +57,25 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import DocumentFileIcon from '../DocumentFileIcon.vue'
-import { isAutoAttachmentPrompt } from '../../../presentation/models/sessionMessageHydration'
+import { isAutoAttachmentPrompt } from '../../models/sessionMessageHydration'
 import { resolveUserMessageDisplayContent } from '../../../application/services/scenarioPrompt'
-import { userMessageText } from '../../../presentation/models/sessionTimeline'
+import { userMessageText } from '../../models/sessionTimeline'
+import type { TimelineItem } from '../../../domain/models/timeline'
+import type { WorkspaceAttachment } from '../../models/viewModels'
 
-const props = defineProps({
-  item: { type: Object, required: true },
-  attachments: { type: Array, default: () => [] },
-  templateLabels: { type: Object, default: () => ({}) },
-})
+const props = withDefaults(defineProps<{
+  item: TimelineItem
+  attachments?: WorkspaceAttachment[]
+  templateLabels?: Record<string, string>
+}>(), { attachments: () => [], templateLabels: () => ({}) })
 
-defineEmits(['open-document'])
+defineEmits<{ 'open-document': [attachment: WorkspaceAttachment] }>()
 
 const payload = computed(() => props.item?.payload || {})
-const metadata = computed(() => {
+const metadata = computed<Record<string, any>>(() => {
   const raw = payload.value.metadata
   return raw && typeof raw === 'object' ? raw : {}
 })
@@ -84,26 +86,34 @@ const displayText = computed(() =>
     props.templateLabels,
   ),
 )
-const attachmentRefs = computed(() => {
-  const uuids = Array.isArray(metadata.value.file_uuids) ? metadata.value.file_uuids : []
+const attachmentRefs = computed<WorkspaceAttachment[]>(() => {
+  const uuids: unknown[] = Array.isArray(metadata.value.file_uuids)
+    ? metadata.value.file_uuids
+    : []
   return uuids
-    .map((uuid) => props.attachments.find((item) => item.file_uuid === uuid))
-    .filter(Boolean)
+    .map((uuid: unknown) =>
+      props.attachments.find((item: WorkspaceAttachment) => item.file_uuid === String(uuid)),
+    )
+    .filter((item): item is WorkspaceAttachment => Boolean(item))
 })
 const images = computed(() =>
   attachmentRefs.value
-    .filter((item) => item.mode === 'image' || String(item.content_type || '').startsWith('image/'))
-    .map((item) => ({
+    .filter((item: WorkspaceAttachment) =>
+      item.mode === 'image' || String(item.content_type || '').startsWith('image/'),
+    )
+    .map((item: WorkspaceAttachment) => ({
       file_uuid: item.file_uuid,
       content: item.download_url || '',
       filename: item.original_filename || item.filename || 'image',
     }))
-    .filter((item) => item.content),
+    .filter((item: { content: string }) => item.content),
 )
 const dataAttachments = computed(() =>
   attachmentRefs.value
-    .filter((item) => !(item.mode === 'image' || String(item.content_type || '').startsWith('image/')))
-    .map((item) => ({
+    .filter((item: WorkspaceAttachment) =>
+      !(item.mode === 'image' || String(item.content_type || '').startsWith('image/')),
+    )
+    .map((item: WorkspaceAttachment) => ({
       file_uuid: item.file_uuid,
       filename: item.original_filename || item.filename || 'file',
     })),

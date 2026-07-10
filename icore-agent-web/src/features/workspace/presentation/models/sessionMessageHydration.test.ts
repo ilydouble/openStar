@@ -1,4 +1,3 @@
-// @ts-nocheck
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
@@ -53,7 +52,7 @@ test('resolveUserMessageDisplayContent prefers template label from metadata', ()
 })
 
 test('collectMessageAttachmentUuids assigns each file only once', () => {
-  const assigned = new Set()
+  const assigned = new Set<string>()
   assert.deepEqual(
     collectMessageAttachmentUuids(['a', 'b', 'a'], assigned),
     ['a', 'b'],

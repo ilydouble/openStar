@@ -15,7 +15,15 @@
   </div>
 </template>
 
-<script setup>
-defineProps({ tool: Object })
-defineEmits(['open'])
+<script setup lang="ts">
+interface ToolCardModel {
+  iconBg: string
+  icon: string
+  name: string
+  category: string
+  description: string
+}
+
+defineProps<{ tool: ToolCardModel }>()
+defineEmits<{ open: [tool: ToolCardModel] }>()
 </script>

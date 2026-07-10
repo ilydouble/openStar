@@ -121,7 +121,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { workspaceApplication } from '../../index'
@@ -130,7 +130,8 @@ import { isDark as isDarkFn } from '../../../../shared/presentation/theme/theme'
 import {
   applyTurnEvent,
   hydrateSessionTimeline,
-} from '../../presentation/models/sessionTimeline'
+} from '../models/sessionTimeline'
+import type { WorkspaceAttachment } from '../models/viewModels'
 
 const {
   createSessionId: newSessionId,
@@ -142,19 +143,19 @@ const {
 
 const { t } = useI18n()
 
-const props = defineProps({ sessionId: String, initialMessage: String })
+const props = defineProps<{ sessionId?: string; initialMessage?: string }>()
 
 const sessionId = ref(props.sessionId || newSessionId())
 const timeline = ref(hydrateSessionTimeline({ session_id: sessionId.value, turns: [], attachments: [] }))
 const draft = ref('')
 const loading = ref(false)
-const scrollEl = ref(null)
-const textareaEl = ref(null)
-const fileInputEl = ref(null)
+const scrollEl = ref<HTMLElement | null>(null)
+const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const fileInputEl = ref<HTMLInputElement | null>(null)
 const dark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
 
-const attachmentList = ref([])
-const timelineAttachments = ref([])
+const attachmentList = ref<WorkspaceAttachment[]>([])
+const timelineAttachments = ref<WorkspaceAttachment[]>([])
 const uploading = ref(false)
 const uploadError = ref('')
 const isDraggingFile = ref(false)
@@ -162,13 +163,13 @@ const isDraggingFile = ref(false)
 const ACCEPTED_EXTS = new Set(['.pdf', '.docx', '.txt', '.md'])
 
 /** Build the API prompt when the user sends attachments without typing a message. */
-function defaultAttachmentPrompt(attachments) {
+function defaultAttachmentPrompt(attachments: WorkspaceAttachment[]): string {
   if (attachments.length > 1) return t('chat.fileReplyPromptMulti')
   return t('chat.fileReplyPrompt')
 }
 
 /** Add a local-only failed turn when a request fails before backend events arrive. */
-function appendLocalErrorTurn(message) {
+function appendLocalErrorTurn(message: string): void {
   const now = Date.now()
   timeline.value.turns.push({
     turnId: `local-error-${now}`,
@@ -194,67 +195,69 @@ function appendLocalErrorTurn(message) {
   })
 }
 
-function resetTextarea() {
+function resetTextarea(): void {
   nextTick(() => {
     if (!textareaEl.value) return
     textareaEl.value.style.height = 'auto'
   })
 }
 
-function clearComposer() {
+function clearComposer(): void {
   draft.value = ''
   attachmentList.value = []
   uploadError.value = ''
   resetTextarea()
 }
 
-function handleDrop(e) {
+function handleDrop(e: DragEvent): void {
   isDraggingFile.value = false
   const file = e.dataTransfer?.files?.[0]
   if (!file) return
-  const ext = '.' + file.name.split('.').pop().toLowerCase()
+  const ext = `.${file.name.split('.').pop()?.toLowerCase() || ''}`
   if (!ACCEPTED_EXTS.has(ext)) {
     uploadError.value = t('chat.uploadUnsupportedTypes', { ext })
     return
   }
-  doUpload(file)
+  void doUpload(file)
 }
 
-async function doUpload(file) {
+/** Upload one selected attachment into the active composer. */
+async function doUpload(file: File): Promise<void> {
   uploading.value = true
   uploadError.value = ''
   try {
-    const uploaded = await uploadFileAsset(file)
+    const uploaded = await uploadFileAsset(file) as WorkspaceAttachment
     attachmentList.value = [...attachmentList.value, uploaded]
-  } catch (err) {
-    uploadError.value = err.message || t('chat.uploadFailed')
+  } catch (error: unknown) {
+    uploadError.value = readErrorMessage(error, t('chat.uploadFailed'))
   } finally {
     uploading.value = false
   }
 }
 
-async function refreshAttachments() {
+async function refreshAttachments(): Promise<void> {
   // File references are persisted with chat message metadata, not a legacy attach API.
 }
 
-async function handleFileUpload(e) {
-  const file = e.target.files?.[0]
-  if (e.target) e.target.value = ''
+async function handleFileUpload(event: Event): Promise<void> {
+  const input = event.currentTarget as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
   if (!file) return
   await doUpload(file)
 }
 
-async function deleteAttachment(fileUuid) {
+async function deleteAttachment(fileUuid: string): Promise<void> {
   try {
     await deleteFileAsset(fileUuid)
     attachmentList.value = attachmentList.value.filter((item) => item.file_uuid !== fileUuid)
-  } catch (err) {
-    uploadError.value = err.message || t('chat.deleteFailed')
+  } catch (error: unknown) {
+    uploadError.value = readErrorMessage(error, t('chat.deleteFailed'))
   }
 }
 
 /** Open one uploaded document attachment in a new tab. */
-async function openDocumentAttachment(row) {
+async function openDocumentAttachment(row: WorkspaceAttachment): Promise<void> {
   const fileUuid = String(row?.file_uuid || '').trim()
   if (!fileUuid) return
   try {
@@ -266,24 +269,24 @@ async function openDocumentAttachment(row) {
   }
 }
 
-function syncTheme() {
+function syncTheme(): void {
   dark.value = isDarkFn()
 }
 
 onMounted(() => {
   syncTheme()
   window.addEventListener('icore-theme-change', syncTheme)
-  refreshAttachments()
+  void refreshAttachments()
 })
 onUnmounted(() => {
   window.removeEventListener('icore-theme-change', syncTheme)
 })
 
 if (props.initialMessage) {
-  sendMessage(props.initialMessage)
+  void sendMessage(props.initialMessage)
 }
 
-async function send() {
+async function send(): Promise<void> {
   if (loading.value || uploading.value) return
   const text = draft.value.trim()
   const pendingAttachments = [...attachmentList.value]
@@ -296,7 +299,10 @@ async function send() {
   await sendMessage(apiText, pendingAttachments)
 }
 
-async function sendMessage(msg, attachments = []) {
+async function sendMessage(
+  msg: string,
+  attachments: WorkspaceAttachment[] = [],
+): Promise<void> {
   loading.value = true
   await scrollBottom()
   try {
@@ -316,13 +322,19 @@ async function sendMessage(msg, attachments = []) {
   }
 }
 
-async function scrollBottom() {
+async function scrollBottom(): Promise<void> {
   await nextTick()
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
 }
 
-function autoResize(e) {
-  e.target.style.height = 'auto'
-  e.target.style.height = e.target.scrollHeight + 'px'
+function autoResize(event: Event): void {
+  const textarea = event.currentTarget as HTMLTextAreaElement
+  textarea.style.height = 'auto'
+  textarea.style.height = `${textarea.scrollHeight}px`
+}
+
+/** Convert an unknown workspace failure into safe user-facing text. */
+function readErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 </script>

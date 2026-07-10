@@ -1,8 +1,11 @@
-// @ts-nocheck
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'vitest'
 
-import { AxiosHeaders } from 'axios'
+import {
+  AxiosHeaders,
+  type AxiosAdapter,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 
 import { configureApiClient, createApiClient } from '../../../../shared/infrastructure/http'
 import { QuotaExceededError } from '../../domain/errors/quotaExceededError'
@@ -154,8 +157,8 @@ test('chatEventStream preserves quota errors from the shared SSE client', async 
 })
 
 test('transcribeSpeech uses shared FormData transport with the long request timeout', async () => {
-  let seenConfig
-  const adapter = async (config) => {
+  let seenConfig: InternalAxiosRequestConfig | undefined
+  const adapter: AxiosAdapter = async (config) => {
     seenConfig = config
     return {
       config,
@@ -183,6 +186,7 @@ test('transcribeSpeech uses shared FormData transport with the long request time
   })
 
   assert.equal(text, 'Transcribed text')
+  assert.ok(seenConfig)
   assert.equal(seenConfig.url, '/agent/transcribe')
   assert.equal(seenConfig.timeout, 120_000)
   assert.equal(seenConfig.signal, signal)
@@ -191,16 +195,14 @@ test('transcribeSpeech uses shared FormData transport with the long request time
   assert.equal(AxiosHeaders.from(seenConfig.headers).get('Authorization'), 'Bearer voice-token')
 })
 
-function mockChatStreamResponse(frames) {
-  globalThis.fetch = async () => ({
-    ok: true,
-    body: streamFromFrames(frames),
-    headers: { get: () => 'text/event-stream' },
-    url: '/api/v1/agent/chat',
+function mockChatStreamResponse(frames: string[]): void {
+  globalThis.fetch = async () => new Response(streamFromFrames(frames), {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
   })
 }
 
-function streamFromFrames(frames) {
+function streamFromFrames(frames: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
   return new ReadableStream({
     start(controller) {
@@ -212,12 +214,12 @@ function streamFromFrames(frames) {
   })
 }
 
-function sse(payload) {
+function sse(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
-async function collect(generator) {
-  const events = []
+async function collect<T>(generator: AsyncGenerator<T>): Promise<T[]> {
+  const events: T[] = []
   for await (const event of generator) {
     events.push(event)
   }

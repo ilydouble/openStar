@@ -78,21 +78,17 @@
   </svg>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import {
   DOCUMENT_FILE_ICON_COLORS,
   resolveDocumentFileKind,
-} from '../../presentation/models/documentFileType'
+} from '../models/documentFileType'
 
-const props = defineProps({
-  filename: { type: String, default: '' },
-  size: {
-    type: String,
-    default: 'md',
-    validator: (value) => ['sm', 'md'].includes(value),
-  },
-})
+const props = withDefaults(defineProps<{
+  filename?: string
+  size?: 'sm' | 'md'
+}>(), { filename: '', size: 'md' })
 
 const kind = computed(() => resolveDocumentFileKind(props.filename))
 const sizeClass = computed(() =>

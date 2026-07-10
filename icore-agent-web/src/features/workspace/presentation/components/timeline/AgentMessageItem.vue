@@ -19,7 +19,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { renderMarkdown } from '../../../../../shared/presentation/html/sanitizeHtml'
 

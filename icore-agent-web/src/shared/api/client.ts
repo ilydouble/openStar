@@ -1,5 +1,5 @@
-import { buildAuthHeaders, getAccessToken } from '../../auth/session'
-import { authTrace } from '../../auth/trace'
+import { buildAuthHeaders, getAccessToken } from '../../features/auth/application/session'
+import { authTrace } from '../../features/auth/application/trace'
 import i18n from '../i18n'
 
 /** HTTP statuses that always map to localized copy instead of backend detail. */

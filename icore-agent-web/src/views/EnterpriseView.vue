@@ -107,7 +107,7 @@
 import { computed, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { captureLead } from '../api/account.js'
+import { captureLead } from '../features/account/infrastructure/accountApi'
 
 const { t, tm } = useI18n()
 const route = useRoute()

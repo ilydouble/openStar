@@ -465,7 +465,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../stores/preferences'
-import { clearSession } from '../auth/session'
+import { clearSession } from '../features/auth/application/session'
 import ThemeToggle from './ThemeToggle.vue'
 import { sanitizeHtml } from '../shared/html/sanitizeHtml'
 

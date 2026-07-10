@@ -1,4 +1,4 @@
-import { getBrowserStorage, readStoredString, removeStoredKey, writeStoredString } from '../shared/storage/browserStorage'
+import { getBrowserStorage, readStoredString, removeStoredKey, writeStoredString } from '../../../shared/storage/browserStorage'
 import { authTrace, isAuthTracingEnabled } from './trace'
 
 const TOKEN_KEY = 'icore_access_token'

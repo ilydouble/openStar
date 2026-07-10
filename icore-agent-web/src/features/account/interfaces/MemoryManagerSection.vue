@@ -133,7 +133,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { deleteMemoryFact, fetchMemory, updateMemoryFact } from '../api/account.js'
+import { deleteMemoryFact, fetchMemory, updateMemoryFact } from '../infrastructure/accountApi'
 
 const { t, locale } = useI18n()
 

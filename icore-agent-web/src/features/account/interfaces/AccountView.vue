@@ -287,11 +287,11 @@ import {
   fetchPlan,
   fetchTeam,
   renameTeam,
-  signOut,
   updateByok,
   updateKnowledgeScope,
-} from '../api/account.js'
-import MemoryManagerSection from '../components/MemoryManagerSection.vue'
+} from '../infrastructure/accountApi'
+import { signOut } from '../../auth/infrastructure/authApi'
+import MemoryManagerSection from './MemoryManagerSection.vue'
 
 const { t } = useI18n()
 const router = useRouter()

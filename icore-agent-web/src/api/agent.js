@@ -1,5 +1,5 @@
-import { buildAuthHeaders, getAccessToken } from '../auth/session'
-import { authTrace } from '../auth/trace'
+import { buildAuthHeaders, getAccessToken } from '../features/auth/application/session'
+import { authTrace } from '../features/auth/application/trace'
 import { formatApiErrorMessage, readJsonResponse } from '../shared/api/client'
 
 const BASE = '/api/v1/agent'

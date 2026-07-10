@@ -163,7 +163,7 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocalePreference } from '../../stores/preferences'
-import { isAuthenticated } from '../../auth/session'
+import { isAuthenticated } from '../../features/auth/application/session'
 import ThemeToggle from '../ThemeToggle.vue'
 
 const { t, tm, locale } = useI18n()

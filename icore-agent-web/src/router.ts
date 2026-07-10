@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
-import { isAuthenticated } from './auth/session'
+import { isAuthenticated } from './features/auth/application/session'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'landing', component: () => import('./views/LandingView.vue') },
-  { path: '/auth', name: 'auth', component: () => import('./views/AuthView.vue') },
+  { path: '/auth', name: 'auth', component: () => import('./features/auth/interfaces/AuthView.vue') },
   { path: '/enterprise', name: 'enterprise', component: () => import('./views/EnterpriseView.vue') },
   {
     path: '/account',
     name: 'account',
-    component: () => import('./views/AccountView.vue'),
+    component: () => import('./features/account/interfaces/AccountView.vue'),
     meta: { requiresAuth: true },
   },
   {

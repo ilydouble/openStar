@@ -428,7 +428,8 @@ import {
   QuotaExceededError,
 } from '../api/agent.js'
 import { isDark as isDarkFn } from '../shared/theme/theme'
-import { fetchPlan, fetchProjects, signOut, syncProject } from '../api/account.js'
+import { fetchPlan, fetchProjects, syncProject } from '../features/account/infrastructure/accountApi'
+import { signOut } from '../features/auth/infrastructure/authApi'
 import {
   getWorkspaceOnboardingComplete,
   setWorkspaceOnboardingComplete,

@@ -88,7 +88,10 @@ def test_payment_compose_and_env_are_loaded_by_compose_script() -> None:
     assert "payment-service/Dockerfile.migrate" in dev_compose
     assert "payment-db-migrate:" in production_compose
     assert "payment-service/Dockerfile.migrate" in production_compose
-    assert "network_mode: host" in production_compose
+    assert "network_mode: host" not in production_compose
+    assert production_compose.count("infra-access: {}") == 2
+    assert "@postgres:${PAYMENT_DB_PORT:-5432}" in production_compose
+    assert "PAYMENT_KAFKA_BROKERS:-kafka:9092" in production_compose
     assert "\n  postgres:" not in production_compose
     assert "\n  kafka-init:" not in production_compose
     assert "POSTGRES_ADMIN_USER" in env_example
@@ -131,7 +134,7 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
         assert "LOGGING_SERVICE_TIMEOUT" in consumer
         assert "LOGGING_CLIENT_DRAIN_TIMEOUT" in consumer
         assert "logging-service:" in consumer
-    assert "network_mode: host" in production_backend_compose
+    assert "network_mode: host" not in production_backend_compose
     production_consumer = production_backend_compose.split(
         "payment-events-consumer:", 1
     )[1]
@@ -141,7 +144,7 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     assert "LOGGING_CLIENT_BATCH_FLUSH_MS" in dev_consumer
     assert "LOGGING_CLIENT_MAX_BATCH_SIZE" in dev_consumer
     assert ".env.logging" in production_consumer
-    assert "http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}" in production_consumer
+    assert "http://logging-service:8091" in production_consumer
     for logging_example in (dev_logging_example, production_logging_example):
         assert "LOGGING_CLIENT_BATCH_FLUSH_MS=100" in logging_example
         assert "LOGGING_CLIENT_MAX_BATCH_SIZE=64" in logging_example

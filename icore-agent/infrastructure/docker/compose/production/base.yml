@@ -1,5 +1,12 @@
 name: icore-agent
 
+networks:
+  default:
+    driver: bridge
+  infra-access:
+    external: true
+    name: ${ICORE_INFRA_ACCESS_NETWORK_NAME:-project-icore-agent-infra-access}
+
 volumes:
   agent-tool-workspace:
     driver: local

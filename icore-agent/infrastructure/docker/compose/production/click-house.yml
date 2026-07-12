@@ -9,12 +9,15 @@ services:
     env_file:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.clickhouse${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
-      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-127.0.0.1}
-      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_HOST_NATIVE_PORT:-9000}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-icore_logging_db}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-icore_logging}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in dotenv/production/.env.clickhouse}
-    network_mode: host
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
 
   clickhouse-writer:
     build:
@@ -41,17 +44,20 @@ services:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.clickhouse${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
-      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
-      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-127.0.0.1}
-      CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HOST_HTTP_PORT:-8123}
-      CLICKHOUSE_HTTP_URL: ${CLICKHOUSE_HTTP_URL:-http://127.0.0.1:${CLICKHOUSE_HOST_HTTP_PORT:-8123}}
+      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-kafka:9092}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HTTP_PORT:-8123}
+      CLICKHOUSE_HTTP_URL: ${CLICKHOUSE_HTTP_URL:-http://clickhouse:8123}
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-icore_logging_db}
       CLICKHOUSE_LOGS_TABLE: ${CLICKHOUSE_LOGS_TABLE:-icore_logs}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-icore_logging}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in dotenv/production/.env.clickhouse}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
-    network_mode: host
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
     depends_on:
       kafka-init:
         condition: service_completed_successfully

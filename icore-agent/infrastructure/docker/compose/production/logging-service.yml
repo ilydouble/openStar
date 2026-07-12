@@ -25,12 +25,15 @@ services:
       LOGGING_SERVICE_ADDR: ${LOGGING_SERVICE_ADDR:-:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
       LOGGING_SERVICE_DATA_DIR: /var/lib/logging-service
-      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+      LOGGING_KAFKA_BROKERS: ${LOGGING_KAFKA_BROKERS:-kafka:9092}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
     volumes:
       - logging-service-data:/var/lib/logging-service
-    network_mode: host
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
     depends_on:
       kafka-init:
         condition: service_completed_successfully

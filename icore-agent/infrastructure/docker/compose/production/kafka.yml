@@ -9,7 +9,7 @@ services:
       PAYMENT_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
       PAYMENT_KAFKA_PARTITIONS: ${PAYMENT_KAFKA_PARTITIONS:-${KAFKA_NUM_PARTITIONS:-3}}
       KAFKA_REPLICATION_FACTOR: ${KAFKA_REPLICATION_FACTOR:-1}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
     command:
       - /bin/sh
       - -ec
@@ -36,4 +36,7 @@ services:
           --bootstrap-server "$$KAFKA_BOOTSTRAP_SERVERS" \
           --describe \
           --topic "$$PAYMENT_KAFKA_TOPIC"
-    network_mode: host
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}

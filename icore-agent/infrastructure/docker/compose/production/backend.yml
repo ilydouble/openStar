@@ -32,20 +32,23 @@ services:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.storage${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
-      DB_HOST: ${DB_HOST:-127.0.0.1}
-      DB_INTERNAL_PORT: ${DB_HOST_PORT:-5432}
-      REDIS_URL: ${REDIS_URL:-redis://127.0.0.1:${REDIS_HOST_PORT:-6379}/0}
-      STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://127.0.0.1:${STORAGE_SERVICE_HOST_PORT:-8090}}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_INTERNAL_PORT: ${DB_INTERNAL_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      STORAGE_SERVICE_URL: ${STORAGE_SERVICE_URL:-http://storage-service:8090}
       STORAGE_SERVICE_TOKEN: ${STORAGE_SERVICE_TOKEN:?set STORAGE_SERVICE_TOKEN in dotenv/production/.env.storage}
       STORAGE_SERVICE_TIMEOUT: ${STORAGE_SERVICE_TIMEOUT:-30}
-      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
     volumes:
       - agent-tool-workspace:/tmp/icore-agent-workspace
-    network_mode: host
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
     depends_on:
       storage-service:
         condition: service_started
@@ -68,19 +71,22 @@ services:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
-      DB_HOST: ${DB_HOST:-127.0.0.1}
-      DB_INTERNAL_PORT: ${DB_HOST_PORT:-5432}
-      PAYMENT_EVENTS_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-127.0.0.1:${KAFKA_HOST_PORT:-9092}}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_INTERNAL_PORT: ${DB_INTERNAL_PORT:-5432}
+      PAYMENT_EVENTS_KAFKA_BROKERS: ${PAYMENT_KAFKA_BROKERS:-kafka:9092}
       PAYMENT_EVENTS_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
       PAYMENT_EVENTS_GROUP_ID: ${PAYMENT_EVENTS_GROUP_ID:-icore-agent-payment-events}
       PAYMENT_EVENTS_POLL_TIMEOUT_MS: ${PAYMENT_EVENTS_POLL_TIMEOUT_MS:-1000}
-      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
       LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
-    network_mode: host
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
     depends_on:
       icore-agent:
         condition: service_healthy

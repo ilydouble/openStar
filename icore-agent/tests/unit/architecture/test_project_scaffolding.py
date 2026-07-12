@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 AGENT_ROOT = PROJECT_ROOT / "icore-agent"
@@ -21,6 +23,19 @@ def test_root_agents_md_documents_repo_workflow():
     assert "Alembic" in text
     assert "测试" in text
     assert "git" in text
+
+
+def test_production_deployment_document_describes_external_network_contract():
+    """Verify production deployment is documented without repository coupling."""
+    deployment_doc = (
+        PROJECT_ROOT / "docs" / "deployment" / "production_deployment.md"
+    ).read_text(encoding="utf-8")
+
+    assert "ICORE_INFRA_ACCESS_NETWORK_NAME" in deployment_doc
+    assert "project-icore-agent-infra-access" in deployment_doc
+    assert "./scripts/compose.sh production up -d --build" in deployment_doc
+    assert "MINIO_PUBLIC_ENDPOINT" in deployment_doc
+    assert "server-infrastructure" not in deployment_doc
 
 
 def test_dotenv_files_are_split_by_domain():
@@ -94,6 +109,8 @@ def test_compose_wrapper_loads_split_env_files():
     assert 'BUILD_ENV_FILE="$PROJECT_DIR/dotenv/$MODE/.env.build"' in text
     assert 'ICORE_COMPOSE_DOTENV_DIR="$PROJECT_DIR/dotenv/$MODE"' in text
     assert 'ICORE_COMPOSE_ENV_SUFFIX=".example"' in text
+    assert "requires_external_network" in text
+    assert 'docker network inspect "$infra_network_name"' in text
     for domain in (
         "app",
         "agent",
@@ -142,6 +159,77 @@ def test_compose_wrapper_loads_split_env_files():
         "gateway.yml",
     ):
         assert f"infrastructure/docker/compose/production/{compose_file}" in text
+
+
+def test_production_compose_config_does_not_require_external_network(
+    tmp_path: Path,
+) -> None:
+    """Verify static production config bypasses the runtime network preflight."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    docker_log = tmp_path / "docker.log"
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        "#!/bin/sh\n"
+        'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_DOCKER_LOG": str(docker_log),
+        "ICORE_COMPOSE_USE_EXAMPLES": "1",
+    }
+
+    result = subprocess.run(
+        [str(AGENT_ROOT / "scripts" / "compose.sh"), "production", "config"],
+        check=False,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    invocations = docker_log.read_text(encoding="utf-8")
+    assert "network inspect" not in invocations
+    assert "compose --env-file" in invocations
+    assert invocations.rstrip().endswith("config")
+
+
+def test_production_compose_up_requires_external_network(tmp_path: Path) -> None:
+    """Verify production startup fails before compose when its network is absent."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    docker_log = tmp_path / "docker.log"
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        "#!/bin/sh\n"
+        'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"\n'
+        'if [ "$1 $2" = "network inspect" ]; then exit 1; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_DOCKER_LOG": str(docker_log),
+        "ICORE_COMPOSE_USE_EXAMPLES": "1",
+    }
+
+    result = subprocess.run(
+        [str(AGENT_ROOT / "scripts" / "compose.sh"), "production", "up", "-d"],
+        check=False,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Missing production infrastructure network" in result.stderr
+    assert docker_log.read_text(encoding="utf-8").strip() == (
+        "network inspect project-icore-agent-infra-access"
+    )
 
 
 def test_app_env_documents_build_proxy_overrides():
@@ -234,12 +322,17 @@ def test_infrastructure_compose_base_declares_shared_resources():
     assert "clickhouse-data:" in dev_base
 
     assert "name: icore-agent" in production_base
-    assert "networks:" not in production_base
+    assert "networks:" in production_base
+    assert "default:" in production_base
+    assert "driver: bridge" in production_base
+    assert "infra-access:" in production_base
+    assert "external: true" in production_base
+    assert "ICORE_INFRA_ACCESS_NETWORK_NAME" in production_base
     assert "logging-service-data:" in production_base
 
 
-def test_production_compose_uses_host_network_without_infra_services():
-    """Production starts app and init services, but not infrastructure daemons."""
+def test_production_compose_uses_bridge_networks_without_infra_services():
+    """Production uses project bridges without owning infrastructure daemons."""
     compose_dir = AGENT_ROOT / "infrastructure" / "docker" / "compose" / "production"
     combined = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(compose_dir.glob("*.yml"))
@@ -269,9 +362,18 @@ def test_production_compose_uses_host_network_without_infra_services():
     ):
         assert f"\n  {service_name}" not in combined
 
-    assert "networks:" not in combined
-    assert "network_mode: host" in combined
-    assert "127.0.0.1" in combined
+    assert "network_mode: host" not in combined
+    assert combined.count("infra-access: {}") == 11
+    assert combined.count("gw_priority: 100") == 11
+    assert "${GATEWAY_PORT_BIND:-127.0.0.1:11000:11000}" in combined
+    assert "http://icore-agent:11001" in combined
+    assert "http://storage-service:8090" in combined
+    assert "http://logging-service:8091" in combined
+    assert "http://payment-service:8080" in combined
+    assert "redis://redis:6379/0" in combined
+    assert "kafka:9092" in combined
+    assert "http://minio:9000" in combined
+    assert "http://clickhouse:8123" in combined
 
 
 def test_clickhouse_logging_infra_is_declared():
@@ -296,7 +398,9 @@ def test_clickhouse_logging_infra_is_declared():
     assert "clickhouse/clickhouse-server" not in production_clickhouse
     assert "clickhouse-migrate:" in production_clickhouse
     assert "clickhouse-writer:" in production_clickhouse
-    assert "network_mode: host" in production_clickhouse
+    assert "network_mode: host" not in production_clickhouse
+    assert "CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}" in production_clickhouse
+    assert "CLICKHOUSE_HTTP_URL: ${CLICKHOUSE_HTTP_URL:-http://clickhouse:8123}" in production_clickhouse
     assert "CLICKHOUSE_DATABASE=icore_logging_db" in clickhouse_example
     assert "CLICKHOUSE_WRITER_GROUP_ID=logging-clickhouse-writer" in clickhouse_example
     assert "kafka_invalid_temp_events.jsonl" in logging_example
@@ -341,9 +445,10 @@ def test_object_and_logging_infra_have_init_services():
     assert "minio-init:" in dev_minio
     assert "mc mb --ignore-existing local/icore-agent-images" in dev_minio
     assert "mc mb --ignore-existing local/icore-files" in dev_minio
-    assert "minio:" not in production_minio
+    assert "\n  minio:" not in production_minio
     assert "minio-init:" in production_minio
-    assert "network_mode: host" in production_minio
+    assert "network_mode: host" not in production_minio
+    assert "MINIO_INTERNAL_ENDPOINT:-http://minio:9000" in production_minio
 
     assert "kafka:" in dev_kafka
     assert "kafka-init:" in dev_kafka
@@ -354,7 +459,8 @@ def test_object_and_logging_infra_have_init_services():
     assert 'topic "$$PAYMENT_KAFKA_TOPIC"' in dev_kafka
     assert "\n  kafka:" not in production_kafka
     assert "kafka-init:" in production_kafka
-    assert "network_mode: host" in production_kafka
+    assert "network_mode: host" not in production_kafka
+    assert "KAFKA_BOOTSTRAP_SERVERS:-kafka:9092" in production_kafka
 
 
 def test_go_microservice_dockerfiles_use_buildkit_caches():

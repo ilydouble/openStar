@@ -25,15 +25,20 @@ services:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.memory${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
-      GATEWAY_BACKEND_URL: ${GATEWAY_BACKEND_URL:-http://127.0.0.1:${API_PORT:-11001}}
-      GATEWAY_PAYMENT_SERVICE_URL: ${GATEWAY_PAYMENT_SERVICE_URL:-http://127.0.0.1:${PAYMENT_SERVICE_PORT:-8080}}
+      GATEWAY_BACKEND_URL: ${GATEWAY_BACKEND_URL:-http://icore-agent:11001}
+      GATEWAY_PAYMENT_SERVICE_URL: ${GATEWAY_PAYMENT_SERVICE_URL:-http://payment-service:8080}
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-}
-      REDIS_URL: ${REDIS_URL:-redis://127.0.0.1:${REDIS_HOST_PORT:-6379}/0}
-      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
-    network_mode: host
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,clickhouse,storage-service,logging-service,payment-service,icore-agent,gateway
+    ports:
+      - '${GATEWAY_PORT_BIND:-127.0.0.1:11000:11000}'
+    networks:
+      default:
+        gw_priority: 100
+      infra-access: {}
     depends_on:
       icore-agent:
         condition: service_healthy

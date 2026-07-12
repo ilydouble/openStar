@@ -103,6 +103,21 @@ normalize_proxy_url() {
   esac
 }
 
+# Return success when the compose command can create new production containers.
+requires_external_network() {
+  local arg
+
+  for arg in "$@"; do
+    case "$arg" in
+      up|create|run)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
 BUILD_ENV_FILE="$PROJECT_DIR/dotenv/$MODE/.env.build"
 BUILD_EXAMPLE_FILE="$BUILD_ENV_FILE.example"
 http_proxy_value="${BUILD_HTTP_PROXY-}"
@@ -149,5 +164,24 @@ for compose_file in "${COMPOSE_FILES[@]}"; do
   fi
   cmd+=(-f "$full_path")
 done
+
+if [[ "$MODE" == "production" ]] && requires_external_network "$@"; then
+  app_env_file="$PROJECT_DIR/dotenv/production/.env.app$ICORE_COMPOSE_ENV_SUFFIX"
+  infra_network_name="${ICORE_INFRA_ACCESS_NETWORK_NAME-}"
+  if [[ -z "$infra_network_name" && -f "$app_env_file" ]]; then
+    infra_network_name="$(read_env_value "ICORE_INFRA_ACCESS_NETWORK_NAME" "$app_env_file")"
+  fi
+  infra_network_name="${infra_network_name%\"}"
+  infra_network_name="${infra_network_name#\"}"
+  infra_network_name="${infra_network_name%\'}"
+  infra_network_name="${infra_network_name#\'}"
+  infra_network_name="${infra_network_name:-project-icore-agent-infra-access}"
+
+  if ! docker network inspect "$infra_network_name" >/dev/null 2>&1; then
+    echo "Missing production infrastructure network: $infra_network_name" >&2
+    echo "Create and attach the required infrastructure services before starting production." >&2
+    exit 1
+  fi
+fi
 
 exec "${cmd[@]}" "$@"

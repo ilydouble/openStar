@@ -147,12 +147,14 @@ def test_settings_load_logging_service_domain(monkeypatch):
     monkeypatch.setenv("LOGGING_SERVICE_URL", "http://logging-service:8091")
     monkeypatch.setenv("LOGGING_SERVICE_TOKEN", "logging-token")
     monkeypatch.setenv("LOGGING_SERVICE_TIMEOUT", "2.5")
+    monkeypatch.setenv("LOGGING_CLIENT_DRAIN_TIMEOUT", "6.5")
 
     settings = Settings(_env_file=None)
 
     assert settings.logging_service_url == "http://logging-service:8091"
     assert settings.logging_service_token == "logging-token"
     assert settings.logging_service_timeout == 2.5
+    assert settings.logging_client_drain_timeout == 6.5
 
 
 def test_settings_load_agent_runtime_domain(monkeypatch):

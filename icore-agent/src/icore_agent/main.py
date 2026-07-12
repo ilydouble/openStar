@@ -31,6 +31,7 @@ from .shared.http.middleware import (
     RequestIdMiddleware,
 )
 from .shared.logging.app_logger import get_logger
+from .shared.logging.logging_service_client import default_logging_client
 
 
 log = get_logger(__name__)
@@ -101,6 +102,9 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         log.info("icore_agent_stopped")
+        await default_logging_client.aclose(
+            timeout=settings.logging_client_drain_timeout
+        )
 
 
 def create_app() -> FastAPI:

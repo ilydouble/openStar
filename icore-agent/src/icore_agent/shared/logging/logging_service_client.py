@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import sys
 import threading
@@ -43,7 +44,11 @@ class LoggingServiceClient:
         self.sync_transport = sync_transport
         self._queue: queue.Queue[LogEvent] = queue.Queue(maxsize=queue_size)
         self._worker_started = False
-        self._worker_lock = threading.Lock()
+        self._worker: threading.Thread | None = None
+        self._state_lock = threading.Lock()
+        self._stop_requested = threading.Event()
+        self._worker_done = threading.Event()
+        self._closed = False
         self._last_fallback_warning = 0.0
         self._client: httpx.Client | None = None
 
@@ -75,14 +80,20 @@ class LoggingServiceClient:
 
     def _enqueue_event(self, event: LogEvent) -> bool:
         """Put an event on the worker queue and drop it explicitly if the queue is full."""
-        self._ensure_worker()
-        try:
-            self._queue.put_nowait(event)
-            return True
-        except queue.Full:
-            self._fallback_warning(
-                "logging-service queue is full; dropping log event")
-            return False
+        with self._state_lock:
+            if self._closed:
+                self._fallback_warning(
+                    "logging-service client is closed; dropping log event"
+                )
+                return False
+            self._ensure_worker_locked()
+            try:
+                self._queue.put_nowait(event)
+                return True
+            except queue.Full:
+                self._fallback_warning(
+                    "logging-service queue is full; dropping log event")
+                return False
 
     def _send_event_sync(self, event: LogEvent) -> bool:
         """Send a single queued event to logging-service using the JSON HTTP contract."""
@@ -109,8 +120,61 @@ class LoggingServiceClient:
             return False
         return True
 
-    def close(self) -> None:
-        """Close the reusable HTTP client if it has been created."""
+    def close(self, *, timeout: float | None = None) -> bool:
+        """Stop accepting events and wait for the delivery worker to drain its queue."""
+        drain_timeout = self._drain_timeout(timeout)
+        if self._request_close() is None:
+            return True
+
+        if self._worker_done.wait(timeout=drain_timeout):
+            return True
+
+        self._warn_drain_timeout()
+        return False
+
+    async def aclose(self, *, timeout: float | None = None) -> bool:
+        """Drain and close the logging client without blocking the asyncio event loop."""
+        drain_timeout = self._drain_timeout(timeout)
+        if self._request_close() is None:
+            return True
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + drain_timeout
+        while not self._worker_done.is_set():
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                self._warn_drain_timeout()
+                return False
+            await asyncio.sleep(min(0.05, remaining))
+        return True
+
+    @staticmethod
+    def _drain_timeout(timeout: float | None) -> float:
+        """Resolve an explicit or configured non-negative drain timeout."""
+        configured = settings.logging_client_drain_timeout if timeout is None else timeout
+        return max(configured, 0.0)
+
+    def _request_close(self) -> threading.Thread | None:
+        """Atomically close the enqueue side and request worker termination."""
+        with self._state_lock:
+            self._closed = True
+            self._stop_requested.set()
+            worker = self._worker
+
+        if worker is None:
+            self._close_http_client()
+            self._worker_done.set()
+        return worker
+
+    def _warn_drain_timeout(self) -> None:
+        """Report how many queued events remain after a bounded drain wait."""
+        self._fallback_warning(
+            "logging-service drain timed out; "
+            f"remaining_events={self._queue.qsize()}"
+        )
+
+    def _close_http_client(self) -> None:
+        """Close the reusable HTTP client after its worker no longer uses it."""
         if self._client is not None:
             self._client.close()
             self._client = None
@@ -122,25 +186,31 @@ class LoggingServiceClient:
                 timeout=self.timeout, transport=self.sync_transport)
         return self._client
 
-    def _ensure_worker(self) -> None:
-        """Start the daemon worker that drains queued events."""
+    def _ensure_worker_locked(self) -> None:
+        """Start the daemon worker while the client state lock is held."""
         if self._worker_started:
             return
-        with self._worker_lock:
-            if self._worker_started:
-                return
-            thread = threading.Thread(target=self._worker_loop, daemon=True)
-            thread.start()
-            self._worker_started = True
+        self._worker_started = True
+        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker.start()
 
     def _worker_loop(self) -> None:
         """Continuously send queued events while isolating failures from application code."""
-        while True:
-            event = self._queue.get()
-            try:
-                self._send_event_sync(event)
-            finally:
-                self._queue.task_done()
+        try:
+            while True:
+                if self._stop_requested.is_set() and self._queue.empty():
+                    return
+                try:
+                    event = self._queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                try:
+                    self._send_event_sync(event)
+                finally:
+                    self._queue.task_done()
+        finally:
+            self._close_http_client()
+            self._worker_done.set()
 
     def _fallback_warning(self, message: str) -> None:
         """Print throttled local fallback warnings when logging-service delivery fails."""

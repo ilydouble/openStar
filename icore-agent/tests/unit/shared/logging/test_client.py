@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
 from datetime import UTC, datetime
 from uuid import UUID
+
+import httpx
 
 from icore_agent.shared.http.request.request_context import clear_request_id, set_request_id
 from icore_agent.shared.logging.contracts.v1 import LogEvent, LogLevel
@@ -103,3 +108,94 @@ def test_logging_client_assigns_event_id_to_each_event():
     )
 
     assert UUID(client.events[0].event_id)
+
+
+def test_logging_client_close_drains_events_and_rejects_new_emits() -> None:
+    """Closing must deliver queued events before rejecting subsequent logs."""
+    delivered: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        """Capture one logging-service request."""
+        payload = json.loads(request.content)
+        delivered.append(payload["event"]["message"])
+        return httpx.Response(200, json={"code": 200})
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="first",
+        service="icore-agent",
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="second",
+        service="icore-agent",
+    )
+
+    assert client.close(timeout=1.0)
+    assert delivered == ["first", "second"]
+    assert not client.emit_event(
+        LogLevel.INFO,
+        message="after-close",
+        service="icore-agent",
+    )
+    assert client.close(timeout=1.0)
+
+
+def test_logging_client_close_times_out_without_waiting_forever() -> None:
+    """A blocked delivery must not make process shutdown wait indefinitely."""
+    delivery_started = threading.Event()
+    release_delivery = threading.Event()
+
+    def handle(_: httpx.Request) -> httpx.Response:
+        """Hold one request until the test releases the worker."""
+        delivery_started.set()
+        release_delivery.wait(timeout=1.0)
+        return httpx.Response(200, json={"code": 200})
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="blocked",
+        service="icore-agent",
+    )
+    assert delivery_started.wait(timeout=1.0)
+
+    assert not client.close(timeout=0.01)
+    release_delivery.set()
+    assert client.close(timeout=1.0)
+
+
+def test_logging_client_aclose_drains_from_async_code() -> None:
+    """The async close facade must drain events through a worker thread."""
+    delivered = threading.Event()
+
+    def handle(_: httpx.Request) -> httpx.Response:
+        """Record delivery through the reusable sync transport."""
+        delivered.set()
+        return httpx.Response(200, json={"code": 200})
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="async-close",
+        service="icore-agent",
+    )
+
+    assert asyncio.run(client.aclose(timeout=1.0))
+    assert delivered.is_set()

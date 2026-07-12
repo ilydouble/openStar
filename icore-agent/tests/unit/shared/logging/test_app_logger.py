@@ -71,3 +71,37 @@ def test_app_logger_preserves_warning_level():
     assert client.events[0].level == LogLevel.WARNING
     assert client.events[0].message == "auth_validation_error"
     assert client.events[0].metadata["error"] == "bad token"
+
+
+def test_app_logger_uses_explicit_service_and_trace_id() -> None:
+    """Worker loggers must be able to identify their process and source event."""
+    client = CapturingLoggingClient()
+    log = get_logger(
+        "icore_agent.worker",
+        client=client,
+        service="icore-payment-events-consumer",
+    )
+
+    log.info("payment_event_handled", trace_id="evt-1", status="applied")
+
+    event = client.events[0]
+    assert event.service == "icore-payment-events-consumer"
+    assert event.trace_id == "evt-1"
+    assert event.metadata["status"] == "applied"
+
+
+def test_app_logger_exception_captures_active_exception() -> None:
+    """Structured exception logs must preserve error type, text, and traceback."""
+    client = CapturingLoggingClient()
+    log = get_logger("icore_agent.worker", client=client)
+
+    try:
+        raise ValueError("invalid payment event")
+    except ValueError:
+        log.exception("payment_event_handling_failed")
+
+    event = client.events[0]
+    assert event.level == LogLevel.ERROR
+    assert event.metadata["error_type"] == "ValueError"
+    assert event.metadata["error"] == "invalid payment event"
+    assert "ValueError: invalid payment event" in event.metadata["traceback"]

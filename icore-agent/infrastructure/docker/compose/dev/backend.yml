@@ -38,6 +38,8 @@ services:
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
       LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
+      LOGGING_CLIENT_BATCH_FLUSH_MS: ${LOGGING_CLIENT_BATCH_FLUSH_MS:-100}
+      LOGGING_CLIENT_MAX_BATCH_SIZE: ${LOGGING_CLIENT_MAX_BATCH_SIZE:-64}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
     expose:
@@ -79,6 +81,8 @@ services:
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
       LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
+      LOGGING_CLIENT_BATCH_FLUSH_MS: ${LOGGING_CLIENT_BATCH_FLUSH_MS:-100}
+      LOGGING_CLIENT_MAX_BATCH_SIZE: ${LOGGING_CLIENT_MAX_BATCH_SIZE:-64}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,kafka,logging-service,icore-agent,icore-postgres,icore-kafka,icore-logging-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,kafka,logging-service,icore-agent,icore-postgres,icore-kafka,icore-logging-service
     volumes:

@@ -148,6 +148,8 @@ def test_settings_load_logging_service_domain(monkeypatch):
     monkeypatch.setenv("LOGGING_SERVICE_TOKEN", "logging-token")
     monkeypatch.setenv("LOGGING_SERVICE_TIMEOUT", "2.5")
     monkeypatch.setenv("LOGGING_CLIENT_DRAIN_TIMEOUT", "6.5")
+    monkeypatch.setenv("LOGGING_CLIENT_BATCH_FLUSH_MS", "125")
+    monkeypatch.setenv("LOGGING_CLIENT_MAX_BATCH_SIZE", "32")
 
     settings = Settings(_env_file=None)
 
@@ -155,6 +157,8 @@ def test_settings_load_logging_service_domain(monkeypatch):
     assert settings.logging_service_token == "logging-token"
     assert settings.logging_service_timeout == 2.5
     assert settings.logging_client_drain_timeout == 6.5
+    assert settings.logging_client_batch_flush_ms == 125
+    assert settings.logging_client_max_batch_size == 32
 
 
 def test_settings_load_agent_runtime_domain(monkeypatch):

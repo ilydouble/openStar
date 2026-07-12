@@ -113,18 +113,23 @@ def test_logging_client_assigns_event_id_to_each_event():
 def test_logging_client_close_drains_events_and_rejects_new_emits() -> None:
     """Closing must deliver queued events before rejecting subsequent logs."""
     delivered: list[str] = []
+    paths: list[str] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
         """Capture one logging-service request."""
         payload = json.loads(request.content)
-        delivered.append(payload["event"]["message"])
-        return httpx.Response(200, json={"code": 200})
+        paths.append(request.url.path)
+        delivered.extend(event["message"] for event in payload["events"])
+        assert request.headers["X-Logging-Service-Token"] == "token"
+        assert "X-Request-ID" not in request.headers
+        return _batch_response(len(payload["events"]))
 
     client = LoggingServiceClient(
         base_url="http://logging-service:8091",
         token="token",
         timeout=1.0,
         sync_transport=httpx.MockTransport(handle),
+        batch_flush_ms=10_000,
     )
     assert client.emit_event(
         LogLevel.INFO,
@@ -139,6 +144,7 @@ def test_logging_client_close_drains_events_and_rejects_new_emits() -> None:
 
     assert client.close(timeout=1.0)
     assert delivered == ["first", "second"]
+    assert paths == ["/v1/log-events/batch"]
     assert not client.emit_event(
         LogLevel.INFO,
         message="after-close",
@@ -156,13 +162,14 @@ def test_logging_client_close_times_out_without_waiting_forever() -> None:
         """Hold one request until the test releases the worker."""
         delivery_started.set()
         release_delivery.wait(timeout=1.0)
-        return httpx.Response(200, json={"code": 200})
+        return _batch_response(1)
 
     client = LoggingServiceClient(
         base_url="http://logging-service:8091",
         token="token",
         timeout=1.0,
         sync_transport=httpx.MockTransport(handle),
+        max_batch_size=1,
     )
     assert client.emit_event(
         LogLevel.INFO,
@@ -183,13 +190,14 @@ def test_logging_client_aclose_drains_from_async_code() -> None:
     def handle(_: httpx.Request) -> httpx.Response:
         """Record delivery through the reusable sync transport."""
         delivered.set()
-        return httpx.Response(200, json={"code": 200})
+        return _batch_response(1)
 
     client = LoggingServiceClient(
         base_url="http://logging-service:8091",
         token="token",
         timeout=1.0,
         sync_transport=httpx.MockTransport(handle),
+        max_batch_size=1,
     )
     assert client.emit_event(
         LogLevel.INFO,
@@ -199,3 +207,193 @@ def test_logging_client_aclose_drains_from_async_code() -> None:
 
     assert asyncio.run(client.aclose(timeout=1.0))
     assert delivered.is_set()
+
+
+def test_logging_client_flushes_when_batch_reaches_max_size() -> None:
+    """A full client batch must be posted immediately in FIFO order."""
+    batches: list[list[str]] = []
+    delivered = threading.Event()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        """Capture one full batch and release the waiting test."""
+        payload = json.loads(request.content)
+        batches.append([event["message"] for event in payload["events"]])
+        delivered.set()
+        return _batch_response(len(payload["events"]))
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        batch_flush_ms=10_000,
+        max_batch_size=2,
+    )
+    for message in ("first", "second"):
+        assert client.emit_event(
+            LogLevel.INFO,
+            message=message,
+            service="icore-agent",
+        )
+
+    assert delivered.wait(timeout=1.0)
+    assert client.close(timeout=1.0)
+    assert batches == [["first", "second"]]
+
+
+def test_logging_client_flushes_partial_batch_after_interval() -> None:
+    """Low-volume logs must be sent when the configured time window expires."""
+    batches: list[list[str]] = []
+    delivered = threading.Event()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        """Capture one interval-triggered partial batch."""
+        payload = json.loads(request.content)
+        batches.append([event["message"] for event in payload["events"]])
+        delivered.set()
+        return _batch_response(len(payload["events"]))
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        batch_flush_ms=20,
+        max_batch_size=64,
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="partial",
+        service="icore-agent",
+    )
+
+    assert delivered.wait(timeout=1.0)
+    assert client.close(timeout=1.0)
+    assert batches == [["partial"]]
+
+
+def test_logging_client_splits_oversized_multi_event_batch() -> None:
+    """Batches above the client body limit must split without reordering events."""
+    batches: list[list[str]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        """Capture each size-bounded request generated by recursive splitting."""
+        payload = json.loads(request.content)
+        batches.append([event["message"] for event in payload["events"]])
+        assert len(request.content) <= 900 * 1024
+        return _batch_response(len(payload["events"]))
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        batch_flush_ms=10_000,
+        max_batch_size=2,
+    )
+    for message in ("first", "second"):
+        assert client.emit_event(
+            LogLevel.INFO,
+            message=message,
+            service="icore-agent",
+            metadata={"payload": "x" * 500_000},
+        )
+
+    assert client.close(timeout=1.0)
+    assert batches == [["first"], ["second"]]
+
+
+def test_logging_client_drops_single_event_above_body_limit(capsys) -> None:
+    """One oversized event must be dropped locally without an invalid HTTP request."""
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        """Record any unexpected request made for an oversized event."""
+        requests.append(request)
+        return _batch_response(1)
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        max_batch_size=1,
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="oversized",
+        service="icore-agent",
+        metadata={"payload": "x" * 950_000},
+    )
+
+    assert client.close(timeout=1.0)
+    assert requests == []
+    assert "event exceeds client body limit" in capsys.readouterr().err
+
+
+def test_logging_client_rejects_accepted_count_mismatch(capsys) -> None:
+    """A successful envelope must still confirm every submitted event was accepted."""
+
+    def handle(_: httpx.Request) -> httpx.Response:
+        """Return a malformed success count from logging-service."""
+        return _batch_response(0)
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        max_batch_size=1,
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="mismatch",
+        service="icore-agent",
+    )
+
+    assert client.close(timeout=1.0)
+    assert "accepted count mismatch" in capsys.readouterr().err
+
+
+def test_logging_client_drops_rejected_batch_without_retrying(capsys) -> None:
+    """A rejected batch must fail fast without falling back to per-event requests."""
+    request_count = 0
+
+    def handle(_: httpx.Request) -> httpx.Response:
+        """Reject the only batch request."""
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            503,
+            json={"code": 503, "message": "unavailable", "data": None},
+        )
+
+    client = LoggingServiceClient(
+        base_url="http://logging-service:8091",
+        token="token",
+        timeout=1.0,
+        sync_transport=httpx.MockTransport(handle),
+        max_batch_size=1,
+    )
+    assert client.emit_event(
+        LogLevel.INFO,
+        message="rejected",
+        service="icore-agent",
+    )
+
+    assert client.close(timeout=1.0)
+    assert request_count == 1
+    assert "batch emit failed" in capsys.readouterr().err
+
+
+def _batch_response(accepted: int) -> httpx.Response:
+    """Build the successful ApiEnvelope returned by logging-service batch ingest."""
+    return httpx.Response(
+        200,
+        json={
+            "code": 200,
+            "message": "ok",
+            "data": {"accepted": accepted},
+            "timestamp": "2026-07-12T00:00:00Z",
+        },
+    )

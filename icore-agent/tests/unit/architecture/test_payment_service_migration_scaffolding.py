@@ -106,6 +106,12 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     production_backend_compose = read_text(
         PROJECT_ROOT / "infrastructure/docker/compose/production/backend.yml"
     )
+    dev_logging_example = read_text(
+        PROJECT_ROOT / "dotenv/dev/.env.logging.example"
+    )
+    production_logging_example = read_text(
+        PROJECT_ROOT / "dotenv/production/.env.logging.example"
+    )
     pyproject = read_text(PROJECT_ROOT / "pyproject.toml")
     migration = read_text(
         PROJECT_ROOT
@@ -129,8 +135,16 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
     production_consumer = production_backend_compose.split(
         "payment-events-consumer:", 1
     )[1]
+    dev_consumer = dev_backend_compose.split("payment-events-consumer:", 1)[1]
+    assert "LOGGING_CLIENT_BATCH_FLUSH_MS" in dev_backend_compose
+    assert "LOGGING_CLIENT_MAX_BATCH_SIZE" in dev_backend_compose
+    assert "LOGGING_CLIENT_BATCH_FLUSH_MS" in dev_consumer
+    assert "LOGGING_CLIENT_MAX_BATCH_SIZE" in dev_consumer
     assert ".env.logging" in production_consumer
     assert "http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}" in production_consumer
+    for logging_example in (dev_logging_example, production_logging_example):
+        assert "LOGGING_CLIENT_BATCH_FLUSH_MS=100" in logging_example
+        assert "LOGGING_CLIENT_MAX_BATCH_SIZE=64" in logging_example
     assert "payment-service:" not in dev_backend_compose.split(
         "payment-events-consumer:", 1)[1]
     assert "processed_payment_events" in migration

@@ -1,21 +1,36 @@
 """Kafka worker that applies payment-service success events to accounts."""
 
+# ruff: noqa: E402,I001
+# autopep8: off
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
+import signal
 from dataclasses import dataclass
 from typing import Any
 
 from icore_agent.config.dotenv import load_domain_dotenvs
+
+load_domain_dotenvs()
+
+from icore_agent.config import settings
 from icore_agent.contexts.account.infrastructure.control_plane.json_store import control_plane_store
 from icore_agent.contexts.payment.infrastructure.persistence.payment_events import (
     PostgresPaymentEventRepository,
 )
+from icore_agent.shared.logging.app_logger import get_logger
+from icore_agent.shared.logging.logging_service_client import default_logging_client
 
-log = logging.getLogger(__name__)
+# autopep8: on
+
+
+_WORKER_SERVICE = "icore-payment-events-consumer"
+
+log = get_logger(__name__, service=_WORKER_SERVICE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +43,7 @@ class PaymentEventsWorkerSettings:
     poll_timeout_ms: int
 
     @classmethod
-    def from_env(cls) -> "PaymentEventsWorkerSettings":
+    def from_env(cls) -> PaymentEventsWorkerSettings:
         """Load worker settings from process environment."""
         brokers = tuple(
             value.strip()
@@ -73,6 +88,11 @@ async def run_worker(
         enable_auto_commit=False,
     )
     await consumer.start()
+    log.info(
+        "payment_events_consumer_started",
+        topic=settings.topic,
+        group_id=settings.group_id,
+    )
     try:
         async for message in consumer:
             await _handle_consumer_message(
@@ -83,23 +103,59 @@ async def run_worker(
             )
     finally:
         await consumer.stop()
+        log.info(
+            "payment_events_consumer_stopped",
+            topic=settings.topic,
+            group_id=settings.group_id,
+        )
 
 
-def _handle_message(repository: PostgresPaymentEventRepository, value: bytes) -> bool:
+def _handle_message(
+    repository: PostgresPaymentEventRepository,
+    value: bytes,
+    *,
+    topic: str,
+    partition: int,
+    offset: int,
+) -> bool:
     """Apply one Kafka message and return whether its offset can be committed."""
+    event_id = ""
     try:
         payload = json.loads(value.decode("utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("payment event payload must be an object")
+        event_id = str(payload.get("event_id") or "").strip()
         result = repository.apply_payment_succeeded(payload)
     except Exception:
-        log.exception("payment event handling failed")
+        log.exception(
+            "payment_event_handling_failed",
+            trace_id=event_id or None,
+            topic=topic,
+            partition=partition,
+            offset=offset,
+        )
         return False
 
     if result.status in {"applied", "duplicate", "ignored"}:
-        log.info("payment event handled status=%s", result.status)
+        log.info(
+            "payment_event_handled",
+            trace_id=event_id or None,
+            topic=topic,
+            partition=partition,
+            offset=offset,
+            status=result.status,
+        )
         return True
-    log.error("payment event rejected reason=%s", result.reason)
+    log_method = log.warning if result.status == "deferred" else log.error
+    log_method(
+        "payment_event_not_applied",
+        trace_id=event_id or None,
+        topic=topic,
+        partition=partition,
+        offset=offset,
+        status=result.status,
+        reason=result.reason,
+    )
     return False
 
 
@@ -113,18 +169,51 @@ async def _handle_consumer_message(
     from aiokafka import TopicPartition
 
     topic_partition = TopicPartition(message.topic, message.partition)
-    if _handle_message(repository, message.value):
+    if _handle_message(
+        repository,
+        message.value,
+        topic=str(message.topic),
+        partition=int(message.partition),
+        offset=int(message.offset),
+    ):
         await consumer.commit({topic_partition: message.offset + 1})
         return
     consumer.seek(topic_partition, message.offset)
     await asyncio.sleep(max(poll_timeout_ms, 1) / 1000)
 
 
+async def run_worker_until_stopped() -> None:
+    """Run the consumer until completion or a container termination signal."""
+    loop = asyncio.get_running_loop()
+    worker_task = asyncio.create_task(run_worker())
+    sigterm_installed = False
+    try:
+        loop.add_signal_handler(signal.SIGTERM, worker_task.cancel)
+        sigterm_installed = True
+    except (NotImplementedError, RuntimeError, ValueError):
+        pass
+
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        if sigterm_installed:
+            loop.remove_signal_handler(signal.SIGTERM)
+
+
 def main() -> None:
     """Run the payment events worker process."""
     logging.basicConfig(level=logging.INFO)
-    load_domain_dotenvs()
-    asyncio.run(run_worker())
+    try:
+        asyncio.run(run_worker_until_stopped())
+    except Exception:
+        log.exception("payment_events_consumer_failed")
+        raise
+    finally:
+        default_logging_client.close(
+            timeout=settings.logging_client_drain_timeout
+        )
 
 
 if __name__ == "__main__":

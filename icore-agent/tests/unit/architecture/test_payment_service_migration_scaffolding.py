@@ -119,7 +119,18 @@ def test_python_payment_event_consumer_scaffold_is_wired() -> None:
         assert "PAYMENT_EVENTS_KAFKA_BROKERS" in backend_compose
         assert "PAYMENT_EVENTS_KAFKA_TOPIC" in backend_compose
         assert "PAYMENT_EVENTS_GROUP_ID" in backend_compose
+        consumer = backend_compose.split("payment-events-consumer:", 1)[1]
+        assert "LOGGING_SERVICE_URL" in consumer
+        assert "LOGGING_SERVICE_TOKEN" in consumer
+        assert "LOGGING_SERVICE_TIMEOUT" in consumer
+        assert "LOGGING_CLIENT_DRAIN_TIMEOUT" in consumer
+        assert "logging-service:" in consumer
     assert "network_mode: host" in production_backend_compose
+    production_consumer = production_backend_compose.split(
+        "payment-events-consumer:", 1
+    )[1]
+    assert ".env.logging" in production_consumer
+    assert "http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}" in production_consumer
     assert "payment-service:" not in dev_backend_compose.split(
         "payment-events-consumer:", 1)[1]
     assert "processed_payment_events" in migration

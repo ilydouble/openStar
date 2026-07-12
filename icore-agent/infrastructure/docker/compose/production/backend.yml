@@ -66,6 +66,7 @@ services:
     env_file:
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.database${ICORE_COMPOSE_ENV_SUFFIX:-}
       - ${ICORE_COMPOSE_DOTENV_DIR}/.env.payment${ICORE_COMPOSE_ENV_SUFFIX:-}
+      - ${ICORE_COMPOSE_DOTENV_DIR}/.env.logging${ICORE_COMPOSE_ENV_SUFFIX:-}
     environment:
       DB_HOST: ${DB_HOST:-127.0.0.1}
       DB_INTERNAL_PORT: ${DB_HOST_PORT:-5432}
@@ -73,9 +74,15 @@ services:
       PAYMENT_EVENTS_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
       PAYMENT_EVENTS_GROUP_ID: ${PAYMENT_EVENTS_GROUP_ID:-icore-agent-payment-events}
       PAYMENT_EVENTS_POLL_TIMEOUT_MS: ${PAYMENT_EVENTS_POLL_TIMEOUT_MS:-1000}
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://127.0.0.1:${LOGGING_SERVICE_HOST_PORT:-8091}}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:?set LOGGING_SERVICE_TOKEN in dotenv/production/.env.logging}
+      LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
+      LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
     network_mode: host
     depends_on:
       icore-agent:
         condition: service_healthy
+      logging-service:
+        condition: service_started

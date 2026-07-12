@@ -37,6 +37,7 @@ services:
       LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
       LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
       LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
+      LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
       no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,redis,minio,kafka,storage-service,logging-service,icore-agent,icore-postgres,icore-redis,icore-minio,icore-kafka,icore-storage-service,icore-logging-service
     expose:
@@ -74,8 +75,12 @@ services:
       PAYMENT_EVENTS_KAFKA_TOPIC: ${PAYMENT_KAFKA_TOPIC:-payment.events.v1}
       PAYMENT_EVENTS_GROUP_ID: ${PAYMENT_EVENTS_GROUP_ID:-icore-agent-payment-events}
       PAYMENT_EVENTS_POLL_TIMEOUT_MS: ${PAYMENT_EVENTS_POLL_TIMEOUT_MS:-1000}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,kafka,icore-agent,icore-postgres,icore-kafka
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,kafka,icore-agent,icore-postgres,icore-kafka
+      LOGGING_SERVICE_URL: ${LOGGING_SERVICE_URL:-http://logging-service:8091}
+      LOGGING_SERVICE_TOKEN: ${LOGGING_SERVICE_TOKEN:-dev-logging-service-token}
+      LOGGING_SERVICE_TIMEOUT: ${LOGGING_SERVICE_TIMEOUT:-2.0}
+      LOGGING_CLIENT_DRAIN_TIMEOUT: ${LOGGING_CLIENT_DRAIN_TIMEOUT:-5.0}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},postgres,kafka,logging-service,icore-agent,icore-postgres,icore-kafka,icore-logging-service
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1},postgres,kafka,logging-service,icore-agent,icore-postgres,icore-kafka,icore-logging-service
     volumes:
       - ../../../../src:/app/src:ro
     depends_on:
@@ -84,6 +89,8 @@ services:
       kafka-init:
         condition: service_completed_successfully
       kafka:
+        condition: service_healthy
+      logging-service:
         condition: service_healthy
     networks:
       - icore-net
